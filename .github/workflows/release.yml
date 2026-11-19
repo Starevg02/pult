@@ -31,7 +31,7 @@ jobs:
         with:
           toolchain: "1.88"
       - name: Библиотеки для сборки (Kerberos)
-        timeout-minutes: 6
+        timeout-minutes: 10
         run: |
           apt_opts="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o DPkg::Lock::Timeout=120"
           sudo apt-get $apt_opts update -qq

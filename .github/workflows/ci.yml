@@ -35,7 +35,7 @@ jobs:
           toolchain: "1.88"
           components: rustfmt, clippy
       - name: GSSAPI для сборки (вход через домен)
-        timeout-minutes: 6
+        timeout-minutes: 10
         run: |
           apt_opts="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o DPkg::Lock::Timeout=120"
           sudo apt-get $apt_opts update -qq
@@ -87,7 +87,7 @@ jobs:
         with:
           toolchain: "1.88"
       - name: GSSAPI для сборки (вход через домен)
-        timeout-minutes: 6
+        timeout-minutes: 10
         run: |
           apt_opts="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o DPkg::Lock::Timeout=120"
           sudo apt-get $apt_opts update -qq
@@ -125,7 +125,7 @@ jobs:
         with:
           toolchain: "1.88"
       - name: GSSAPI для сборки (вход через домен)
-        timeout-minutes: 6
+        timeout-minutes: 10
         run: |
           apt_opts="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o DPkg::Lock::Timeout=120"
           sudo apt-get $apt_opts update -qq
@@ -172,7 +172,7 @@ jobs:
         with:
           toolchain: "1.88"
       - name: GSSAPI для сборки (вход через домен)
-        timeout-minutes: 6
+        timeout-minutes: 10
         run: |
           apt_opts="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o DPkg::Lock::Timeout=120"
           sudo apt-get $apt_opts update -qq
