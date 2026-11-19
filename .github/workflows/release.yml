@@ -88,9 +88,11 @@ jobs:
         run: |
           $version = (cargo pkgid -p pult-agent) -replace '.*[#@]', ''
           if ("v$version" -ne $env:GITHUB_REF_NAME) { Write-Error "тег $env:GITHUB_REF_NAME, а агент — $version"; exit 1 }
-          dotnet tool install wix --version 5.0.2 --tool-path target/wix
-          ./target/wix/wix extension add -g WixToolset.Util.wixext/5.0.2
-          ./target/wix/wix build -arch x64 -ext WixToolset.Util.wixext -d Version=$version `
+          # Вне target/: каталог target сохраняется в кэше, повторная установка в него падает.
+          $wix = Join-Path $env:RUNNER_TEMP wix
+          dotnet tool install wix --version 5.0.2 --tool-path $wix
+          & "$wix/wix" extension add -g WixToolset.Util.wixext/5.0.2
+          & "$wix/wix" build -arch x64 -ext WixToolset.Util.wixext -d Version=$version `
             -d AgentExe=target/release/pult-agent.exe deploy/windows/agent.wxs -o target/release/pult-agent.msi
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
