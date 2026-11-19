@@ -65,7 +65,7 @@ jobs:
           sudo LANG=C.UTF-8 sh dist/install.sh "dist/pult_${GITHUB_REF_NAME#v}_amd64.deb"
           curl -fsk https://127.0.0.1/health
           sudo journalctl -u pult --no-pager | grep -q "SETUP CODE"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: linux
           path: |
@@ -94,7 +94,7 @@ jobs:
           & "$wix/wix" extension add -g WixToolset.Util.wixext/5.0.2
           & "$wix/wix" build -arch x64 -ext WixToolset.Util.wixext -d Version=$version `
             -d AgentExe=target/release/pult-agent.exe deploy/windows/agent.wxs -o target/release/pult-agent.msi
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows
           path: |

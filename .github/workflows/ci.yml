@@ -60,7 +60,7 @@ jobs:
           curl -fsS http://127.0.0.1:18080/metrics | grep -q pult_http_requests_total
       - name: Схема OpenAPI (вход для генерации TS-клиента)
         run: cargo run -q -p pult-server -- openapi > openapi.json
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: openapi
           path: openapi.json
@@ -153,7 +153,7 @@ jobs:
           sudo LANG=C.UTF-8 sh deploy/install.sh dist/pult_*_amd64.deb
           curl -fsk https://127.0.0.1/health
           sudo journalctl -u pult --no-pager | grep -q "SETUP CODE"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pult-linux-x86_64
           path: |
@@ -250,7 +250,7 @@ jobs:
           & "$wix/wix" build -arch x64 -ext WixToolset.Util.wixext -d Version=$version `
             -d AgentExe=target/release/pult-agent.exe deploy/windows/agent.wxs -o target/release/pult-agent.msi
           Get-FileHash target/release/pult-agent.msi, target/release/pult-agent.exe, target/release/pult-helper.exe
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pult-windows
           path: |
