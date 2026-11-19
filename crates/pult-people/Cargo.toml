@@ -1,0 +1,35 @@
+[package]
+name = "pult-people"
+description = "Pult people: AD accounts and sync, portal users and login, sites"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+pult-core.workspace = true
+pult-ad.workspace = true
+pult-phonebook.workspace = true
+axum.workspace = true
+sqlx.workspace = true
+uuid.workspace = true
+time.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+utoipa.workspace = true
+utoipa-axum.workspace = true
+base64.workspace = true
+dns-lookup = "2"
+
+[dev-dependencies]
+pult-testkit.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tower = { workspace = true, features = ["util"] }
+http-body-util = "0.1"
+
+[lints]
+workspace = true

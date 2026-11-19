@@ -1,0 +1,257 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  rust:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: pult
+          POSTGRES_USER: pult
+          POSTGRES_PASSWORD: pult-ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U pult -d pult" --health-interval 5s --health-retries 20
+    env:
+      PULT_DATABASE_URL: postgres://pult:pult-ci@localhost:5432/pult
+      PULT_TEST_DATABASE_URL: postgres://pult:pult-ci@localhost:5432/pult
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@5445741acf05630efa19e221cc588ebe0842b13d # 1.88
+        with:
+          toolchain: "1.88"
+          components: rustfmt, clippy
+      - name: GSSAPI для сборки (вход через домен)
+        timeout-minutes: 6
+        run: |
+          apt_opts="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o DPkg::Lock::Timeout=120"
+          sudo apt-get $apt_opts update -qq
+          sudo apt-get $apt_opts install -y -qq --no-install-recommends libkrb5-dev libclang-dev
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - name: Формат
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Тесты
+        run: cargo test --workspace
+      - name: Миграции на чистой БД
+        run: |
+          cargo run -q -p pult-server -- migrate
+          cargo run -q -p pult-server -- check db
+      - name: Смоук /health и /metrics
+        run: |
+          export PULT_SECRET_KEY="$(openssl rand -base64 48)" PULT_LISTEN=127.0.0.1:18080
+          cargo build -q -p pult-server
+          ./target/debug/pult serve & sleep 3
+          curl -fsS http://127.0.0.1:18080/health
+          curl -fsS http://127.0.0.1:18080/metrics | grep -q pult_http_requests_total
+      - name: Схема OpenAPI (вход для генерации TS-клиента)
+        run: cargo run -q -p pult-server -- openapi > openapi.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: openapi
+          path: openapi.json
+      - name: Пароли не попадают в журнал тестов
+        run: |
+          cargo test --workspace 2>&1 | tee test.log >/dev/null
+          ! grep -E "user-pass-xyz|svc-pass-xyz|hunter2|P@ssw0rd-very-secret|svc-Pass-123|User-Pass-456|stale-svc-password|ro-secret" test.log
+
+  # Фронтенд: типы, линтер, сборка, уязвимости в том, что уходит в браузер,
+  # и актуальность TS-клиента относительно OpenAPI сервера.
+  web:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: dtolnay/rust-toolchain@5445741acf05630efa19e221cc588ebe0842b13d # 1.88
+        with:
+          toolchain: "1.88"
+      - name: GSSAPI для сборки (вход через домен)
+        timeout-minutes: 6
+        run: |
+          apt_opts="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o DPkg::Lock::Timeout=120"
+          sudo apt-get $apt_opts update -qq
+          sudo apt-get $apt_opts install -y -qq --no-install-recommends libkrb5-dev libclang-dev
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - name: npm ci (без скриптов установки — .npmrc)
+        run: npm ci
+      - name: tsc
+        run: npm run typecheck
+      - name: eslint
+        run: npm run lint
+      - name: Сборка
+        run: npm run build
+      - name: Уязвимости в зависимостях для браузера
+        run: npm audit --omit=dev --audit-level=low
+      - name: TS-клиент совпадает с OpenAPI сервера
+        run: |
+          mkdir -p ../target
+          cargo run -q -p pult-server -- openapi > ../target/openapi.json
+          npm run -s gen:api
+          git diff --exit-code -- src/api/schema.ts || { echo "schema.ts устарел: npm run gen:api"; exit 1; }
+
+  # Один бинарник со встроенным фронтендом: собирается в release, запускается
+  # без web/dist на диске и отдаёт фронтенд из себя.
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: dtolnay/rust-toolchain@5445741acf05630efa19e221cc588ebe0842b13d # 1.88
+        with:
+          toolchain: "1.88"
+      - name: GSSAPI для сборки (вход через домен)
+        timeout-minutes: 6
+        run: |
+          apt_opts="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o DPkg::Lock::Timeout=120"
+          sudo apt-get $apt_opts update -qq
+          sudo apt-get $apt_opts install -y -qq --no-install-recommends libkrb5-dev libclang-dev
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - name: Сборка фронтенда
+        working-directory: web
+        run: npm ci && npm run build
+      - name: Сборка release
+        run: cargo build --release -p pult-server
+      # Сервер может быть старым x86-64 без AVX2 (ВМ с ограниченным набором инструкций): сборка не должна требовать x86-64-v2+.
+      - name: Бинарник для базового x86-64
+        run: |
+          if readelf -n target/release/pult | grep -E "x86 ISA needed: .*x86-64-v[234]"; then
+            echo "::error::сборка требует процессор новее базового x86-64"; exit 1
+          fi
+          objdump -T target/release/pult | grep -o "GLIBC_[0-9.]*" | sort -Vu | tail -1
+      - name: Смоук встроенного фронтенда
+        run: deploy/ci/smoke-release.sh target/release/pult
+      # Раннер — одноразовая Ubuntu 24.04 с systemd: пакет и install.sh так, как их запустит администратор.
+      - name: Пакет .deb и установка через install.sh
+        run: |
+          sh deploy/deb/build.sh target/release/pult dist
+          sudo systemctl start postgresql
+          sudo LANG=C.UTF-8 sh deploy/install.sh dist/pult_*_amd64.deb
+          curl -fsk https://127.0.0.1/health
+          sudo journalctl -u pult --no-pager | grep -q "SETUP CODE"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pult-linux-x86_64
+          path: |
+            target/release/pult
+            dist/*.deb
+
+  # Окружение разработчика целиком (compose.dev.yml) и проверки входа и синхронизации на Samba AD ×2.
+  compose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      PULT_DATABASE_URL: postgres://pult:pult-dev@localhost:5432/pult
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@5445741acf05630efa19e221cc588ebe0842b13d # 1.88
+        with:
+          toolchain: "1.88"
+      - name: GSSAPI для сборки (вход через домен)
+        timeout-minutes: 6
+        run: |
+          apt_opts="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o DPkg::Lock::Timeout=120"
+          sudo apt-get $apt_opts update -qq
+          sudo apt-get $apt_opts install -y -qq --no-install-recommends libkrb5-dev libclang-dev
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - name: docker compose up (PostgreSQL, Samba AD ×2, Mailpit, GreenMail)
+        run: docker compose -f deploy/compose.dev.yml up -d --build
+      - name: Сборка pult
+        run: cargo build -p pult-server
+      - name: PostgreSQL, Mailpit, GreenMail отвечают
+        run: |
+          for _ in $(seq 1 30); do docker compose -f deploy/compose.dev.yml exec -T postgres pg_isready -U pult -d pult && break; sleep 2; done
+          ./target/debug/pult migrate
+          ./target/debug/pult check db
+          for p in 1025 8025 3143 3025; do timeout 60 sh -c "until nc -z 127.0.0.1 $p; do sleep 2; done" && echo "порт $p открыт"; done
+      - name: Имена контроллеров (должны совпадать с сертификатами)
+        run: echo "127.0.0.1 dc1.pult.test dc2.pult.test" | sudo tee -a /etc/hosts
+      - name: вход и синхронизация на Samba AD
+        run: deploy/ci/samba-ad-check.sh target/debug/pult
+      - name: Портал на Samba AD (serve, вход, синхронизация, отключение учётки)
+        run: deploy/ci/stage1-samba.sh target/debug/pult
+      - name: Мастер первого запуска на Samba AD
+        run: deploy/ci/setup-wizard-samba.sh target/debug/pult
+      - name: Журнал контроллеров при сбое
+        if: failure()
+        run: docker compose -f deploy/compose.dev.yml logs --no-color --tail 200 samba-dc1 samba-dc2
+
+  # Установка так, как её сделает пользователь: образ и compose без единой настройки.
+  install:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: docker compose up (образ собирается с нуля)
+        run: docker compose -f deploy/compose.yml up -d --build
+      - name: HTTPS, мастер, код настройки, права на ключи
+        run: deploy/ci/docker-smoke.sh
+      - name: Журнал при сбое
+        if: failure()
+        run: docker compose -f deploy/compose.yml logs --no-color --tail 100
+
+  deny:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: EmbarkStudios/cargo-deny-action@70f81531115945ba6eb6b941ec9d39d063438eb9 # v2
+
+
+
+  # Агент и helper: код под cfg(windows) проверяется только здесь; MSI — WiX 5.
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@5445741acf05630efa19e221cc588ebe0842b13d # 1.88
+        with:
+          toolchain: "1.88"
+          components: clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - name: Clippy (Windows)
+        run: cargo clippy -p pult-agent -p pult-helper --all-targets -- -D warnings
+      - name: Тесты (Windows)
+        run: cargo test -p pult-agent -p pult-helper
+      - name: Сборка release
+        run: cargo build --release -p pult-agent -p pult-helper
+      - name: MSI агента
+        shell: pwsh
+        run: |
+          $version = (cargo pkgid -p pult-agent) -replace '.*[#@]', ''
+          dotnet tool install wix --version 5.0.2 --tool-path target/wix
+          ./target/wix/wix extension add -g WixToolset.Util.wixext/5.0.2
+          ./target/wix/wix build -arch x64 -ext WixToolset.Util.wixext -d Version=$version `
+            -d AgentExe=target/release/pult-agent.exe deploy/windows/agent.wxs -o target/release/pult-agent.msi
+          Get-FileHash target/release/pult-agent.msi, target/release/pult-agent.exe, target/release/pult-helper.exe
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pult-windows
+          path: |
+            target/release/pult-agent.msi
+            target/release/pult-agent.exe
+            target/release/pult-helper.exe

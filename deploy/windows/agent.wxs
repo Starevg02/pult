@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MSI агента Pult. Собирает CI (задание windows, WiX 5); см. docs/admin-guide.md.
+
+  Установка (GPO «Установка программ» или вручную, от администратора):
+    msiexec /i pult-agent.msi /qn PORTALURL=https://pult.example.local/ ENROLLTOKEN=pae_… UPDATEKEY=…
+  Параметры можно не передавать, а задать групповой политикой в HKLM\SOFTWARE\Policies\Pult\Agent
+  (она важнее значений MSI). При обновлении MSI без параметров прежние значения сохраняются.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <Package Name="Pult Agent" Manufacturer="Pult" Version="$(var.Version)" Scope="perMachine"
+           UpgradeCode="79032f66-309b-43c5-a85e-e876dc7dcdc5" Language="1033" Codepage="65001" Compressed="yes">
+    <SummaryInformation Description="Pult Agent: user sessions to the Pult portal" />
+    <MajorUpgrade DowngradeErrorMessage="Установлена более новая версия агента Pult." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Значения из командной строки; если их нет — прежние из реестра (обновление без параметров). -->
+    <Property Id="PORTALURL" Secure="yes" />
+    <Property Id="UPDATEKEY" Secure="yes" />
+    <Property Id="ENROLLTOKEN" Secure="yes" Hidden="yes" />
+    <Property Id="SAVED_PORTALURL">
+      <RegistrySearch Root="HKLM" Key="SOFTWARE\Pult\Agent" Name="PortalUrl" Type="raw" Bitness="always64" />
+    </Property>
+    <Property Id="SAVED_UPDATEKEY">
+      <RegistrySearch Root="HKLM" Key="SOFTWARE\Pult\Agent" Name="UpdatePublicKey" Type="raw" Bitness="always64" />
+    </Property>
+    <Property Id="SAVED_ENROLLTOKEN" Hidden="yes">
+      <RegistrySearch Root="HKLM" Key="SOFTWARE\Pult\Agent" Name="EnrollToken" Type="raw" Bitness="always64" />
+    </Property>
+    <SetProperty Id="PORTALURL" Value="[SAVED_PORTALURL]" After="AppSearch" Sequence="both"
+                 Condition="NOT PORTALURL AND SAVED_PORTALURL" />
+    <SetProperty Id="UPDATEKEY" Value="[SAVED_UPDATEKEY]" After="AppSearch" Sequence="both"
+                 Condition="NOT UPDATEKEY AND SAVED_UPDATEKEY" />
+    <SetProperty Id="ENROLLTOKEN" Value="[SAVED_ENROLLTOKEN]" After="AppSearch" Sequence="both"
+                 Condition="NOT ENROLLTOKEN AND SAVED_ENROLLTOKEN" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="PultDir" Name="Pult">
+        <Directory Id="INSTALLDIR" Name="Agent">
+          <Component Id="AgentExe" Bitness="always64">
+            <File Id="AgentExeFile" Source="$(var.AgentExe)" Name="pult-agent.exe" KeyPath="yes" />
+            <ServiceInstall Id="AgentService" Name="PultAgent" DisplayName="Pult Agent"
+                            Description="Сообщает порталу Pult, кто работает на этом ПК (для заявок и удалённой поддержки)."
+                            Type="ownProcess" Start="auto" ErrorControl="normal" Account="LocalSystem"
+                            Arguments="service" Vital="yes">
+              <!-- Сбой и самообновление (агент выходит с кодом 1) — служба перезапускается. -->
+              <util:ServiceConfig FirstFailureActionType="restart" SecondFailureActionType="restart"
+                                  ThirdFailureActionType="restart" RestartServiceDelayInSeconds="5" ResetPeriodInDays="1" />
+            </ServiceInstall>
+            <ServiceControl Id="AgentServiceControl" Name="PultAgent" Start="install" Stop="both" Remove="uninstall"
+                            Wait="yes" />
+          </Component>
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <!-- Настройки читают только SYSTEM и администраторы: в них токен регистрации. -->
+    <ComponentGroup Id="Settings">
+      <Component Id="SettingsKey" Directory="INSTALLDIR" Bitness="always64" Guid="0b6c7f4e-6a43-4f4e-9d0a-3c1d5b8e2a71">
+        <RegistryKey Root="HKLM" Key="SOFTWARE\Pult\Agent" ForceCreateOnInstall="yes" ForceDeleteOnUninstall="yes">
+          <PermissionEx Sddl="D:P(A;CI;KA;;;SY)(A;CI;KA;;;BA)" />
+          <RegistryValue Name="InstalledVersion" Type="string" Value="$(var.Version)" KeyPath="yes" />
+        </RegistryKey>
+      </Component>
+      <Component Id="PortalUrlValue" Directory="INSTALLDIR" Bitness="always64" Condition="PORTALURL"
+                 Guid="5d2a9c1b-7e3f-4b8a-a6d4-1f0e9c3b7a52">
+        <RegistryValue Root="HKLM" Key="SOFTWARE\Pult\Agent" Name="PortalUrl" Type="string" Value="[PORTALURL]"
+                       KeyPath="yes" />
+      </Component>
+      <Component Id="UpdateKeyValue" Directory="INSTALLDIR" Bitness="always64" Condition="UPDATEKEY"
+                 Guid="a8e4f2c7-3b1d-4c9e-8f6a-2d7b5e1c9f03">
+        <RegistryValue Root="HKLM" Key="SOFTWARE\Pult\Agent" Name="UpdatePublicKey" Type="string" Value="[UPDATEKEY]"
+                       KeyPath="yes" />
+      </Component>
+      <Component Id="EnrollTokenValue" Directory="INSTALLDIR" Bitness="always64" Condition="ENROLLTOKEN"
+                 Guid="c3f7a1e9-5d2b-4e8c-9a6f-4b1e7d3c8a24">
+        <RegistryValue Root="HKLM" Key="SOFTWARE\Pult\Agent" Name="EnrollToken" Type="string" Value="[ENROLLTOKEN]"
+                       KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <Feature Id="Main" Title="Pult Agent" Level="1">
+      <ComponentRef Id="AgentExe" />
+      <ComponentGroupRef Id="Settings" />
+    </Feature>
+  </Package>
+</Wix>

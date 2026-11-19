@@ -1,0 +1,24 @@
+[package]
+name = "pult-helper"
+description = "Pult helper on the engineer's PC: handles pult:// links, exchanges the one-time token and starts mstsc /shadow or a quick action"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+pult-api-types.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+clap.workspace = true
+url.workspace = true
+serde_json.workspace = true
+# Синхронный клиент: helper — короткоживущая консольная программа. Корневой сертификат — из хранилища Windows.
+reqwest = { workspace = true, features = ["blocking", "rustls-tls-native-roots"] }
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = ["Win32_System_Registry"] }
+
+[lints]
+workspace = true

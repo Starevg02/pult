@@ -1,0 +1,165 @@
+#!/bin/sh
+# Pult: настройка после установки или обновления.
+#
+# Новая установка: системный пользователь pult, база и роль в локальном PostgreSQL со случайным
+# паролем, /etc/pult/pult.env, служба с HTTPS на 443. Дальше — мастер в браузере.
+# Обновление: резервная копия, миграции одной транзакцией. Если копия или миграция не удалась —
+# база не меняется, возвращается прежний бинарник, служба запускается на нём, пакет — с ошибкой.
+set -eu
+
+BIN=/opt/pult/bin/pult
+ENV=/etc/pult/pult.env
+DATA=/var/lib/pult
+# Прежний бинарник и метка обновления (preinst) — в каталоге только для root.
+RB=/var/lib/pult-rollback
+
+say() { echo "pult: $*"; }
+
+# Команда pult от имени пользователя pult с настройками из pult.env.
+as_pult() {
+    runuser -u pult -- sh -c 'set -a; . /etc/pult/pult.env; set +a; cd /var/lib/pult; exec "$@"' pult "$@"
+}
+
+has_systemd() { [ -d /run/systemd/system ]; }
+
+# Откат — только при обновлении и только из каталога root без ссылок.
+upgrading() { [ -d "$RB" ] && [ ! -L "$RB" ] && [ "$(stat -c %u "$RB")" = 0 ] && [ -f "$RB/upgrading" ]; }
+
+rollback() {
+    say "ОШИБКА: $1"
+    if upgrading && [ -f "$RB/pult.prev" ] && [ ! -L "$RB/pult.prev" ]; then
+        # Новую программу откладываем: повтор (dpkg --configure -a) вернёт её и попробует снова —
+        # сбой мог быть временным (база недоступна, диск полон).
+        cp --no-dereference -p "$BIN" "$RB/pult.new"
+        install -m 0755 "$RB/pult.prev" "$BIN"
+        say "возвращена прежняя версия: $(cat "$RB/upgrading" 2>/dev/null || echo '?')"
+        say "повторить обновление: sudo dpkg --configure -a"
+        if has_systemd; then systemctl restart pult.service || true; fi
+    fi
+    say "журнал: journalctl -u pult; резервные копии: $DATA/backups"
+    exit 1
+}
+
+# База и роль pult в локальном PostgreSQL. Пароль идёт через stdin, не через аргументы.
+local_database() {
+    command -v psql >/dev/null 2>&1 || return 1
+    runuser -u postgres -- psql -XtAqc 'SELECT 1' >/dev/null 2>&1 || return 1
+    port=$(runuser -u postgres -- psql -XtAqc 'SHOW port')
+    pass=$(head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 32)
+    # Пароль не должен попасть в журнал PostgreSQL ни при log_statement=ddl, ни при ошибке оператора.
+    printf '%s\n' \
+        "SET log_statement = 'none';" "SET log_min_error_statement = 'panic';" \
+        "SELECT 'CREATE ROLE pult LOGIN' WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'pult')" '\gexec' \
+        "ALTER ROLE pult LOGIN PASSWORD '$pass';" \
+        "SELECT 'CREATE DATABASE pult OWNER pult' WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'pult')" '\gexec' |
+        runuser -u postgres -- psql -X -q -v ON_ERROR_STOP=1 >/dev/null || return 1
+    # Расширения ставит владелец кластера: у роли pult прав суперпользователя нет.
+    printf '%s\n' 'CREATE EXTENSION IF NOT EXISTS pg_trgm;' 'CREATE EXTENSION IF NOT EXISTS unaccent;' |
+        runuser -u postgres -- psql -X -q -v ON_ERROR_STOP=1 -d pult >/dev/null || return 1
+    echo "PULT_DATABASE_URL=postgres://pult:$pass@127.0.0.1:$port/pult"
+}
+
+write_env() (
+    set -e
+    umask 027
+    tmp=$(mktemp "$ENV.XXXXXX")
+    trap 'rm -f "$tmp"' EXIT
+    {
+        echo "# Pult: настройки службы. Создан пакетом при установке; пакет его больше не меняет."
+        echo "# Тут пароль базы — права root:pult 0640. Все параметры — docs/install.md."
+        if url=$(local_database); then
+            echo "$url"
+        else
+            echo "# PostgreSQL на этом сервере не найден: укажите базу и перезапустите службу."
+            echo "# PULT_DATABASE_URL=postgres://pult:ПАРОЛЬ@сервер-бд:5432/pult"
+        fi
+        echo "PULT_DATA_DIR=$DATA"
+        echo "PULT_AUTO_TLS=1"
+        echo "PULT_LISTEN=0.0.0.0:443"
+        echo "PULT_LOG_FORMAT=json"
+    } >"$tmp"
+    chown root:pult "$tmp"
+    chmod 0640 "$tmp"
+    mv "$tmp" "$ENV"
+)
+
+# Служба поднялась и не упала сразу после старта.
+service_up() {
+    i=0
+    while [ $i -lt 30 ]; do
+        if [ "$(systemctl is-active pult.service 2>/dev/null)" = active ]; then
+            sleep 2
+            [ "$(systemctl is-active pult.service 2>/dev/null)" = active ] && return 0
+        fi
+        i=$((i + 1))
+        sleep 1
+    done
+    return 1
+}
+
+case "$1" in
+configure)
+    if upgrading && [ -f "$RB/pult.new" ] && [ ! -L "$RB/pult.new" ]; then
+        # Повтор после отката: на месте прежняя программа, возвращаем новую из этого пакета.
+        say "повтор обновления после отката"
+        if has_systemd; then systemctl stop pult.service 2>/dev/null || true; fi
+        install -m 0755 "$RB/pult.new" "$BIN"
+        rm -f "$RB/pult.new"
+    fi
+    if ! getent passwd pult >/dev/null; then
+        adduser --system --group --home "$DATA" --no-create-home --quiet pult
+    fi
+    install -d -o pult -g pult -m 0750 "$DATA"
+    install -d -o root -g pult -m 0750 /etc/pult
+    if [ ! -f "$ENV" ]; then
+        write_env || { say "ОШИБКА: не удалось записать $ENV"; exit 1; }
+    fi
+
+    if ! grep -q '^PULT_DATABASE_URL=' "$ENV"; then
+        rm -rf "$RB"
+        if has_systemd; then
+            systemctl daemon-reload
+            systemctl enable pult.service >/dev/null 2>&1
+        fi
+        say "база не настроена — служба НЕ запущена: впишите PULT_DATABASE_URL в $ENV и выполните systemctl restart pult"
+        exit 0
+    fi
+
+    if upgrading; then
+        say "обновление с версии $(cat "$RB/upgrading"): резервная копия…"
+        as_pult "$BIN" backup || rollback "резервная копия не создана — обновление не применено"
+    elif [ -f "$DATA/secret.key" ]; then
+        # Повторная установка после apt remove: данные прежней установки на месте — сначала копия.
+        say "найдены данные прежней установки: резервная копия…"
+        as_pult "$BIN" backup || { say "ОШИБКА: резервная копия не создана — миграции не применены"; exit 1; }
+    fi
+    as_pult "$BIN" migrate || rollback "миграции не применились — база не изменена"
+    rm -rf "$RB"
+
+    if has_systemd; then
+        systemctl daemon-reload
+        systemctl enable pult.service >/dev/null 2>&1
+        if ! systemctl restart pult.service || ! service_up; then
+            # База уже обновлена: прежняя версия с ней не стартует, откат — только из резервной копии.
+            say "ОШИБКА: служба не запустилась после установки. Журнал: journalctl -u pult"
+            say "резервные копии: $DATA/backups (восстановление — docs/install.md, раздел «Резервные копии»)"
+            exit 1
+        fi
+    fi
+    say "готово: $("$BIN" version)"
+    if [ -z "${2:-}" ]; then
+        host=$(hostname -f 2>/dev/null || hostname)
+        say "откройте https://$host/ — мастер первого запуска спросит код:"
+        say "  journalctl -u pult | grep 'SETUP CODE' | tail -n 1"
+    fi
+    ;;
+abort-upgrade | abort-remove | abort-deconfigure)
+    # Новый пакет не встал (его preinst упал): эта версия остаётся, служба — снова на ней.
+    rm -rf "$RB"
+    if has_systemd && systemctl is-enabled pult.service >/dev/null 2>&1; then
+        systemctl restart pult.service || true
+    fi
+    ;;
+esac
+
+exit 0

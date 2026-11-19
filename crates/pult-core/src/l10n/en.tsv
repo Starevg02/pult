@@ -1,0 +1,572 @@
+# Каталог переводов сервера: русский<TAB>английский, по алфавиту русского текста.
+# {…} — подстановка из format!; \n в тексте — перевод строки. Полнота: cargo test -p pult-core --test l10n_coverage
+## Проблема\n\n	## Problem\n\n
+CSRF-токен отсутствует или неверен	CSRF token is missing or invalid
+HTTPS настроен вне портала — сертификат меняется там же.	HTTPS is configured outside the portal — change the certificate there.
+Pult (временный сертификат)	Pult (temporary certificate)
+Pult: проверка почты	Pult: mail test
+Pult: синхронизация с AD не удалась	Pult: AD synchronization failed
+\n\n## Решение\n\n	\n\n## Solution\n\n
+\nПодробно и выгрузка в XLSX: {}/reports?from={}&to={}\n	\nDetails and XLSX export: {}/reports?from={}&to={}\n
+{}: начало дня позже конца.	{}: the day starts after it ends.
+{}: нет сертификатов	{}: no certificates
+{}: укажите и начало, и конец дня или ничего.	{}: set both the start and the end of the day, or neither.
+«{e}» не похоже на адрес почты.	“{e}” does not look like an email address.
+«{name}» уже есть.	“{name}” already exists.
+«Не могу войти»	“Can’t sign in”
+АТС не ответила.	The PBX did not respond.
+АТС недоступна. Попробуйте позже.	The PBX is unavailable. Try again later.
+АТС перегружена, попробуйте позже.	The PBX is overloaded, try again later.
+Автозакрытие — от 1 до 30 рабочих дней.	Auto-close: 1 to 30 working days.
+Адрес CallGateway — только https://	The CallGateway address must start with https://
+Адрес АТС — имя или IP без порта.	PBX address: a host name or IP without a port.
+Адрес для отчёта — электронная почта.	The report address must be an email address.
+Адрес или пользователь телефонии изменились — введите токен (пароль) заново или удалите его.	The telephony address or user changed — enter the token (password) again or remove it.
+Адрес отправителя не похож на email.	The sender address does not look like an email address.
+Адрес портала начинается с https://	The portal address must start with https://
+Адрес — https://… (http — только для localhost).	Address: https://… (http is allowed only for localhost).
+Базовый DN — вида DC=corp,DC=example,DC=local.	Base DN looks like DC=corp,DC=example,DC=local.
+Без исполнителя	Unassigned
+Без исполнителя сейчас	Unassigned now
+В вашей карточке справочника нет внутреннего номера — АТС не знает, на какой телефон звонить вам.	Your directory card has no internal extension — the PBX does not know which phone to ring.
+В группе — только инженеры площадок.	A group can contain only site engineers.
+В срок	On time
+В файле не нашлось ни одного дня.	No days were found in the file.
+В чек-листе не больше 100 пунктов.	A checklist can have at most 100 items.
+Ваш телефон не зарегистрирован на АТС или номер не найден.	Your phone is not registered on the PBX or the number was not found.
+Ваша линия занята.	Your line is busy.
+Вернуть в работу может заявитель решённой заявки.	Only the requester of a resolved ticket can reopen it.
+Вести каталог оборудования: добавлять, менять, списывать	Manage the asset catalog: add, change, write off
+Вести площадки и ответственных инженеров	Manage sites and responsible engineers
+Вложение не найдено или уже использовано.	The attachment was not found or is already used.
+Время «{s}» — нужен формат ЧЧ:ММ.	Time “{s}” must be in HH:MM format.
+Время — от 1 минуты до 40 часов.	Time: 1 minute to 40 hours.
+Вход в это время запрещён. Обратитесь в IT-службу.	Sign-in is not allowed at this time. Contact IT support.
+Вход с этого компьютера запрещён. Обратитесь в IT-службу.	Sign-in from this computer is not allowed. Contact IT support.
+Вход через AD ещё не настроен.	AD sign-in is not configured yet.
+Вы не сняли трубку.	You did not pick up the phone.
+Выберите код закрытия.	Choose a closure code.
+Выберите от 1 до 200 заявок.	Select 1 to 200 tickets.
+Выполнение SLA, %	SLA met, %
+Главная заявка не найдена.	The parent ticket was not found.
+Главную заявку нельзя привязать к другой.	A parent ticket cannot be linked to another one.
+Группа не найдена.	Group not found.
+Группа с таким названием уже есть.	A group with this name already exists.
+Дата «{}» — нужен формат ГГГГ-ММ-ДД.	Date “{}” must be in YYYY-MM-DD format.
+Дата — в формате RFC 3339	The date must be in RFC 3339 format
+Дата — в формате ГГГГ-ММ-ДД.	The date must be in YYYY-MM-DD format.
+Действию «{}» нужен выбор из списка.	Action “{}” needs a value from the list.
+День недели указан дважды.	A weekday is listed twice.
+Дни недели — от 1 до 7.	Weekdays: 1 to 7.
+Добавьте хотя бы одно действие.	Add at least one action.
+Доля «хорошо», %	“Good” ratings, %
+Доля повторных открытий, %	Reopened, %
+Домен AD не настроен.	The AD domain is not configured.
+Дубль	Duplicate
+Дубль уже решён или закрыт.	The duplicate is already resolved or closed.
+Забыл пароль	Forgot password
+Закрытый ключ — не в формате PEM или зашифрован паролем.	The private key is not in PEM format or is password-protected.
+Запись с таким названием уже есть.	An entry with this name already exists.
+Заполните поле «{}».	Fill in the field “{}”.
+Заявитель	Requester
+Заявитель и так получает все сообщения.	The requester already receives all messages.
+Заявитель уже указан.	The requester is already set.
+Заявка закрыта.	The ticket is closed.
+Заявка закрыта. Открыть её заново может суперадминистратор.	The ticket is closed. Only a superadministrator can reopen it.
+Заявка не закрыта.	The ticket is not closed.
+Заявка объединена с #{} — дальше работа идёт там, вы будете получать уведомления по ней.	The ticket was merged into #{} — work continues there, and you will get its notifications.
+Заявка отменена.	The ticket is cancelled.
+Заявка уже привязана к другой главной.	The ticket is already linked to another parent.
+Заявка уже решена или закрыта.	The ticket is already resolved or closed.
+Заявку нельзя объединить саму с собой.	A ticket cannot be merged into itself.
+Звонить можно только на внутренний номер.	Only internal extensions can be called.
+Звонок не найден.	Call not found.
+Звонок не состоялся.	The call did not go through.
+Звонок сброшен.	The call was dropped.
+Значение	Value
+Изменять настройки системы и безопасности	Change system and security settings
+Имя контроллера не находится в DNS. Проверьте имя и DNS сервера портала.	The controller name is not found in DNS. Check the name and the portal server’s DNS.
+Имя контроллера не совпадает с его сертификатом. Укажите полное DNS-имя контроллера, а не IP или короткое имя.	The controller name does not match its certificate. Use the controller’s full DNS name, not an IP or a short name.
+Инженер неактивен.	The engineer is inactive.
+Инженер уже ответил — отменить заявку может только он.	An engineer has already replied — only they can cancel the ticket.
+Исполнители	Assignees
+Исполнитель	Assignee
+Исполнитель пункта — активный инженер.	The item assignee must be an active engineer.
+Используется — можно только отправить в архив.	In use — it can only be archived.
+Истёк срок пароля	Password expired
+Истёк срок пароля. Смените пароль на компьютере.	Your password has expired. Change it on your computer.
+Канал	Channel
+Канал звонящего — например Local/{ext}@from-internal или PJSIP/{ext}.	Caller channel, for example Local/{ext}@from-internal or PJSIP/{ext}.
+Канал — телефон или лично.	Channel: phone or in person.
+Каналы	Channels
+Категории	Categories
+Категории — не глубже трёх уровней и без циклов.	Categories: at most three levels and no cycles.
+Категория	Category
+Категория не найдена.	Category not found.
+Код «no_response» нужен для автоматического решения по «Ждёт ответа».	The “no_response” code is required to auto-resolve tickets in “Waiting for reply”.
+Код закрытия «{}» повторяется или без названия.	Closure code “{}” is duplicated or has no name.
+Код закрытия «{}» — латиница в нижнем регистре, цифры и «_».	Closure code “{}” may contain only lowercase Latin letters, digits and “_”.
+Кому доступен — all или engineers.	Availability: all or engineers.
+Конец должен быть позже начала.	The end must be later than the start.
+Конец периода раньше начала или период больше двух лет.	The period ends before it starts or is longer than two years.
+Контекст набора — например from-internal.	Dial context, for example from-internal.
+Контроллер не ответил вовремя. Проверьте сеть и файрвол между порталом и контроллером.	The controller did not respond in time. Check the network and firewall between the portal and the controller.
+Контроллер оборвал TLS-соединение. Чаще всего у него нет сертификата LDAPS: он появляется сам, если в домене есть AD CS; без AD CS сертификат нужно выпустить и установить (см. документацию).	The controller dropped the TLS connection. Most often it has no LDAPS certificate: it appears automatically if the domain has AD CS; without AD CS the certificate must be issued and installed (see the documentation).
+Контроллеры, режим TLS, CA или служебная учётка изменились — введите пароль служебной учётки заново.	Controllers, TLS mode, CA or the service account changed — enter the service account password again.
+Линия — l1 или l2.	Line: l1 or l2.
+Лично	In person
+Логин почты совпадает с логином AD, фамилия — нет	The mailbox login matches the AD login, the last name does not
+Массовый сбой не найден.	Major incident not found.
+Массовый сбой уже решён.	The major incident is already resolved.
+Матрица приоритета — 3 × 3 из low, normal, high, critical.	The priority matrix is 3 × 3 of low, normal, high, critical.
+Нагрузка	Workload
+Назначать роли и менять матрицу разрешений	Assign roles and change the permission matrix
+Напишите текст ответа.	Write the reply text.
+Напишите, как решена заявка: заявитель получит это письмом.	Describe how the ticket was resolved: the requester will get it by email.
+Напишите, чего ждём: заявитель увидит это.	Describe what we are waiting for: the requester will see it.
+Напишите, что не работает.	Describe what is not working.
+Напишите, что не так.	Describe what is wrong.
+Настраивать Helpdesk: категории, рабочее время, отсутствия инженеров	Configure Helpdesk: categories, working hours, engineer absences
+Настраивать отправку почты (SMTP)	Configure outgoing mail (SMTP)
+Настраивать подключение к AD и запускать синхронизацию	Configure the AD connection and run synchronization
+Настраивать справочник: источники полей, телефония, шаблон письма	Configure the directory: field sources, telephony, email link
+Настройки — объект JSON до 32 КБ.	Settings must be a JSON object up to 32 KB.
+Начало рабочего дня должно быть раньше конца.	The working day must start before it ends.
+Не воспроизводится	Cannot reproduce
+Не выполнено обязательных пунктов чек-листа: {open}.	Required checklist items not done: {open}.
+Не могу войти	Can’t sign in
+Не наша зона	Out of scope
+Не удалось разобрать сертификат: {e}	Could not parse the certificate: {e}
+Неверная аудитория или состояние.	Invalid audience or state.
+Неверное влияние или срочность.	Invalid impact or urgency.
+Неверное значение поля «{}».	Invalid value of the field “{}”.
+Неверное состояние.	Invalid state.
+Неверное условие «{} {}».	Invalid condition “{} {}”.
+Неверный логин или пароль служебной учётки.	Wrong service account login or password.
+Неверный логин или пароль.	Wrong login or password.
+Неверный порт.	Invalid port.
+Неверный приоритет.	Invalid priority.
+Неверный тип или приоритет.	Invalid type or priority.
+Неизвестная роль.	Unknown role.
+Неизвестное действие «{}».	Unknown action “{}”.
+Неизвестное действие.	Unknown action.
+Неизвестное поле: {bad}	Unknown field: {bad}
+Неизвестное право «{p}».	Unknown scope “{p}”.
+Неизвестное разрешение: {bad}	Unknown permission: {bad}
+Неизвестное событие.	Unknown event.
+Неизвестный вид объекта.	Unknown object kind.
+Неизвестный способ звонка.	Unknown call method.
+Неизвестный часовой пояс: {}	Unknown time zone: {}
+Нельзя выдать или снять разрешение, которого нет у вас: {p}	You cannot grant or revoke a permission you do not have: {p}
+Нельзя выдать или снять роль с разрешением, которого нет у вас: {p}	You cannot grant or revoke a role with a permission you do not have: {p}
+Нельзя снять роль с последнего суперадминистратора.	The last superadministrator cannot lose the role.
+Нет ответа	No response
+Нет права звонить или к учётке не привязана трубка.	No permission to call, or no phone is bound to the account.
+Нет связи с доменом.	No connection to the domain.
+Нет связи с доменом. Попробуйте позже.	No connection to the domain. Try again later.
+Нет связи с доменом. Работа продолжится, когда связь восстановится.	No connection to the domain. Work will continue once the connection is back.
+Ни один контроллер не принял служебную учётку — проверьте подключение.	No controller accepted the service account — check the connection settings.
+Нужен идентификатор.	An identifier is required.
+Обходное решение	Workaround
+Объединена заявка #{} «{}».	Ticket #{} “{}” was merged.
+Объект не найден.	Object not found.
+Оборудование не найдено.	Equipment not found.
+Не больше 10 единиц оборудования.	No more than 10 equipment items.
+Описание слишком длинное.	The description is too long.
+Основная заявка закрыта.	The main ticket is closed.
+Ответа не было, заявка решена автоматически. Если проблема осталась — нажмите «Нет, не решена» или ответьте в заявке.	There was no reply, so the ticket was resolved automatically. If the problem persists, click “No, not resolved” or reply in the ticket.
+Ответственным может быть только активный пользователь с ролью «Инженер».	Only an active user with the “Engineer” role can be responsible.
+Отказ	Rejected
+Открыто сейчас	Open now
+Открыты дольше 1 дня	Open longer than 1 day
+Открыты дольше 3 дней	Open longer than 3 days
+Открыты дольше 7 дней	Open longer than 7 days
+Открытых заявок	Open tickets
+Отчёт Helpdesk за {} — {}	Helpdesk report for {} — {}
+Оценить можно свою решённую заявку.	You can rate only your own resolved ticket.
+Оценка — хорошо или плохо.	Rating: good or bad.
+Оценок «плохо»	“Bad” ratings
+Оценок «хорошо»	“Good” ratings
+Ошибка телефонии: {0}	Telephony error: {0}
+Период	Period
+Писать и публиковать статьи базы знаний	Write and publish knowledge base articles
+Площадка	Site
+Площадка «{name}» уже есть.	Site “{name}” already exists.
+Площадка не найдена.	Site not found.
+Площадки	Sites
+Повторно открыто	Reopened
+Повторное обращение по #{old_number}	Follow-up to #{old_number}
+Подразделение	Department
+Подразделение не может входить само в себя.	A department cannot be inside itself.
+Подразделения	Departments
+Подтвердить решение может заявитель решённой заявки.	Only the requester of a resolved ticket can confirm the resolution.
+Показатель	Metric
+Поле «{field}» берётся из AD и в портале не меняется.	The field “{field}” comes from AD and cannot be changed in the portal.
+Пользователь AMI — латиница, цифры, . _ - @	AMI user: Latin letters, digits, . _ - @
+Порт закрыт. Проверьте порт LDAPS (636) на контроллере и файрвол.	The port is closed. Check the LDAPS port (636) on the controller and the firewall.
+Портал	Portal
+Почта	Email
+Почта без шифрования запрещена.	Unencrypted mail is not allowed.
+Права «{p}» нет у вас самого.	You do not have the “{p}” scope yourself.
+Править справочник: сотрудники, подразделения, должности, архив	Edit the directory: employees, departments, positions, archive
+Привязать можно только к другой главной заявке.	A ticket can be linked only to another parent ticket.
+Просматривать и выгружать журнал аудита	View and export the audit log
+Просрочено сейчас	Overdue now
+Пункт без текста.	The item has no text.
+Пункт отмечает назначенный на него инженер.	Only the engineer assigned to the item can check it.
+Пункты чек-листа — с текстом, не больше 100.	Checklist items must have text, at most 100 of them.
+Работать с заявками: видеть все, отвечать, менять, передавать, решать	Work on tickets: see all, reply, change, transfer, resolve
+Размер вложения — от 1 до 100 МБ.	Attachment size: 1 to 100 MB.
+Расписание никогда не срабатывает.	The schedule never fires.
+Регистрировать заявку за сотрудника (по звонку или лично)	Register a ticket on behalf of an employee (by phone or in person)
+Режим TLS — ldaps или starttls.	TLS mode: ldaps or starttls.
+Решено	Resolved
+Решено заявок	Tickets resolved
+Решено с первого обращения, %	First-contact resolution, %
+Решено со сроком SLA	Resolved with an SLA deadline
+Родитель не найден.	Parent not found.
+Сводка	Summary
+Связать можно с другой существующей заявкой.	A ticket can be linked only to another existing ticket.
+Связывать учётки AD с сотрудниками справочника	Link AD accounts to directory employees
+Связь — related или follow_up.	Link type: related or follow_up.
+Секрет подписи — не короче 16 символов.	The signing secret must be at least 16 characters.
+Сервер, порт, шифрование или логин SMTP изменились — введите пароль заново.	The SMTP server, port, encryption or login changed — enter the password again.
+Сертификат CA — в формате PEM.	The CA certificate must be in PEM format.
+Сертификат контроллера выдан неизвестным центром. Вставьте корневой сертификат вашего CA (PEM) в настройках домена.	The controller certificate is issued by an unknown authority. Paste your CA root certificate (PEM) in the domain settings.
+Сертификат контроллера просрочен или ещё не действует, либо расходится время на серверах.	The controller certificate is expired or not yet valid, or the servers’ clocks differ.
+Сертификат просрочен или ещё не начал действовать.	The certificate is expired or not yet valid.
+Сертификат — не в формате PEM.	The certificate is not in PEM format.
+Сертификат: {e}	Certificate: {e}
+Сеть «{s}» — нужен формат CIDR.	Network “{s}” must be in CIDR format.
+Синхронизация с Active Directory не удалась:\n\n{text}\n\nПодробности — в админке, раздел «Каталог AD».	Active Directory synchronization failed:\n\n{text}\n\nSee Admin → AD directory for details.
+Синхронизация уже идёт.	Synchronization is already running.
+Слишком много дней.	Too many days.
+Слишком много неудачных попыток. Попробуйте через {} мин.	Too many failed attempts. Try again in {} min.
+Слишком много обращений. Позвоните в IT-службу.	Too many requests. Please call IT support.
+Смотреть и выгружать отчёты Helpdesk	View and export Helpdesk reports
+Сначала суперадминистратор должен выдать этому пользователю роль «Инженер».	A superadministrator must first give this user the “Engineer” role.
+Совпадают фамилия и имя	Last and first names match
+Совпадают фамилия и имя (displayName)	Last and first names match (displayName)
+Содержимое файла не соответствует его расширению.	The file content does not match its extension.
+Создано	Created
+Создано заявок	Tickets created
+Сотрудник не найден.	Employee not found.
+Сотрудник не перенесён из Phonebook — CallGateway его не знает.	The employee was not migrated from Phonebook — CallGateway does not know them.
+Сотрудник уже связан с другой учёткой.	The employee is already linked to another account.
+Среднее время до «В работе», мин	Average time to “In progress”, min
+Среднее время первого ответа, мин	Average first response time, min
+Среднее время решения, ч	Average resolution time, h
+Среднее решение, ч	Average resolution, h
+Срок действия учётной записи истёк. Обратитесь в IT-службу.	Your account has expired. Contact IT support.
+Срок — от 1 дня до 10 лет.	Validity: 1 day to 10 years.
+Сроки напоминаний — до 30 рабочих дней.	Reminder delays: up to 30 working days.
+Сроки — в рабочих минутах, хотя бы один.	Deadlines are in working minutes; set at least one.
+Ссылка уже использована или срок её действия истёк.	The link has already been used or has expired.
+Тайм-аут — от 1 до 60 секунд.	Timeout: 1 to 60 seconds.
+Такого активного инженера нет.	There is no such active engineer.
+Такого кода закрытия нет.	There is no such closure code.
+Такое название или инвентарный номер уже есть.	This name or inventory number already exists.
+Текст заметки пуст.	The note text is empty.
+Текст слишком длинный.	The text is too long.
+Телефон	Phone
+Телефония не настроена.	Telephony is not configured.
+Тип не найден.	Type not found.
+Тип поля — text, select или bool.	Field type: text, select or bool.
+Трудозатраты, мин	Time spent, min
+У каждого поля формы — свой ключ и подпись.	Each form field needs its own key and label.
+У каждого поля — свой ключ и тип text, select или bool.	Each field needs its own key and a type: text, select or bool.
+У суперадминистратора есть все разрешения.	The superadministrator has all permissions.
+Уже идёт звонок.	A call is already in progress.
+Укажите DNS-имя домена, например corp.example.local.	Enter the domain DNS name, for example corp.example.local.
+Укажите ФИО и телефон.	Enter your full name and phone number.
+Укажите варианты поля «{}».	Add the options of the field “{}”.
+Укажите заголовок (до 300 знаков).	Enter a title (up to 300 characters).
+Укажите имя SMTP-сервера без схемы и порта.	Enter the SMTP server name without a scheme or port.
+Укажите логин и пароль.	Enter your login and password.
+Укажите название группы.	Enter the group name.
+Укажите название и текст шаблона.	Enter the template name and text.
+Укажите название и тему заявки.	Enter the name and the ticket subject.
+Укажите название и хотя бы одно право.	Enter a name and at least one scope.
+Укажите название площадки.	Enter the site name.
+Укажите название правила.	Enter the rule name.
+Укажите название раздела.	Enter the section name.
+Укажите название типа.	Enter the type name.
+Укажите название.	Enter a name.
+Укажите настройки домена.	Enter the domain settings.
+Укажите основную заявку.	Specify the main ticket.
+Укажите пароль служебной учётки.	Enter the service account password.
+Укажите порт AMI (обычно 5038).	Enter the AMI port (usually 5038).
+Укажите причину передачи.	Enter the reason for the transfer.
+Укажите служебную учётку и её пароль.	Enter the service account and its password.
+Укажите служебную учётку.	Enter the service account.
+Укажите тему.	Enter a subject.
+Укажите фамилию или имя.	Enter a last or first name.
+Укажите хотя бы один рабочий день.	Set at least one working day.
+Учётка не найдена или отключена.	The account was not found or is disabled.
+Учётная запись заблокирована	Account locked
+Учётная запись заблокирована. Обратитесь в IT-службу.	Your account is locked. Contact IT support.
+Учётная запись отключена. Обратитесь в IT-службу.	Your account is disabled. Contact IT support.
+Файл больше {} МБ.	The file is larger than {} MB.
+Файл не получен.	No file received.
+Файл пустой.	The file is empty.
+Файл слишком большой.	The file is too large.
+Файлы типа «.{ext}» загружать нельзя.	Files of type “.{ext}” cannot be uploaded.
+Фильтр пользователей — выражение LDAP в скобках.	The user filter must be an LDAP expression in parentheses.
+Частые заявители	Frequent requesters
+Шаблон не найден.	Template not found.
+Шаблон письма — mailto: или https:// с подстановкой {email}	The email link must be mailto: or https:// with {email}
+Эта учётка уже связана с другим сотрудником.	This account is already linked to another employee.
+Это ваш собственный номер.	This is your own number.
+Это проверочное письмо портала Pult. Отвечать на него не нужно.	This is a test message from the Pult portal. No reply is needed.
+бездействие — от 1 до 72 часов	idle timeout: 1 to 72 hours
+в расписании «{0}» должно быть 5 полей: минута час день месяц день_недели	schedule “{0}” must have 5 fields: minute hour day month weekday
+в списке контроллеров нет ни одного DC	the controller list has no DC
+в тексте нет сертификатов PEM	the text contains no PEM certificates
+внутренняя ошибка	internal error
+вход отклонён: {0:?}	sign-in rejected: {0}
+день месяца	day of month
+день недели	weekday
+для расписания «{0}» нет обработчика	schedule “{0}” has no handler
+запись уже изменена другим пользователем	the record was already changed by another user
+изменён	changed
+каталог сертификата {path}: {source}	certificate directory {path}: {source}
+ключ {path}: {reason}	key {path}: {reason}
+контроллер сменился — нужна полная	the controller changed — a full sync is needed
+месяц	month
+минута	minute
+начало диапазона больше конца	the range start is greater than the end
+не найдено	not found
+не удалось прочитать сертификат CA: {0}	could not read the CA certificate: {0}
+неверное значение	invalid value
+неверный порт: {0}	invalid port: {0}
+неверный шаг	invalid step
+недопустимый символ в команде АТС	invalid character in a PBX command
+недостаточно прав	insufficient permissions
+неизвестный формат зашифрованного секрета	unknown encrypted secret format
+нет связи ни с одним контроллером домена: {0}	no connection to any domain controller: {0}
+нет сертификатов в PEM	no certificates in PEM
+нет имён DNS	no DNS names
+нужно войти	sign-in required
+обработчик «{0}» уже зарегистрирован	handler “{0}” is already registered
+обработчик завершился паникой	the handler panicked
+обработчик отменён	the handler was cancelled
+окно — от 1 до 60 минут	window: 1 to 60 minutes
+ошибка LDAP (код {rc}): {text}	LDAP error (code {rc}): {text}
+по адресу отвечает не AMI	the address does not answer as AMI
+поле «{field}» расписания: «{value}» — {reason}	schedule field “{field}”: “{value}” — {reason}
+попыток на логин — от 1 до 20	attempts per login: 1 to 20
+попыток с IP — от 1 до 200	attempts per IP: 1 to 200
+превышено время выполнения ({} с)	time limit exceeded ({} s)
+пустое имя контроллера	empty controller name
+работа без домена — от 1 до 480 минут	offline grace period: 1 to 480 minutes
+расписание «{0}» никогда не срабатывает	schedule “{0}” never fires
+секрет повреждён или зашифрован другим ключом (PULT_SECRET_KEY)	the secret is corrupted or encrypted with another key (PULT_SECRET_KEY)
+сертификат {path}: {reason}	certificate {path}: {reason}
+сертификат и ключ не подходят друг другу или не поддерживаются: {0}	the certificate and key do not match or are not supported: {0}
+системный генератор случайных чисел недоступен	the system random number generator is unavailable
+слишком длинный ответ АТС	the PBX response is too long
+служебная учётка не вошла в домен (код LDAP {rc}): {text}	the service account could not sign in to the domain (LDAP code {rc}): {text}
+смещение «{0}» — ожидается вида +03:00	offset “{0}” — expected like +03:00
+срок сеанса — от 1 до 30 дней	session lifetime: 1 to 30 days
+удалён	removed
+укажите контроллер без схемы (`dc1.example.local[:порт]`), режим TLS задаётся параметром `tls`: {0}	enter the controller without a scheme (`dc1.example.local[:port]`), the TLS mode is set by the `tls` parameter: {0}
+час	hour
+Язык — ru, en или zh.	Language: ru, en or zh.
+
+# Каталог AD и запросы доступа
+{text} Проверено повторным чтением из AD.	{text} Verified by reading back from AD.
+Вести каталог ресурсов для запросов доступа и назначать их владельцев	Manage the catalog of resources for access requests and assign their owners
+Видеть состояние учёток AD и операции каталога	View AD account state and directory operations
+Включать и отключать учётки AD в разрешённых OU	Enable and disable AD accounts in allowed OUs
+Владелец не найден.	Owner not found.
+Владелец ресурса «{resource}» отказал в доступе.	The owner of “{resource}” rejected the access request.
+Владелец ресурса «{resource}» согласовал доступ.	The owner of “{resource}” approved access.
+Выберите ресурс, к которому нужен доступ.	Choose the resource you need access to.
+Выполнение прервалось: пароль мог измениться. Проверьте учётку и запросите сброс заново.	The run was interrupted and the password may have changed. Check the account and request a new reset.
+Группа AD — DN вида CN=…,OU=…,DC=…	The AD group must be a DN like CN=…,OU=…,DC=…
+Для группы AD укажите её DN.	Enter the DN of the AD group.
+Добавлять учётки в разрешённые группы AD	Add accounts to allowed AD groups
+Запись в AD не настроена: укажите учётку записи в разделе «Каталог AD → Запись».	Writing to AD is not configured: set the writer account in “AD directory → Writes”.
+Запрос отправлен на согласование владельцу ресурса «{resource}»: {}.	Sent for approval to the owner of “{resource}”: {}.
+Запрос уже отправлен на согласование.	The request has already been sent for approval.
+Заявка #{number}, пункт чек-листа «{title}».	Request #{number}, checklist item “{title}”.
+Заявка #{number}: доступ к «{resource}», согласован владельцем ресурса.	Request #{number}: access to “{resource}”, approved by the resource owner.
+Заявка не найдена.	Request not found.
+Каталог AD	AD directory
+Ключ идемпотентности — от 8 до 200 символов.	The idempotency key must be 8 to 200 characters.
+Название — от 1 до 200 символов.	The name must be 1 to 200 characters.
+Настраивать запись в AD: учётку записи, разрешённые OU и группы	Configure AD writes: the writer account, allowed OUs and groups
+Неизвестное действие пункта.	Unknown checklist item action.
+Операция каталога AD «{kind}» для {login} не выполнена: {error}	AD directory operation “{kind}” for {login} failed: {error}
+Основание — не длиннее 2000 символов.	The reason must be at most 2000 characters.
+Пароль учётки {login} сброшен, при входе нужно сменить. Временный пароль — у запросившего.	The password of {login} was reset and must be changed at next sign-in. The requester has the temporary password.
+Повторное чтение из AD не подтвердило изменение.	Reading back from AD did not confirm the change.
+Подтвердите операцию.	Confirm the operation.
+Разблокировать учётки AD в разрешённых OU	Unlock AD accounts in allowed OUs
+Ресурс не найден.	Resource not found.
+Ресурс с таким названием уже есть.	A resource with this name already exists.
+Сбрасывать пароль учёток AD в разрешённых OU	Reset passwords of AD accounts in allowed OUs
+Сначала нужно согласование владельца ресурса.	The resource owner has to approve first.
+Тип ресурса — группа AD, папка, приложение или прочее.	The resource type must be an AD group, a shared folder, an application or other.
+У запросившего больше нет права на эту операцию или учётка вне разрешённой области.	The requester no longer has permission for this operation, or the account is outside the allowed scope.
+У пункта нет действия каталога.	This checklist item has no directory action.
+У сотрудника нет учётки AD.	The employee has no AD account.
+Укажите группу.	Choose a group.
+Укажите заявку — основание операции.	Choose the request that justifies the operation.
+Укажите основание.	Enter a reason.
+Учётка {login} включена.	Account {login} was enabled.
+Учётка {login} добавлена в группу {group}.	Account {login} was added to group {group}.
+Учётка {login} не была заблокирована, AD не меняли.	Account {login} was not locked, AD was not changed.
+Учётка {login} отключена.	Account {login} was disabled.
+Учётка {login} разблокирована.	Account {login} was unlocked.
+Учётка {login} уже была в группе {group}, AD не меняли.	Account {login} was already in group {group}, AD was not changed.
+Учётка {login} уже была включена, AD не меняли.	Account {login} was already enabled, AD was not changed.
+Учётка {login} уже была отключена, AD не меняли.	Account {login} was already disabled, AD was not changed.
+Учётка записи в AD не настроена.	The AD writer account is not configured.
+Учётка записи — не длиннее 500 символов.	The writer account must be at most 500 characters.
+Учётка с таким логином не найдена.	No account with this login was found.
+Учётки нет в AD.	The account is not in AD.
+Это не DN: {s}	Not a DN: {s}
+Это не запрос доступа.	This is not an access request.
+Этот ресурс выдаётся вручную: выполните и закройте заявку.	This resource is granted manually: do it and close the request.
+включение учётки	enabling the account
+добавление в группу	adding to a group
+неизвестная операция {kind}	unknown operation {kind}
+нет пароля	no password
+отключение учётки	disabling the account
+разблокировка	unlocking
+сброс пароля	password reset
+смена пароля — только по LDAPS	password changes require LDAPS
+уже показано, второй раз не показывается	already shown, it is not shown again
+учётка не найдена в AD	account not found in AD
+Учётка привилегированная (adminCount = 1, член административных групп) — Pult её не меняет. Это делает администратор домена.	The account is privileged (adminCount = 1, member of administrative groups) — Pult does not change it. A domain administrator does that.
+Ресурс изменён администратором (группа или тип): согласование снято, отправьте запрос владельцу заново.	The resource was changed by an administrator (group or type): the approval was withdrawn, send the request to the owner again.
+Заявка закрыта: по ней доступ не выдаётся.	The request is closed: no access is granted under it.
+Ресурс выключен: доступ к нему не выдаётся.	The resource is disabled: no access to it is granted.
+«В сети» — от 1 до 60 минут, интервал отчётов — от 30 до 600 секунд.	“Online” is 1 to 60 minutes, the report interval is 30 to 600 seconds.
+Агент на этом ПК отключён администратором.	The agent on this PC was deactivated by an administrator.
+Адрес, с которого пришёл запрос, не совпадает с адресом этого ПК в DNS.	The address the request came from does not match this PC's address in DNS.
+Версия: буквы, цифры, точка, дефис.	Version: letters, digits, dot, hyphen.
+Видеть компьютеры с агентом, их сессии и «где залогинен» сотрудник	See computers with the agent, their sessions and where an employee is logged on
+Выберите сессию пользователя.	Choose a user session.
+Заявитель сейчас не работает на этом ПК (по данным агента).	The requester is not working on this PC right now (according to the agent).
+Импорт из policy.json	Imported from policy.json
+Имя ПК: буквы, цифры, дефис, точка; «*» — любые символы.	PC name: letters, digits, hyphen, dot; “*” matches any characters.
+Компьютера с таким именем нет среди включённых компьютеров AD (синхронизация каталога).	There is no enabled AD computer with this name (directory sync).
+Настраивать удалённую поддержку: токены агентов, устройства, политику, пакеты	Configure remote support: agent tokens, devices, policy, packages
+Неверное DNS-имя компьютера.	Invalid computer DNS name.
+Неверное имя компьютера.	Invalid computer name.
+Неизвестное правило.	Unknown rule.
+Неизвестный вид пакета.	Unknown package kind.
+Обновление агента без подписи не принимается.	An agent update without a signature is not accepted.
+ПК не на связи: агент давно не присылал данные. Проверьте, включён ли компьютер.	The PC is offline: the agent has not reported for a while. Check that the computer is on.
+Пакет обновления агента не найден.	Agent update package not found.
+Подключаться к сессии пользователя в режиме просмотра (всегда с согласием)	Connect to a user session in view mode (always with consent)
+Подключаться с управлением и быстрыми действиями (C$, управление компьютером, PowerShell)	Connect with control and quick actions (C$, Computer Management, PowerShell)
+Helper инженера запустил подключение к ПК {}, сессия {}: {}.	The engineer's helper started a connection to PC {}, session {}: {}.
+Подключение к этому ПК запрещено политикой удалённой поддержки.	Connecting to this PC is forbidden by the remote support policy.
+Подпись Ed25519 — 64 байта.	An Ed25519 signature is 64 bytes.
+Подпись — base64.	The signature must be base64.
+Слишком много ПК в файле.	Too many PCs in the file.
+Слишком много сессий в отчёте.	Too many sessions in the report.
+Срок токена — от 1 до 365 дней.	Token lifetime is 1 to 365 days.
+Ссылка подключения недействительна или устарела — нажмите «Подключиться» в портале ещё раз.	The connection link is invalid or expired — click “Connect” in the portal again.
+У заявки не указан компьютер с агентом Pult.	The ticket has no computer with the Pult agent.
+Укажите название токена.	Enter a token name.
+Файл пустой или больше 64 МБ.	The file is empty or larger than 64 MB.
+Этой сессии на ПК уже нет — обновите список сессий.	This session is no longer on the PC — refresh the session list.
+просмотр, пользователю показан запрос согласия	view, the user was asked for consent
+управление без запроса согласия	control without asking for consent
+управление, пользователю показан запрос согласия	control, the user was asked for consent
+На этом ПК разрешено только теневое подключение с согласием пользователя.	On this PC only a shadow session with the user's consent is allowed.
+ПК отключён администратором Pult: регистрация снова возможна после «Включить».	The PC was deactivated by a Pult administrator: it can enroll again after "Activate".
+Главная заявка уже решена или закрыта.	The main ticket is already resolved or closed.
+Загрузка оборвалась.	The upload was interrupted.
+Обработчик не завершил задачу: аренда истекла.	The worker did not finish the job: the lease expired.
+Сервер сейчас принимает много файлов. Повторите через минуту.	The server is receiving many files right now. Try again in a minute.
+Синхронизация отключила бы {disabling} из {active} активных учёток (AD вернул {} записей) — ничего не изменено. Проверьте фильтр, базовый DN и права служебной учётки или подтвердите отключение в админке.	The sync would disable {disabling} of {active} active accounts (AD returned {} entries) — nothing was changed. Check the filter, the base DN and the service account's rights, or confirm the disabling in the admin panel.
+Слишком много файлов загружено и не прикреплено к заявкам. Прикрепите их или повторите завтра.	Too many files are uploaded but not attached to tickets. Attach them or try again tomorrow.
+сброшен	reset
+# Мастер установки: стартовые данные, роли, организация
+IP-адрес	IP address
+Аудитор	Auditor
+Внутренний номер	Extension
+Готово. Если что-то не так — нажмите «Нет, не решена», заявка вернётся ко мне. {{engineer.name}}	Done. If something is wrong, click “No, not resolved” and the ticket will come back to me. {{engineer.name}}
+Группы и доступы к папкам	Groups and folder access
+Действует до	Valid until
+Другое	Other
+Забрать оборудование	Collect equipment
+Замена батареи	Battery replaced
+Запись в справочник, внутренний номер	Phonebook entry, extension
+Запрос доступа	Access request
+Здравствуйте, {{requester.first_name}}! Заявку #{{ticket.number}} взял в работу.	Hello, {{requester.first_name}}! I have taken ticket #{{ticket.number}}.
+Здравствуйте, {{requester.first_name}}! Чтобы решить заявку, пришлите, пожалуйста, скриншот ошибки и имя компьютера.	Hello, {{requester.first_name}}! To resolve the ticket, please send a screenshot of the error and the computer name.
+ИБП	UPS
+Изменить подразделение и должность в AD	Change department and title in AD
+Инженер	Engineer
+Картридж	Cartridge
+Компьютер и периферия	Computer and peripherals
+Логотип — PNG, JPEG или WebP до 256 КБ.	The logo must be PNG, JPEG or WebP up to 256 KB.
+Модель	Model
+Монитор	Monitor
+Название — до 100 символов, в одну строку.	The name must be one line of up to 100 characters.
+Не указана	Not specified
+Новый сотрудник	New employee
+Новый сотрудник: ФИО, должность, дата выхода	New employee: name, title, start date
+Ноутбук	Laptop
+Нужна информация	Information needed
+Обновить справочник	Update the phonebook
+Отключить учётную запись в AD	Disable the AD account
+Отметить в справочнике	Mark in the phonebook
+Перевод в другой отдел	Transfer to another department
+Перевод: ФИО, новый отдел и должность	Transfer: name, new department and title
+Перенести рабочее место	Move the workstation
+Пересмотреть группы и доступы	Review groups and access
+Почта: переадресация или архив	Email: forwarding or archive
+Почтовый ящик	Mailbox
+Приветствие	Greeting
+Принтер / МФУ	Printer / MFP
+Принтеры и сканеры	Printers and scanners
+Программа / лицензия	Software / license
+Программы (1С и прочие)	Software (1C and others)
+Программы и 1С	Software and 1C
+Производитель	Vendor
+Прочее	Other
+Рабочее место: ПК, монитор, телефон	Workstation: PC, monitor, phone
+Редактор справочника	Phonebook editor
+Сетевое оборудование	Network equipment
+Сеть и Интернет	Network and Internet
+Снять доступы и группы	Remove access and groups
+Сотрудник	Employee
+Суперадминистратор	Superadministrator
+Телефония	Telephony
+Телефония работает только вместе со справочником.	Telephony works only together with the phonebook.
+Увольнение сотрудника	Employee leaving
+Увольнение: ФИО, последний рабочий день	Leaving: name, last working day
+Учётная запись в AD	AD account
+Учётная запись и пароль	Account and password
+ФИО:\nНовое подразделение и должность:\nДата перевода:	Name:\nNew department and title:\nTransfer date:
+ФИО:\nПодразделение и должность:\nДата выхода:\nРуководитель:\nНужные программы и доступы:	Name:\nDepartment and title:\nStart date:\nManager:\nSoftware and access needed:
+ФИО:\nПоследний рабочий день:\nКому передать почту и файлы:	Name:\nLast working day:\nWho gets the email and files:
+Число мест	Seats
+Недопустимое значение настройки.	Invalid setting value.
+Текущий сеанс закрывается кнопкой «Выйти».	Use “Sign out” to close the current session.
+Связанная запись не найдена или ещё используется.	The related record was not found or is still in use.
+Запрос не уложился во время. Повторите.	The request took too long. Please try again.
+Дождитесь окончания предыдущих загрузок.	Wait for your previous uploads to finish.
+Вход из интернета для этой учётной записи закрыт на сутки: слишком много неудачных попыток. Из сети организации вход работает.	Sign-in from the internet is closed for this account for 24 hours: too many failed attempts. Sign-in from the organization's network still works.
+Введите код из приложения-аутентификатора.	Enter the code from your authenticator app.
+Неверный код. Если вход из интернета ещё не подключён, подключите его в профиле из сети организации.	Invalid code. If sign-in from the internet is not set up yet, set it up in your profile from the organization's network.
+Второй фактор подключают и отключают только из сети организации.	Two-step sign-in can only be turned on or off from the organization's network.
+Второй фактор уже подключён. Сначала отключите его.	Two-step sign-in is already on. Turn it off first.
+Второй фактор уже подключён.	Two-step sign-in is already on.
+Сначала нажмите «Подключить».	Click "Set up" first.
+Код не подошёл. Проверьте время на телефоне и введите новый код.	The code did not match. Check the time on your phone and enter a new code.
+Код не подошёл. Введите новый код из приложения.	The code did not match. Enter a new code from the app.
+Второй фактор не подключён.	Two-step sign-in is not on.
+внутренняя сеть слишком широкая: нужна /8 или уже	internal network is too wide: use /8 or narrower
+внутренняя сеть записана неверно (пример: 10.0.0.0/8)	internal network is written incorrectly (example: 10.0.0.0/8)
+внутренних сетей — не больше 64	no more than 64 internal networks
+роли с обязательным кодом записаны неверно	invalid list of roles that require a code
+Вход уже проверяется. Повторите через несколько секунд.	Sign-in is already being checked. Try again in a few seconds.
+Слишком много неверных кодов. Попробуйте через 5 минут.	Too many invalid codes. Try again in 5 minutes.

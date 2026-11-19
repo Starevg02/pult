@@ -1,0 +1,27 @@
+[package]
+name = "pult-directory"
+description = "Pult: AD catalog writes — typed operations, delegated writer account, read-back, audit (stage 4)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+pult-core.workspace = true
+pult-ad.workspace = true
+pult-people.workspace = true
+pult-jobs.workspace = true
+axum.workspace = true
+sqlx.workspace = true
+uuid.workspace = true
+time.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+utoipa.workspace = true
+utoipa-axum.workspace = true
+ring.workspace = true
+
+[lints]
+workspace = true

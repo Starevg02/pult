@@ -1,0 +1,36 @@
+[package]
+name = "pult-helpdesk"
+description = "Pult helpdesk: tickets, assignment, mail, announcements"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+pult-core.workspace = true
+pult-people.workspace = true
+pult-directory.workspace = true
+pult-jobs.workspace = true
+reqwest.workspace = true
+axum = { workspace = true, features = ["multipart"] }
+sqlx.workspace = true
+uuid.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+utoipa.workspace = true
+utoipa-axum.workspace = true
+time.workspace = true
+tracing.workspace = true
+tokio = { workspace = true, features = ["fs"] }
+ring.workspace = true
+
+[dev-dependencies]
+pult-testkit.workspace = true
+tokio = { workspace = true }
+tower = { workspace = true, features = ["util"] }
+http-body-util = "0.1"
+base64.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,67 @@
+[package]
+name = "pult-server"
+description = "Pult server binary: config, router, health, metrics, migrations"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "pult"
+path = "src/main.rs"
+
+[features]
+# Демо-режим `pult demo`: поддельный домен с вымышленными сотрудниками. В выпускной пакет не входит.
+demo = ["dep:pult-testkit"]
+
+[dependencies]
+pult-testkit = { workspace = true, optional = true }
+pult-core.workspace = true
+pult-ad.workspace = true
+pult-api-types.workspace = true
+pult-phonebook.workspace = true
+pult-people.workspace = true
+pult-helpdesk.workspace = true
+pult-directory.workspace = true
+pult-remote.workspace = true
+pult-jobs.workspace = true
+utoipa-axum.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+axum.workspace = true
+tower-http.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+clap.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+metrics.workspace = true
+metrics-exporter-prometheus.workspace = true
+sqlx.workspace = true
+rpassword.workspace = true
+rust-embed.workspace = true
+utoipa.workspace = true
+time.workspace = true
+axum-server.workspace = true
+hyper-util.workspace = true
+rustls.workspace = true
+rustls-pki-types.workspace = true
+base64.workspace = true
+url.workspace = true
+# Временный сертификат при первом запуске и сведения о сертификате в админке.
+rcgen = { version = "0.14", default-features = false, features = ["ring", "pem"] }
+x509-parser = "0.18"
+
+# GSSAPI (вход через домен) — только Linux: MIT krb5, при сборке нужны libkrb5-dev и libclang.
+[target.'cfg(unix)'.dependencies]
+libgssapi.workspace = true
+
+[dev-dependencies]
+tower = { workspace = true, features = ["util"] }
+http-body-util = "0.1"
+
+[lints]
+workspace = true

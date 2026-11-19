@@ -1,0 +1,28 @@
+#!/bin/sh
+# Pult: перед установкой или обновлением. Прежний бинарник откладывается для отката,
+# служба останавливается, чтобы резервная копия была согласованной.
+set -eu
+
+BIN=/opt/pult/bin/pult
+# Только root: каталог данных /var/lib/pult доступен службе на запись, откат оттуда брать нельзя.
+RB=/var/lib/pult-rollback
+
+case "$1" in
+install | upgrade)
+    if [ -x "$BIN" ]; then
+        rm -rf "$RB"
+        install -d -o root -g root -m 0700 "$RB"
+        cp --no-dereference -p "$BIN" "$RB/pult.prev"
+        # Метка «идёт обновление»: postinst сделает копию и при сбое вернёт прежнюю версию.
+        "$BIN" version >"$RB/upgrading" 2>/dev/null || echo "pult (неизвестная версия)" >"$RB/upgrading"
+        if [ -d /run/systemd/system ]; then
+            systemctl stop pult.service 2>/dev/null || true
+        fi
+    else
+        # Прежней программы нет: следы старого отката не должны выдать новую установку за обновление.
+        rm -rf "$RB"
+    fi
+    ;;
+esac
+
+exit 0

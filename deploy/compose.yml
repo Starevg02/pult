@@ -1,0 +1,56 @@
+# Установка Pult: docker compose -f deploy/compose.yml up -d --build
+# Настраивать ничего не нужно: пароль базы, ключ шифрования и временный сертификат создаются сами.
+# Дальше — https://адрес-сервера/ и мастер первого запуска (docs/install.md).
+#
+#   PULT_HTTPS_PORT   порт HTTPS на сервере (по умолчанию 443)
+
+name: pult
+
+services:
+  # Один раз создаёт пароль базы; он хранится в томе и наружу не выводится.
+  secrets:
+    image: postgres:17-alpine
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        [ -s /secrets/db_password ] || od -An -tx1 -N32 /dev/urandom | tr -d ' \n' > /secrets/db_password
+        chmod 444 /secrets/db_password
+    volumes: [secrets:/secrets]
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: pult
+      POSTGRES_USER: pult
+      POSTGRES_PASSWORD_FILE: /secrets/db_password
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - secrets:/secrets:ro
+    depends_on:
+      secrets: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pult -d pult"]
+      interval: 3s
+      retries: 30
+    restart: unless-stopped
+
+  pult:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: pult:local
+    environment:
+      PULT_DATABASE_URL: postgres://pult@db:5432/pult
+      PULT_DATABASE_PASSWORD_FILE: /secrets/db_password
+    ports: ["${PULT_HTTPS_PORT:-443}:8443"]
+    volumes:
+      - data:/data
+      - secrets:/secrets:ro
+    depends_on:
+      db: { condition: service_healthy }
+    restart: unless-stopped
+
+volumes:
+  secrets:
+  pgdata:
+  data:

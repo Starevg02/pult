@@ -1,0 +1,131 @@
+# Выпуск: тег vX.Y.Z → черновик релиза GitHub с установщиками.
+#   pult_X.Y.Z_amd64.deb       — сервер для Debian 13 / Ubuntu 24.04+ (установка и обновление)
+#   install.sh                 — проверка сервера перед установкой и установка пакета
+#   pult-agent.msi             — агент удалённой поддержки для ПК пользователей (Windows)
+#   pult-helper.exe            — helper инженера для подключения к ПК (Windows)
+#   SHA256SUMS                 — контрольные суммы всех файлов
+# Черновик публикует мейнтейнер вручную после проверки. Кэш сборки в выпуске не используется.
+name: Release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 26
+      - uses: dtolnay/rust-toolchain@5445741acf05630efa19e221cc588ebe0842b13d # 1.88
+        with:
+          toolchain: "1.88"
+      - name: Библиотеки для сборки (Kerberos)
+        timeout-minutes: 6
+        run: |
+          apt_opts="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o DPkg::Lock::Timeout=120"
+          sudo apt-get $apt_opts update -qq
+          sudo apt-get $apt_opts install -y -qq --no-install-recommends libkrb5-dev libclang-dev
+      - name: Веб-интерфейс
+        working-directory: web
+        run: npm ci && npm run build
+      - name: Сервер
+        run: cargo build --release --locked -p pult-server
+      - name: Версия программы совпадает с тегом
+        run: |
+          want="${GITHUB_REF_NAME#v}"
+          got=$(target/release/pult version | awk '{print $2}')
+          [ "$got" = "$want" ] || { echo "::error::тег $GITHUB_REF_NAME, а программа — $got (Cargo.toml)"; exit 1; }
+      - name: Бинарник для базового x86-64
+        run: |
+          if readelf -n target/release/pult | grep -E "x86 ISA needed: .*x86-64-v[234]"; then
+            echo "::error::сборка требует процессор новее базового x86-64"; exit 1
+          fi
+      - name: Смоук встроенного веб-интерфейса
+        run: deploy/ci/smoke-release.sh target/release/pult
+      - name: Пакет .deb
+        run: |
+          PULT_DEB_VERSION="${GITHUB_REF_NAME#v}" sh deploy/deb/build.sh target/release/pult dist
+          cp deploy/install.sh dist/install.sh
+          ls -l dist
+      # Раннер — одноразовая Ubuntu 24.04 с systemd: ставим пакет так, как это сделает администратор.
+      - name: Установка через install.sh
+        run: |
+          sudo systemctl start postgresql
+          sudo LANG=C.UTF-8 sh dist/install.sh "dist/pult_${GITHUB_REF_NAME#v}_amd64.deb"
+          curl -fsk https://127.0.0.1/health
+          sudo journalctl -u pult --no-pager | grep -q "SETUP CODE"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linux
+          path: |
+            dist/*.deb
+            dist/install.sh
+          if-no-files-found: error
+
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@5445741acf05630efa19e221cc588ebe0842b13d # 1.88
+        with:
+          toolchain: "1.88"
+      - name: Агент и helper
+        run: cargo build --release --locked -p pult-agent -p pult-helper
+      - name: MSI агента
+        shell: pwsh
+        run: |
+          $version = (cargo pkgid -p pult-agent) -replace '.*[#@]', ''
+          if ("v$version" -ne $env:GITHUB_REF_NAME) { Write-Error "тег $env:GITHUB_REF_NAME, а агент — $version"; exit 1 }
+          dotnet tool install wix --version 5.0.2 --tool-path target/wix
+          ./target/wix/wix extension add -g WixToolset.Util.wixext/5.0.2
+          ./target/wix/wix build -arch x64 -ext WixToolset.Util.wixext -d Version=$version `
+            -d AgentExe=target/release/pult-agent.exe deploy/windows/agent.wxs -o target/release/pult-agent.msi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows
+          path: |
+            target/release/pult-agent.msi
+            target/release/pult-helper.exe
+          if-no-files-found: error
+
+  publish:
+    needs: [linux, windows]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Контрольные суммы и заметки к выпуску
+        run: |
+          cd artifacts
+          rm -f ./*.sha256
+          sha256sum -- * > ../SHA256SUMS
+          mv ../SHA256SUMS SHA256SUMS
+          cat SHA256SUMS
+          cd ..
+          # Раздел CHANGELOG.md для этой версии: от «## X.Y.Z» до следующего «## ».
+          awk -v v="${GITHUB_REF_NAME#v}" '$0 ~ "^## "v"( |$)" {p=1; next} /^## / {p=0} p' CHANGELOG.md > notes.md
+          [ -s notes.md ] || { echo "::error::в CHANGELOG.md нет раздела ${GITHUB_REF_NAME#v}"; exit 1; }
+          printf '\n---\nУстановка и обновление сервера — docs/install.md, настройка — docs/guide.md.\n' >> notes.md
+      - name: Черновик релиза
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --draft --verify-tag \
+            --title "Pult ${GITHUB_REF_NAME#v}" --notes-file notes.md artifacts/*

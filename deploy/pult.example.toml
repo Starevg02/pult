@@ -1,0 +1,47 @@
+# Пример конфигурации Pult. Скопируйте в pult.toml (он в .gitignore) и замените CHANGEME.
+# Любой параметр можно задать переменной окружения: PULT_LISTEN, PULT_LOG_FORMAT,
+# PULT_SECRET_KEY, PULT_DATABASE_URL, PULT_AD_BIND_PASSWORD.
+
+listen = "127.0.0.1:8080"
+log_format = "text"            # text — для разработки, json — для сервера
+
+# Ключ шифрования секретов в БД, не короче 32 символов. Лучше задавать через PULT_SECRET_KEY.
+# Сгенерировать: openssl rand -base64 48. Если задан data_dir (PULT_DATA_DIR), ключ можно не задавать:
+# он создастся сам в data_dir/secret.key. Этот файл нужно хранить вместе с резервными копиями.
+secret_key = "CHANGEME"
+
+# /metrics отдаётся только с самого сервера (127.0.0.1, ::1). Для Prometheus на другой машине —
+# токен (заголовок Authorization: Bearer …); лучше через PULT_METRICS_TOKEN.
+# metrics_token = "CHANGEME"
+
+# data_dir = "/var/lib/pult"
+# auto_tls = true                      # HTTPS без настройки: временный сертификат, свой — в админке
+# trusted_proxies = ["10.0.0.5"]       # обратные прокси, которым верим в X-Forwarded-For
+
+# Свой сертификат файлами (PULT_TLS_CERT, PULT_TLS_KEY). Вторую пару получает клиент, запросивший имя
+# из её сертификата, — например, внешнее имя с публичным wildcard; остальные — основную.
+# [tls]
+# cert = "/etc/pult/tls/pult.chain.crt"
+# key = "/etc/pult/tls/pult.key"
+# extra_cert = "/etc/pult/tls/public.chain.crt"   # PULT_TLS_EXTRA_CERT
+# extra_key = "/etc/pult/tls/public.key"          # PULT_TLS_EXTRA_KEY
+
+[database]
+url = "postgres://pult:CHANGEME@localhost:5432/pult"
+max_connections = 10
+
+# Подключение к AD. Для compose.dev.yml — тестовый домен PULT.TEST.
+[ad]
+controllers = ["dc1.pult.test:6361", "dc2.pult.test:6362"]   # в порядке приоритета, без схемы
+tls = "ldaps"                                                # ldaps | starttls; незащищённого режима нет
+base_dn = "DC=pult,DC=test"
+bind_dn = "svc-pult@pult.test"                               # служебная учётка только на чтение
+bind_password = "CHANGEME"                                   # лучше через PULT_AD_BIND_PASSWORD
+ca_cert = "deploy/dev/ca/all-ca.pem"                         # cat deploy/dev/ca/dc*-ca.pem > deploy/dev/ca/all-ca.pem
+timeout_secs = 5
+
+# Фоновые задачи: очередь в PostgreSQL и расписания cron.
+[jobs]
+enabled = true                 # false — эта копия сервера задачи не выполняет
+concurrency = 4                # задач одновременно
+utc_offset = "+03:00"          # в этом смещении читаются расписания (в России нет летнего времени)

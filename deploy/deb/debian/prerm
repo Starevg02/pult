@@ -1,0 +1,10 @@
+#!/bin/sh
+# Pult: перед удалением — остановить службу (при обновлении её останавливает preinst новой версии).
+set -eu
+
+if [ "$1" = remove ] && [ -d /run/systemd/system ]; then
+    systemctl stop pult.service 2>/dev/null || true
+    systemctl disable pult.service >/dev/null 2>&1 || true
+fi
+
+exit 0

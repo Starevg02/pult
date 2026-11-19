@@ -1,0 +1,148 @@
+@import "tailwindcss";
+
+/* Токены оформления — из макетов (mockups/v7/source/pult-2027.css). Тема — по настройке системы или по
+   выбору пользователя: `data-theme` на <html> (prefs.ts) задаёт `color-scheme`, а с ним и `light-dark()`. */
+:root {
+  color-scheme: light dark;
+  accent-color: var(--accent);
+  --canvas: light-dark(#f5f6f8, #0d0f13);
+  --paper: light-dark(#ffffff, #15181e);
+  --sunken: light-dark(#eef0f3, #1b1f26);
+  --hover: light-dark(#f2f4f7, #1d2129);
+  --ink: light-dark(#16181d, #e8eaef);
+  --muted: light-dark(#596070, #a2aab7);
+  --line: light-dark(#e4e7ec, #272c35);
+  --line-strong: light-dark(#d0d5dd, #363c47);
+  /* Рамка полей ввода: контраст не ниже 3:1 к фону (WCAG 1.4.11). */
+  --control-border: light-dark(#7a8191, #7b8494);
+  --accent: light-dark(#4f46e5, #a5b4fc);
+  --accent-ink: light-dark(#3730a3, #c7d2fe);
+  --accentsoft: light-dark(#eef0ff, #23274a);
+  --ok: light-dark(#146c36, #86efac);
+  --bad: light-dark(#b91c1c, #fca5a5);
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-paper: var(--paper);
+  --color-sunken: var(--sunken);
+  --color-hover: var(--hover);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-control: var(--control-border);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accentsoft: var(--accentsoft);
+  --color-ok: var(--ok);
+  --color-bad: var(--bad);
+  --font-sans: Inter, system-ui, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/* Плотность «компактно»: всё в rem — мельче шрифт и отступы, больше строк на экране. */
+:root[data-density="compact"] {
+  font-size: 14px;
+}
+
+/* Видимый фокус клавиатуры для всего интерактивного (WCAG 2.4.7, 2.4.11). */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Движение: короткие появления (страница, меню, окно, сообщение). Только если система не просит
+   «уменьшить движение» — тогда всё появляется сразу (и ниже ещё общий запрет на анимации). */
+@theme {
+  /* Заполнение `backwards`: после появления на элементе не остаётся transform (иначе он стал бы
+     контейнером для `position: fixed` внутри — выезжающие панели прилипли бы к нему, а не к окну). */
+  --animate-fade-in: pult-fade-in 180ms ease-out backwards;
+  --animate-page-in: pult-page-in 160ms ease-out backwards;
+  --animate-pop-in: pult-pop-in 140ms cubic-bezier(0.2, 0.9, 0.3, 1.2) backwards;
+  --animate-toast-in: pult-toast-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1) backwards;
+  --shadow-xs: 0 1px 2px 0 rgb(16 24 40 / 0.04);
+}
+
+@keyframes pult-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+/* Смена страницы — только прозрачность, без сдвига: в странице есть фиксированные панели. */
+@keyframes pult-page-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes pult-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
+  }
+}
+
+@keyframes pult-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+}
+
+/* Окно: плавное появление вместе с затемнением фона. */
+.pult-dialog[open] {
+  animation: pult-pop-in 160ms ease-out both;
+}
+
+.pult-dialog[open]::backdrop {
+  animation: pult-fade-in 160ms ease-out both;
+}
+
+/* Липкая шапка портала (и таблиц) не закрывает элемент, к которому прокрутил фокус (WCAG 2.4.11). */
+html {
+  scroll-padding-top: 6.5rem;
+  scroll-padding-bottom: 4rem;
+}
+
+/* Полоса прокрутки в тон теме (тонкая, в боковых панелях). */
+.pult-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-page-in,
+  .animate-pop-in,
+  .animate-toast-in,
+  .pult-dialog[open],
+  .pult-dialog[open]::backdrop,
+  .animate-pulse {
+    animation: none !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

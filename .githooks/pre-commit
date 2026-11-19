@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# Проверки безопасности перед коммитом: секреты, незащищённые подключения, SQL из format!, данные организации.
+# Подключение: git config core.hooksPath .githooks
+# Проверить всё дерево, а не только индекс: .githooks/pre-commit --all
+# Ложное срабатывание в строке подавляется комментарием `// SAFE: <почему>` (`# SAFE:`, `<!-- SAFE: -->`).
+set -uo pipefail
+
+fail=0
+report() { echo "❌ $1"; fail=1; }
+
+code_globs=('*.rs' '*.toml' '*.yml' '*.yaml' '*.ts' '*.tsx' '*.js' '*.sh' '*.sql')
+# Документы и скрипты Windows: в них проверяем только секреты (ldap:// и т. п. там встречаются в тексте)
+text_globs=('*.md' '*.ps1' '*.psm1' '*.cmd' '*.bat' '*.json' '*.html' '*.conf' '*.service' '*.inf' 'Dockerfile' '*.example' '.env*')
+
+if [ "${1:-}" = "--all" ]; then
+  files=$(git ls-files)
+  # Строки всех отслеживаемых файлов в виде «+строка», как в diff
+  lines() { git grep -h -I -e '' -- "$@" | sed 's/^/+/'; }
+else
+  files=$(git diff --cached --name-only --diff-filter=ACM)
+  lines() { git diff --cached -U0 --diff-filter=ACM -- "$@" | grep -E '^\+[^+]'; }
+fi
+
+# 1. Файлы с секретами
+for f in $files; do
+  case "$f" in
+    *.example|*.gitkeep) ;;
+    .env|*.env|.env.*|pult.toml|*.pem|*.key|*.p12|*.pfx|*.keytab|*.csr|*.crl|*/id_rsa*|*/id_ed25519*|id_rsa*|id_ed25519*)
+      report "файл с секретами в коммите: $f" ;;
+  esac
+done
+
+code=$(lines "${code_globs[@]}" | grep -v 'SAFE:' | grep -vE '^\+[[:space:]]*(//|#|\*)')
+text=$(lines "${text_globs[@]}" | grep -v 'SAFE:')
+all=$(printf '%s\n%s\n' "$code" "$text")
+
+# 2. Закрытые ключи и токены — в любом файле
+echo "$all" | grep -E 'BEGIN [A-Z ]*PRIVATE KEY|ghp_[A-Za-z0-9]{30}|github_pat_[A-Za-z0-9_]{20}|AKIA[0-9A-Z]{16}|xox[abpr]-[A-Za-z0-9-]{10}|sk-[A-Za-z0-9_-]{30}' \
+  && report "закрытый ключ или токен в тексте"
+
+# 3. Пароли в тексте (кроме шаблонов CHANGEME и тестовых значений)
+allow='CHANGEME|example|pult-dev|pult-ci|test-only|Pult-[A-Za-z]+-2026|#\[cfg\(test\)\]'
+echo "$all" | grep -iE '(password|passwd|pwd|secret|token|api_key)\s*[:=]\s*"[^"$<{]{6,}"' \
+  | grep -viE "$allow" \
+  && report "похоже на пароль или ключ"
+# PowerShell / cmd / openssl: пароль строкой в команде
+echo "$all" | grep -iE 'ConvertTo-SecureString\s+["'"'"'][^"'"'"'$]+["'"'"']|-(Account)?Password\s+["'"'"'][^"'"'"'$]{6,}["'"'"']|pass(in|out)?\s+pass:[^ "$]{6,}|/p(assword)?:[^ *"$%]{6,}' \
+  | grep -viE "$allow" \
+  && report "пароль строкой в команде"
+
+# 3a. Данные конкретной установки (домен, адреса, имена серверов и учёток). Список — в локальном,
+# неотслеживаемом файле .git/info/forbidden (по регулярному выражению ERE в строке, # — комментарий):
+# сами эти слова в репозиторий попадать не должны, поэтому и в хуке их нет.
+forbidden="$(git rev-parse --git-dir)/info/forbidden"
+if [ -f "$forbidden" ]; then
+  patterns=$(grep -vE '^[[:space:]]*(#|$)' "$forbidden" | tr -d '\r')
+  if [ -n "$patterns" ]; then
+    echo "$all" | grep -iE -f <(echo "$patterns") && report "данные установки из .git/info/forbidden"
+    echo "$files" | grep -iE -f <(echo "$patterns") && report "имя файла из .git/info/forbidden"
+  fi
+fi
+
+# 4. Незащищённый LDAP (только код)
+echo "$code" | grep -E 'ldap://' && report "ldap:// без TLS (разрешено только с пометкой // SAFE:)"
+
+# 5. Отключённая проверка сертификата (только код)
+echo "$code" | grep -E 'danger_accept_invalid|set_no_tls_verify|accept_invalid_certs' && report "отключена проверка TLS-сертификата"
+
+# 6. SQL, собранный строкой
+echo "$code" | grep -E 'format!\(.*\b(SELECT|INSERT|UPDATE|DELETE)\b' && report "SQL через format! — используйте параметры sqlx"
+
+if [ $fail -ne 0 ]; then
+  echo "Коммит остановлен. Исправьте или пометьте строку // SAFE: <причина>."
+  exit 1
+fi
+echo "✅ pre-commit: проверки безопасности пройдены"

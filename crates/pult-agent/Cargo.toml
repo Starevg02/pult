@@ -1,0 +1,42 @@
+[package]
+name = "pult-agent"
+description = "Pult agent for Windows workstations: a LocalSystem service that reports user sessions (WTS API) to the portal"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "pult-agent"
+path = "src/main.rs"
+
+[dependencies]
+pult-core.workspace = true
+pult-api-types.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+clap.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+# Корневой сертификат организации — из хранилища Windows (его раздаёт домен).
+reqwest = { workspace = true, features = ["rustls-tls-native-roots"] }
+url.workspace = true
+ring.workspace = true
+base64.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = [
+  "Win32_System_Registry",
+  "Win32_System_SystemInformation",
+  "Win32_Security",
+  "Win32_Security_Authorization",
+  "Win32_Storage_FileSystem",
+] }
+windows-service = "0.8"
+
+[lints]
+workspace = true

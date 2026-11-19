@@ -1,0 +1,19 @@
+#!/bin/sh
+# Pult: после удаления. Данные не удаляются даже при purge: база pult, ключ шифрования
+# (/var/lib/pult/secret.key) и резервные копии нужны, чтобы вернуть портал.
+set -eu
+
+case "$1" in
+remove)
+    rm -rf /var/lib/pult-rollback
+    ;;
+purge)
+    rm -rf /var/lib/pult-rollback
+    echo "pult: оставлены /etc/pult, /var/lib/pult (ключ и копии) и база pult — удалите вручную, если не нужны"
+    ;;
+esac
+if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload || true
+fi
+
+exit 0

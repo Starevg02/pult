@@ -1,0 +1,46 @@
+{
+  "name": "pult-web",
+  "private": true,
+  "version": "0.1.0",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b",
+    "lint": "eslint . --max-warnings 0",
+    "gen:api": "openapi-typescript ../target/openapi.json -o src/api/schema.ts"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "5.104.5",
+    "@tanstack/react-router": "1.170.45",
+    "i18next": "26.5.4",
+    "openapi-fetch": "0.17.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-i18next": "17.1.0",
+    "react-markdown": "10.1.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@tailwindcss/vite": "4.3.3",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "eslint": "10.13.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-plugin-react-refresh": "0.5.7",
+    "globals": "17.13.0",
+    "openapi-typescript": "7.13.0",
+    "tailwindcss": "4.3.3",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.0",
+    "vite": "8.3.5"
+  },
+  "overrides": {
+    "minimatch@10": "11.0.5"
+  }
+}

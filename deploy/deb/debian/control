@@ -1,0 +1,13 @@
+Package: pult
+Version: @VERSION@
+Architecture: amd64
+Maintainer: Pult <pult@localhost>
+Installed-Size: @SIZE@
+Depends: adduser, libc6 (>= @GLIBC@), libgssapi-krb5-2, postgresql (>= 15) | postgresql-client (>= 15)
+Section: web
+Priority: optional
+Description: Pult — portal for the IT service desk
+ Requests, employee directory, Active Directory, remote support and telephony
+ in one web portal. The package installs the service with HTTPS on port 443,
+ creates the database in the local PostgreSQL and starts the first-run wizard.
+ Upgrades back up the database first and roll back if a migration fails.

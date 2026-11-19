@@ -1,0 +1,30 @@
+/target
+/web/node_modules
+/web/dist
+# Секреты и локальные настройки — никогда в git
+.env
+.env.local
+.env.*.local
+pult.toml
+*.pem
+*.key
+*.p12
+*.pfx
+*.keytab
+*.csr
+*.crt
+*.crl
+*.srl
+*.req
+id_rsa*
+id_ed25519*
+!deploy/dev/ca/.gitkeep
+# Выгрузки и временное
+*.log
+/tmp
+.idea
+.vscode
+
+# Python
+__pycache__/
+*.pyc

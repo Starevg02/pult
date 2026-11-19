@@ -1,0 +1,78 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+publish = false   # крейты не публикуются на crates.io; нужно и для cargo deny (allow-wildcard-paths)
+
+[workspace.dependencies]
+pult-core = { path = "crates/pult-core" }
+pult-ad = { path = "crates/pult-ad" }
+pult-agent = { path = "crates/pult-agent" }
+pult-api-types = { path = "crates/pult-api-types" }
+pult-helper = { path = "crates/pult-helper" }
+pult-jobs = { path = "crates/pult-jobs" }
+pult-phonebook = { path = "crates/pult-phonebook" }
+pult-people = { path = "crates/pult-people" }
+pult-testkit = { path = "crates/pult-testkit" }
+pult-helpdesk = { path = "crates/pult-helpdesk" }
+pult-directory = { path = "crates/pult-directory" }
+pult-remote = { path = "crates/pult-remote" }
+
+anyhow = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "time", "sync", "process", "io-util"] }
+axum = "0.8"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "set-header"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+clap = { version = "4", features = ["derive", "env"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+metrics = "0.24"
+metrics-exporter-prometheus = { version = "0.16", default-features = false }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "ipnetwork", "tls-rustls", "postgres", "uuid", "time", "migrate", "macros"] }
+ldap3 = { version = "0.12", default-features = false, features = ["tls-rustls-ring"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-pki-types = { version = "1", features = ["std"] }
+rustls-native-certs = "0.8"
+rpassword = "7"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_RemoteDesktop"] }
+url = "2"
+uuid = { version = "1", features = ["v7", "serde"] }
+time = { version = "0.3", features = ["serde"] }
+async-trait = "0.1"
+rust-embed = { version = "8", features = ["mime-guess"] }
+utoipa = { version = "5", features = ["axum_extras", "uuid", "time"] }
+utoipa-axum = "0.2"
+tiberius = { version = "0.13", default-features = false, features = ["tds73", "rustls", "time", "winauth"] }
+tokio-util = { version = "0.7", features = ["compat"] }
+# Таймер для hyper: без него ограничение на чтение заголовков не действует.
+hyper-util = { version = "0.1", features = ["tokio", "server-auto"] }
+axum-server = { version = "0.8", default-features = false, features = ["tls-rustls-no-provider"] }
+base64 = "0.22"
+ring = "0.17"
+# Вход в Asterisk AMI по MD5-вызову (протокол AMI; для паролей не используется).
+md-5 = "0.10"
+lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "hostname", "tokio1-rustls", "ring", "rustls-native-certs"] }
+libgssapi = { version = "0.11", default-features = false }
+
+[workspace.lints.rust]
+unsafe_code = "deny"   # forbid нельзя снять точечно; unsafe разрешён только в FFI-модулях с комментарием SAFETY
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+print_stdout = "warn"
+unwrap_used = "warn"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

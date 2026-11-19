@@ -1,0 +1,31 @@
+[package]
+name = "pult-ad"
+description = "Pult: Active Directory client — bind, search, sync, DC failover (stage 0 prototype)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+pult-core.workspace = true
+ldap3.workspace = true
+rustls.workspace = true
+rustls-pki-types.workspace = true
+rustls-native-certs.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+serde.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros"] }
+# Поддельный LDAPS-контроллер для тестов входа и синхронизации (tests/fake_dc.rs)
+ldap3_proto = { version = "0.9", default-features = false }
+rcgen = { version = "0.14", default-features = false, features = ["ring", "pem"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+tokio-util = { workspace = true, features = ["codec"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
+
+[lints]
+workspace = true
