@@ -23,7 +23,7 @@ tokio.workspace = true
 utoipa.workspace = true
 utoipa-axum.workspace = true
 base64.workspace = true
-dns-lookup = "2"
+dns-lookup = "4"
 
 [dev-dependencies]
 pult-testkit.workspace = true
