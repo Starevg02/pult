@@ -2053,7 +2053,7 @@ name = "pult-agent"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "base64 0.22.1",
+ "base64 0.23.1",
  "clap",
  "pult-api-types",
  "pult-core",
@@ -2084,7 +2084,7 @@ name = "pult-core"
 version = "0.1.0"
 dependencies = [
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "futures-util",
  "lettre",
  "ring",
@@ -2126,7 +2126,7 @@ name = "pult-helpdesk"
 version = "0.1.0"
 dependencies = [
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "http-body-util",
  "pult-core",
  "pult-directory",
@@ -2180,7 +2180,7 @@ name = "pult-people"
 version = "0.1.0"
 dependencies = [
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "dns-lookup",
  "http-body-util",
  "pult-ad",
@@ -2205,7 +2205,7 @@ name = "pult-phonebook"
 version = "0.1.0"
 dependencies = [
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "md-5",
  "pult-core",
  "reqwest",
@@ -2228,7 +2228,7 @@ name = "pult-remote"
 version = "0.1.0"
 dependencies = [
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "http-body-util",
  "pult-api-types",
  "pult-core",
@@ -2256,7 +2256,7 @@ dependencies = [
  "anyhow",
  "axum",
  "axum-server",
- "base64 0.22.1",
+ "base64 0.23.1",
  "clap",
  "http-body-util",
  "hyper-util",
