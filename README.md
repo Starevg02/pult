@@ -1,14 +1,15 @@
 # Pult
 
+**Русский** | [English](README.en.md) | [中文](README.zh-CN.md)
+
 Портал внутренней IT-поддержки для организаций на Active Directory, который ставится на свой сервер.
 Заявки, справочник сотрудников, доступы и операции в AD, удалённая поддержка ПК — в одном окне.
 Сотрудники входят своим паролем Windows. Открытый код, лицензия MIT. Версия 0.1.0.
 
-[English](#english)
-
 ![Главная страница портала](docs/screenshots/home-zh.jpg)
 
-*Интерфейс на русском, английском и китайском — переключается в профиле и на странице входа.*
+*Интерфейс, письма и сообщения об ошибках — на русском, английском и китайском; язык переключается в
+профиле и на странице входа.*
 
 ## Что умеет
 
@@ -22,8 +23,8 @@
 - **Удалённая поддержка:** агент на ПК показывает сеансы пользователей, инженер подключается из карточки
   ПК или заявки.
 - **Телефония:** журнал звонков и звонок из справочника через АТС.
-- **Вход и безопасность:** пароль Windows (LDAPS/StartTLS, несколько контроллеров), второй фактор (TOTP) по желанию для входа из интернета, роли и права, журнал аудита с цепочкой
-  хешей.
+- **Вход и безопасность:** пароль Windows (LDAPS/StartTLS, несколько контроллеров), второй фактор (TOTP)
+  по желанию для входа из интернета, роли и права, журнал аудита с цепочкой хешей.
 - **Эксплуатация:** один пакет `.deb` или Docker, мастер первого запуска в браузере, обновление с
   резервной копией и откатом, ежедневные копии, метрики Prometheus.
 
@@ -35,20 +36,22 @@
 
 ## Установка
 
-Нужен сервер Debian 13 или Ubuntu 24.04+ (x86-64) в сети домена. Скачайте со страницы **Releases**
-`pult_<версия>_amd64.deb`, `install.sh` и `SHA256SUMS`, затем:
+Нужен сервер Debian 13 или Ubuntu 24.04+ (x86-64) в сети домена. Скачайте со страницы
+[Releases](https://github.com/Starevg02/pult/releases) файлы `pult_<версия>_amd64.deb`, `install.sh` и
+`SHA256SUMS`, затем:
 
 ```bash
-sha256sum -c --ignore-missing SHA256SUMS            # проверить файлы
-sudo sh install.sh --check --dc dc1.corp.example.test   # проверить сервер: что исправить до установки
-sudo sh install.sh ./pult_<версия>_amd64.deb        # установить; в конце — адрес и код мастера
+sha256sum -c --ignore-missing SHA256SUMS                  # проверить файлы
+sudo sh install.sh --check --dc dc1.corp.example.test     # проверить сервер: что исправить до установки
+sudo sh install.sh ./pult_<версия>_amd64.deb              # установить; в конце — адрес и код мастера
 ```
 
-Откройте `https://имя-сервера/` — мастер спросит домен, служебную учётку и войдёт вами как
+Откройте `https://имя-сервера/` — мастер спросит домен и служебную учётку, затем войдёт вами как
 суперадминистратором. Пошагово, с подготовкой домена, сертификатом, копиями и обновлением —
 [docs/install.md](docs/install.md).
 
-Docker: `docker compose -f deploy/compose.yml up -d --build` ([раздел 11](docs/install.md#11-docker-вместо-пакета)).
+Docker: `docker compose -f deploy/compose.yml up -d --build`
+([раздел 11](docs/install.md#11-docker-вместо-пакета)).
 
 ## Документация
 
@@ -63,8 +66,11 @@ Docker: `docker compose -f deploy/compose.yml up -d --build` ([раздел 11](
 | [Как устроен Pult](docs/architecture.md) | Компоненты, код, данные, решения и почему они такие |
 | [Безопасность](docs/security.md) | Модель защиты, что сделать администратору, ограничения |
 | [Языки](docs/localization.md) | Как устроены переводы |
-| [Решения (ADR)](docs/adr/) | Почему Rust, как интегрирован LDAP, выбор стека |
+| [Решения (ADR)](docs/adr/) | Почему Rust, как интегрирован LDAP, выбор стека, очередь задач |
 | [Изменения](CHANGELOG.md) | Что нового в каждой версии |
+
+Документация написана на русском; руководство по развёртыванию есть и на английском
+([docs/install.en.md](docs/install.en.md)).
 
 ## Безопасность
 
@@ -77,20 +83,3 @@ Docker: `docker compose -f deploy/compose.yml up -d --build` ([раздел 11](
 ## Лицензия
 
 MIT — [LICENSE](LICENSE).
-
-## English
-
-Pult is a self-hosted IT-support portal for organizations on Active Directory: tickets with SLA, a staff
-directory synced from AD, access requests with approval, AD operations and remote support for Windows PCs in
-one window. Employees sign in with their Windows password. MIT License, version 0.1.0.
-
-The interface, e-mail notifications and error messages are available in Russian, English and Chinese. The
-detailed documentation is in Russian; the installation guide is also in English:
-[docs/install.en.md](docs/install.en.md).
-
-Install on Debian 13 or Ubuntu 24.04+ (x86-64): download `pult_<version>_amd64.deb`, `install.sh` and
-`SHA256SUMS` from the Releases page, then run `sudo sh install.sh ./pult_<version>_amd64.deb`. Open
-`https://server-name/`: the first-run wizard sets up the domain, the administrator and the organization.
-Docker Compose is also supported (`deploy/compose.yml`).
-
-Security reports: [SECURITY.md](SECURITY.md). Contributing: [CONTRIBUTING.md](CONTRIBUTING.md).

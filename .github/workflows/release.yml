@@ -124,7 +124,7 @@ jobs:
           # Раздел CHANGELOG.md для этой версии: от «## X.Y.Z» до следующего «## ».
           awk -v v="${GITHUB_REF_NAME#v}" '$0 ~ "^## "v"( |$)" {p=1; next} /^## / {p=0} p' CHANGELOG.md > notes.md
           [ -s notes.md ] || { echo "::error::в CHANGELOG.md нет раздела ${GITHUB_REF_NAME#v}"; exit 1; }
-          printf '\n---\nУстановка и обновление сервера — docs/install.md, настройка — docs/guide.md.\n' >> notes.md
+          printf '\n---\nУстановка и обновление — docs/install.md, настройка — docs/guide.md.\nInstallation and updates: docs/install.en.md.\n安装与更新：docs/install.en.md（英文）。\n' >> notes.md
       - name: Черновик релиза
         env:
           GH_TOKEN: ${{ github.token }}
