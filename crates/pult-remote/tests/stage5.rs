@@ -394,6 +394,7 @@ async fn stage5_acceptance() {
     assert_eq!(code, StatusCode::OK, "{r}");
     assert_eq!(r["next_report_secs"], 60);
     assert!(r.get("update").is_none(), "обновление не назначено: {r}");
+    assert_eq!(r["want_inventory"], true, "сведений об оборудовании ещё нет: {r}");
     let (code, _) = send(format!("pak_{}", "y".repeat(43)), report("WS-EMP", &[], "0.5.0")).await;
     assert_eq!(code, StatusCode::UNAUTHORIZED, "чужой ключ");
     let (code, _) = send(key_emp.clone(), report("WS-BUH", &[], "0.5.0")).await;
@@ -443,6 +444,61 @@ async fn stage5_acceptance() {
     assert_eq!(device.map(|d| d.to_string()), Some(ws_emp.clone()), "заявка связана с устройством");
     let (_, card) = eng1.get(&format!("/api/remote/devices/{ws_emp}")).await;
     assert!(card["tickets"].as_array().unwrap().iter().any(|t| t["number"] == n), "заявка в карточке ПК: {card}");
+
+    // --- Оборудование и программы: агент присылает по просьбе портала ---
+    assert!(card["inventory"].is_null(), "сведений ещё нет: {card}");
+    let with_inventory = |software: Value| {
+        let mut r = report("WS-EMP", &[(2, "emp", "active")], "0.5.0");
+        r["inventory"] = json!({
+            "manufacturer": "Dell Inc.", "model": "OptiPlex 7090", "serial_number": "To be filled by O.E.M.",
+            "bios_version": "1.2.3", "cpu": "Intel(R) Core(TM) i5-10500 CPU @ 3.10GHz", "memory_mb": 16384,
+            "disks": [{"name": "C:", "size_gb": 476, "free_gb": 120}],
+            "software": software,
+        });
+        r
+    };
+    let (code, r) = send(
+        key_emp.clone(),
+        with_inventory(json!([
+            {"name": "7-Zip 24.08 (x64)", "version": "24.08", "publisher": "Igor Pavlov"},
+            {"name": "Google Chrome", "version": "131.0"},
+            {"name": "google chrome", "version": "131.0"},
+            {"name": "100% Tool_x"}
+        ])),
+    )
+    .await;
+    assert_eq!(code, StatusCode::OK, "{r}");
+    assert!(r.get("want_inventory").is_none(), "сведения свежие — больше не просим: {r}");
+    let (_, card) = eng1.get(&format!("/api/remote/devices/{ws_emp}")).await;
+    let inv = &card["inventory"];
+    assert_eq!(inv["model"], "OptiPlex 7090", "{card}");
+    assert!(inv["serial_number"].is_null(), "заглушка производителя вместо серийного номера отброшена");
+    assert_eq!(inv["memory_mb"], 16384);
+    assert_eq!(inv["disks"][0]["free_gb"], 120);
+    let names: Vec<&str> = inv["software"].as_array().unwrap().iter().map(|s| s["name"].as_str().unwrap()).collect();
+    assert_eq!(names, ["100% Tool_x", "7-Zip 24.08 (x64)", "Google Chrome"], "без повторов, по алфавиту");
+    let (code, hits) = eng1.get("/api/remote/software?q=chrome").await;
+    assert_eq!(code, StatusCode::OK, "{hits}");
+    assert_eq!(hits.as_array().unwrap().len(), 1, "{hits}");
+    assert_eq!((hits[0]["hostname"].as_str(), hits[0]["version"].as_str()), (Some("WS-EMP"), Some("131.0")));
+    let (_, hits) = eng1.get("/api/remote/software?q=00%25").await;
+    assert_eq!(hits.as_array().unwrap().len(), 1, "% ищется как символ: {hits}");
+    let (_, hits) = eng1.get("/api/remote/software?q=ol_").await;
+    assert_eq!(hits.as_array().unwrap().len(), 1, "_ ищется как символ: {hits}");
+    let (code, _) = eng1.get("/api/remote/software?q=ch").await;
+    assert_eq!(code, StatusCode::BAD_REQUEST, "слишком короткий запрос");
+    let (code, _) = emp.get("/api/remote/software?q=chrome").await;
+    assert_eq!(code, StatusCode::FORBIDDEN, "сотруднику — нет");
+    // Через сутки портал просит снова; новый список целиком заменяет прежний.
+    sqlx::query("UPDATE device_inventory SET collected_at = now() - interval '25 hours'").execute(&pool).await.unwrap();
+    let (_, r) = send(key_emp.clone(), report("WS-EMP", &[(2, "emp", "active")], "0.5.0")).await;
+    assert_eq!(r["want_inventory"], true, "сведения устарели: {r}");
+    let (code, _) = send(key_emp.clone(), with_inventory(json!([{"name": "Google Chrome", "version": "132.0"}]))).await;
+    assert_eq!(code, StatusCode::OK);
+    let (_, hits) = eng1.get("/api/remote/software?q=chrome").await;
+    assert_eq!(hits[0]["version"], "132.0", "{hits}");
+    let (_, hits) = eng1.get("/api/remote/software?q=zip").await;
+    assert_eq!(hits.as_array().unwrap().len(), 0, "удалённая программа пропала: {hits}");
     // Заявку за сотрудника создаёт инженер: адрес запроса — инженера, ПК не подставляется
     // (иначе подделанная агентом сессия привязала бы к заявке чужой компьютер).
     let (code, c) = eng1
@@ -769,6 +825,20 @@ async fn stage5_acceptance() {
     assert_eq!(code, StatusCode::UNAUTHORIZED, "старый ключ больше не действует");
     let reenrolled = audit(&pool, "remote.device.enrolled").await;
     assert_eq!(reenrolled.last().unwrap()["re_enrolled"], true);
+    // Агент Linux передаёт сеансы и оборудование, но подключение к такому ПК не предлагается.
+    sqlx::query("UPDATE devices SET os = 'linux-x86_64' WHERE id = $1::uuid")
+        .bind(&ws_emp)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (code, e) =
+        eng1.post("/api/remote/connections", json!({"device_id": ws_emp, "action": "shadow", "session_id": 2})).await;
+    assert_eq!((code, e["error"].as_str()), (StatusCode::BAD_REQUEST, Some("unsupported_os")), "{e}");
+    sqlx::query("UPDATE devices SET os = 'windows-x86_64' WHERE id = $1::uuid")
+        .bind(&ws_emp)
+        .execute(&pool)
+        .await
+        .unwrap();
 
     // --- Пакеты: helper для инженеров, MSI и обновление — администратору ---
     let helper_exe = b"MZ fake helper".to_vec();

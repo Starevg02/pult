@@ -85,7 +85,7 @@ pub fn filetime_to_unix(ft: u64) -> Option<i64> {
 }
 
 /// Пароль для `unicodePwd`: UTF-16LE в кавычках.
-fn unicode_pwd(p: &str) -> Vec<u8> {
+pub(crate) fn unicode_pwd(p: &str) -> Vec<u8> {
     format!("\"{p}\"").encode_utf16().flat_map(u16::to_le_bytes).collect()
 }
 

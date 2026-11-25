@@ -6,8 +6,9 @@ use axum::{
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
 };
+use pult_ad::{AdError, BindFailure, TlsMode};
 use pult_core::{
-    ApiError, ApiResult, Core, CurrentUser,
+    ApiError, ApiResult, Core, CurrentUser, Secret,
     audit::{self, Entry, Source},
     crypto::sha256,
     session,
@@ -217,6 +218,8 @@ pub struct Profile {
     #[schema(value_type = String, format = DateTime)]
     pub created_at: OffsetDateTime,
     pub prefs: UserPrefs,
+    /// Можно сменить пароль AD здесь: включено в настройках безопасности и учётка — из домена.
+    pub can_change_password: bool,
 }
 
 type PersonRow = (
@@ -242,14 +245,15 @@ pub(crate) async fn get_my_profile(
     headers: HeaderMap,
 ) -> ApiResult<Json<Profile>> {
     browser_only(&headers)?;
-    let (upn, last_login_at, created_at): (Option<String>, Option<OffsetDateTime>, OffsetDateTime) = sqlx::query_as(
-        "SELECT a.upn, u.last_login_at, u.created_at
-           FROM users u LEFT JOIN ad_accounts a ON a.id = u.ad_account_id
-          WHERE u.id = $1",
-    )
-    .bind(user.user_id)
-    .fetch_one(&core.db)
-    .await?;
+    let (upn, last_login_at, created_at, from_ad): (Option<String>, Option<OffsetDateTime>, OffsetDateTime, bool) =
+        sqlx::query_as(
+            "SELECT a.upn, u.last_login_at, u.created_at, a.id IS NOT NULL AND NOT a.is_missing
+               FROM users u LEFT JOIN ad_accounts a ON a.id = u.ad_account_id
+              WHERE u.id = $1",
+        )
+        .bind(user.user_id)
+        .fetch_one(&core.db)
+        .await?;
     let person = match user.person_id {
         Some(pid) => sqlx::query_as::<_, PersonRow>(
             "SELECT p.id, p.last_name, p.first_name, p.middle_name, d.name, pos.name, s.name, p.room,
@@ -310,7 +314,133 @@ pub(crate) async fn get_my_profile(
         last_login_at,
         created_at,
         prefs: load_prefs(&core.db, user.user_id).await?,
+        can_change_password: from_ad
+            && pult_core::settings::load::<pult_core::settings::SecuritySettings>(&core.db).await?.ad_password_change,
     }))
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct PasswordChange {
+    #[schema(value_type = String, format = Password)]
+    pub old_password: Secret,
+    #[schema(value_type = String, format = Password)]
+    pub new_password: Secret,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct PasswordChanged {
+    /// Контроллер домена, на котором сменён пароль.
+    pub controller: String,
+    /// Сколько сеансов на других устройствах закрыто.
+    pub closed_sessions: u64,
+}
+
+/// Сменить свой пароль AD. Портал входит в домен под пользователем со старым паролем и меняет пароль на
+/// новый — как при смене пароля на компьютере. Длину, сложность, историю и минимальный срок проверяет
+/// домен. Неверный старый пароль считается неудачной попыткой входа. После смены закрываются сеансы на
+/// других устройствах. Включается в настройках безопасности; нужен LDAPS.
+#[utoipa::path(post, path = "/api/me/password", tag = "auth", request_body = PasswordChange,
+    responses((status = 200, body = PasswordChanged), (status = 400, body = pult_core::error::ErrorBody), (status = 403),
+        (status = 429, body = pult_core::error::ErrorBody), (status = 503, body = pult_core::error::ErrorBody)))]
+pub(crate) async fn change_my_password(
+    State(core): State<Core>,
+    State(people): State<crate::PeopleState>,
+    user: CurrentUser,
+    headers: HeaderMap,
+    Json(req): Json<PasswordChange>,
+) -> ApiResult<Json<PasswordChanged>> {
+    browser_only(&headers)?;
+    let sec: pult_core::settings::SecuritySettings = pult_core::settings::load(&core.db).await?;
+    if !sec.ad_password_change {
+        return Err(ApiError::Forbidden);
+    }
+    let account: Option<(String, String)> = sqlx::query_as(
+        "SELECT a.dn, a.sam_account_name FROM users u JOIN ad_accounts a ON a.id = u.ad_account_id
+          WHERE u.id = $1 AND NOT a.is_missing",
+    )
+    .bind(user.user_id)
+    .fetch_optional(&core.db)
+    .await?;
+    let not_ad =
+        || ApiError::bad_request("not_ad_account", "Учётная запись не из домена: пароль в портале не меняется.");
+    let Some((dn, sam)) = account else { return Err(not_ad()) };
+    let Some((_, pool)) = people.ad.pool(&core).await? else { return Err(not_ad()) };
+    if pool.tls_mode() != TlsMode::Ldaps {
+        return Err(ApiError::bad_request(
+            "ldaps_required",
+            "Смена пароля в портале работает только при подключении к домену по LDAPS.",
+        ));
+    }
+    // Подбор старого пароля упирается в тот же предел, что и вход.
+    let key = crate::auth::login_key(&sam);
+    let (by_login, _) = crate::auth::failures(&core, &key, &user.actor, sec.login_window_minutes, false).await?;
+    if by_login >= i64::from(sec.login_max_failures_per_login) {
+        return Err(ApiError::TooManyRequests {
+            message: format!("Слишком много неудачных попыток. Попробуйте через {} мин.", sec.login_window_minutes),
+            retry_after_secs: u64::from(sec.login_window_minutes) * 60,
+        });
+    }
+    let refused = |code: &'static str| {
+        let core = core.clone();
+        let (key, actor) = (key.clone(), user.actor.clone());
+        async move {
+            // Неверный старый пароль — как неудачный вход: подбор упирается в тот же предел.
+            if code == "wrong_password" {
+                crate::auth::attempt(&core, &key, &actor, "password_change_failed", false).await;
+            }
+            audit::record(
+                &core.db,
+                &actor,
+                Entry::new("auth.password_change_failed", Source::Portal)
+                    .object("user", user.user_id)
+                    .details(json!({"reason": code})),
+            )
+            .await
+        }
+    };
+    let controller = match pool.change_own_password(&dn, &req.old_password, &req.new_password).await {
+        Ok(dc) => dc,
+        Err(AdError::Bind(BindFailure::InvalidCredentials | BindFailure::Other)) => {
+            refused("wrong_password").await?;
+            return Err(ApiError::bad_request("wrong_password", "Текущий пароль неверен."));
+        }
+        Err(AdError::Bind(f)) => {
+            refused("account").await?;
+            return Err(ApiError::bad_request("account_state", f.user_message()));
+        }
+        Err(AdError::PasswordPolicy) => {
+            refused("password_policy").await?;
+            return Err(ApiError::bad_request(
+                "password_policy",
+                "Новый пароль не подходит под политику домена: длина, сложность, повтор прежних паролей или слишком ранняя смена.",
+            ));
+        }
+        Err(AdError::Unavailable(_)) => {
+            return Err(ApiError::Unavailable {
+                code: "ad_unavailable",
+                message: "Нет связи с доменом. Попробуйте позже.".into(),
+            });
+        }
+        Err(e) => return Err(ApiError::internal(e)),
+    };
+    drop(req);
+    let mut tx = core.db.begin().await?;
+    let closed_sessions = sqlx::query("DELETE FROM sessions WHERE user_id = $1 AND id IS DISTINCT FROM $2")
+        .bind(user.user_id)
+        .bind(current_id(&core, &headers))
+        .execute(&mut *tx)
+        .await?
+        .rows_affected();
+    audit::record(
+        &mut *tx,
+        &user.actor,
+        Entry::new("auth.password_changed", Source::Portal)
+            .object("user", user.user_id)
+            .details(json!({"controller": controller, "sessions_closed": closed_sessions})),
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(Json(PasswordChanged { controller, closed_sessions }))
 }
 
 #[derive(Serialize, ToSchema)]

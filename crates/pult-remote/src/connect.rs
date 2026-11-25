@@ -70,7 +70,8 @@ pub struct IssuedConnection {
 }
 
 type DeviceTicket = (Uuid, Option<Uuid>, Option<Uuid>);
-type DeviceRow = (String, Option<String>, bool, bool);
+/// Имя, домен, агент включён, на связи, ОС агента.
+type DeviceRow = (String, Option<String>, bool, bool, Option<String>);
 
 fn mode_str(m: ShadowMode) -> &'static str {
     match m {
@@ -146,9 +147,9 @@ pub async fn create_connection(
     }
     .ok_or_else(|| ApiError::bad_request("no_device", "У заявки не указан компьютер с агентом Pult."))?;
     let cfg: RemoteSettings = settings::load(&core.db).await?;
-    let (hostname, domain, is_active, online): DeviceRow = sqlx::query_as(
+    let (hostname, domain, is_active, online, os): DeviceRow = sqlx::query_as(
         "SELECT d.hostname, dom.dns_name, d.is_active,
-                coalesce(d.last_seen_at > now() - make_interval(mins => $2), false)
+                coalesce(d.last_seen_at > now() - make_interval(mins => $2), false), d.os
            FROM devices d LEFT JOIN ad_computers c ON c.id = d.ad_computer_id
            LEFT JOIN ad_domains dom ON dom.id = c.domain_id
           WHERE d.id = $1",
@@ -160,6 +161,13 @@ pub async fn create_connection(
     .ok_or(ApiError::NotFound)?;
     if !is_active {
         return Err(ApiError::bad_request("device_inactive", "Агент на этом ПК отключён администратором."));
+    }
+    // Теневое подключение и быстрые действия — средства Windows. Агент Linux только сообщает сеансы и оборудование.
+    if os.as_deref().is_some_and(|o| !o.starts_with("windows")) {
+        return Err(ApiError::bad_request(
+            "unsupported_os",
+            "Подключение — только к ПК с Windows: с этого устройства агент передаёт сеансы и оборудование.",
+        ));
     }
     let ticket_n = ticket.as_ref().map(|(n, _)| *n);
     // Политики и цель подключения — по имени из AD и домену, а не по данным агента.

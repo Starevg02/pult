@@ -1,6 +1,8 @@
 import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
-import { AssetsPage, ObjectPage } from "./pages/assets/AssetPages";
+import { AssetsPage, MyAssetsPage, ObjectPage } from "./pages/assets/AssetPages";
+import { LicensesPage } from "./pages/assets/CmdbParts";
 import { KbArticlePage, KbEditPage, KbNewPage, KbPage } from "./pages/kb/KbPages";
+import { CatalogPage } from "./pages/helpdesk/CatalogPage";
 import { ReportsPage } from "./pages/reports/ReportsPage";
 import { AssetTypesAdminPage, AutomationAdminPage, IntegrationsPage, SlaAdminPage, TemplatesAdminPage } from "./pages/admin/ServicePages";
 import { Layout, ModuleGate, NotFound, PermGate } from "./layout";
@@ -13,9 +15,15 @@ import { NewTicketPage } from "./pages/helpdesk/NewTicketPage";
 import { TicketResponsePage } from "./pages/helpdesk/PublicPages";
 import { TicketPage } from "./pages/helpdesk/TicketPage";
 import { DeskPage, MyTicketsPage } from "./pages/helpdesk/TicketsPage";
+import { ChangeRulesPage, ChangesPage, ProblemsPage } from "./pages/helpdesk/ItilPages";
+import { VaultPage } from "./pages/helpdesk/VaultPage";
+import { AssistantPage } from "./pages/helpdesk/assist";
 import { MailPage } from "./pages/admin/MailPage";
 import { LinkingPage, PhonebookAdminPage } from "./pages/admin/PhonebookAdminPage";
 import { AuditPage, SecurityPage, SystemPage, TelephonyPage } from "./pages/admin/SettingsPages";
+import { ChatPage, ChatsPage } from "./pages/chat/ChatPages";
+import { ChatAdminPage } from "./pages/chat/ChatAdminPage";
+import { ExtensionsPage } from "./pages/admin/ExtensionsPage";
 import { SitesPage } from "./pages/admin/SitesPage";
 import { RolesPage, UsersPage } from "./pages/admin/UsersPage";
 import { HomePage } from "./pages/HomePage";
@@ -32,7 +40,12 @@ const rootRoute = createRootRoute({ component: Layout, notFoundComponent: NotFou
 const PERMS: Record<string, string> = {
   ...Object.fromEntries(adminGroups.flatMap((g) => g.items.map((i) => [i.to, i.perm]))),
   "/desk": "helpdesk.ticket.work",
+  "/problems": "helpdesk.ticket.work",
+  "/changes": "helpdesk.ticket.work",
+  "/vault": "helpdesk.vault.use",
+  "/assistant": "helpdesk.assist.use",
   "/assets": "helpdesk.ticket.work",
+  "/licenses": "helpdesk.ticket.work",
   "/reports": "helpdesk.reports",
   "/computers": "remote.device.view",
   "/computers/$id": "remote.device.view",
@@ -67,23 +80,41 @@ const kbNew = createRoute({
   },
 });
 
+const ticketsNew = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/tickets/new",
+  component: only("helpdesk", NewTicketPage),
+  // Категория из каталога услуг: форма открывается сразу с ней и её полями.
+  validateSearch: (s: Record<string, unknown>): { category?: string } =>
+    typeof s.category === "string" && /^[0-9a-f-]{36}$/i.test(s.category) ? { category: s.category } : {},
+});
+
 const routeTree = rootRoute.addChildren([
   page("/", HomePage),
   page("/phonebook", only("phonebook", PhonebookPage)),
   page("/tickets", only("helpdesk", MyTicketsPage)),
-  page("/tickets/new", only("helpdesk", NewTicketPage)),
+  ticketsNew,
+  page("/catalog", only("helpdesk", CatalogPage)),
   page("/tickets/$number", only("helpdesk", TicketPage)),
   page("/desk", only("helpdesk", DeskPage)),
+  page("/problems", only("helpdesk", ProblemsPage)),
+  page("/changes", only("helpdesk", ChangesPage)),
+  page("/vault", only("helpdesk", VaultPage)),
+  page("/assistant", only("helpdesk", AssistantPage)),
   page("/ticket-response/$token", only("helpdesk", TicketResponsePage)),
   page("/notifications", NotificationsPage),
+  page("/chats", only("chat", ChatsPage)),
+  page("/chats/$id", only("chat", ChatPage)),
   page("/profile", ProfilePage),
   page("/access", only("helpdesk", MyAccessPage)),
+  page("/my-assets", only("helpdesk", MyAssetsPage)),
   page("/approvals", only("helpdesk", ApprovalsPage)),
   page("/kb", only("helpdesk", KbPage)),
   kbNew,
   page("/kb/$id", only("helpdesk", KbArticlePage)),
   page("/kb/$id/edit", only("helpdesk", KbEditPage)),
   page("/assets", only("helpdesk", AssetsPage)),
+  page("/licenses", only("helpdesk", LicensesPage)),
   page("/objects/$kind/$id", only("helpdesk", ObjectPage)),
   page("/reports", only("helpdesk", ReportsPage)),
   page("/computers", only("remote", ComputersPage)),
@@ -93,6 +124,7 @@ const routeTree = rootRoute.addChildren([
   page("/admin/templates", only("helpdesk", TemplatesAdminPage)),
   page("/admin/asset-types", only("helpdesk", AssetTypesAdminPage)),
   page("/admin/integrations", only("helpdesk", IntegrationsPage)),
+  page("/admin/change-rules", only("helpdesk", ChangeRulesPage)),
   page("/admin/remote", only("remote", RemoteAdminPage)),
   page("/admin", AdminHomePage),
   page("/admin/ad", AdPage),
@@ -106,6 +138,8 @@ const routeTree = rootRoute.addChildren([
   page("/admin/linking", LinkingPage),
   page("/admin/mail", MailPage),
   page("/admin/telephony", only("telephony", TelephonyPage)),
+  page("/admin/chats", only("chat", ChatAdminPage)),
+  page("/admin/extensions", only("helpdesk", ExtensionsPage)),
   page("/admin/security", SecurityPage),
   page("/admin/audit", AuditPage),
   page("/admin/system", SystemPage),

@@ -3,12 +3,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, ok, type AccessRequestView } from "../../api/client";
+import { api, ok, type AccessRequestView, type ChangeApprovalItem } from "../../api/client";
 import { formatDate } from "../../format";
 import { Badge, Button, Card, Empty, ErrorBox, Input, PageHeader, Spinner } from "../../ui";
 import { accessTone } from "../helpdesk/directoryUtil";
 import { dyn } from "../helpdesk/helpdeskUtil";
 import { TicketLink } from "../helpdesk/parts";
+import { ChangeApprovals } from "../helpdesk/ItilPages";
 
 function Status({ r }: { r: AccessRequestView }) {
   const { t } = useTranslation();
@@ -73,12 +74,14 @@ export function ApprovalsPage() {
   const q = useQuery({ queryKey: ["approvals"], queryFn: () => ok<AccessRequestView[]>(api.GET("/api/helpdesk/approvals")) });
   const pending = q.data?.filter((r) => r.status === "pending") ?? [];
   const decided = q.data?.filter((r) => r.status !== "pending") ?? [];
+  const changes = useQuery({ queryKey: ["change-approvals"], queryFn: () => ok<ChangeApprovalItem[]>(api.GET("/api/helpdesk/change-approvals")) });
   return (
     <div className="mx-auto max-w-4xl space-y-4">
       <PageHeader title={t("access.approvals")} />
       {q.error && <ErrorBox error={q.error} onRetry={() => void q.refetch()} />}
       {q.isPending && <Spinner />}
-      {q.data && pending.length === 0 && <Empty>{t("access.approvalsEmpty")}</Empty>}
+      {q.data && pending.length === 0 && changes.data?.every((c) => c.status !== "pending") && <Empty>{t("access.approvalsEmpty")}</Empty>}
+      <ChangeApprovals />
       {pending.map((r) => (
         <ApprovalCard key={r.id} r={r} />
       ))}

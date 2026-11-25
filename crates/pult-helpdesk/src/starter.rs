@@ -32,6 +32,9 @@ const ASSET_TYPES: &[&str] = &[
     "Сетевое оборудование",
     "Программа / лицензия",
     "Прочее",
+    "Компьютер",
+    "Сервис / ИС",
+    "Сервер",
 ];
 const ASSET_FIELDS: &[&str] = &[
     "Модель",
@@ -42,6 +45,21 @@ const ASSET_FIELDS: &[&str] = &[
     "Производитель",
     "Действует до",
     "Число мест",
+    "ОС",
+    "Владелец",
+    "Адрес",
+];
+
+/// Виды связей CMDB: прямое и обратное название (`20261120000009_cmdb.sql`).
+const RELATIONS: &[&str] = &[
+    "Зависит от",
+    "Нужен для",
+    "Подключено к",
+    "К нему подключено",
+    "Установлено на",
+    "На нём установлено",
+    "Входит в",
+    "Состоит из",
 ];
 
 /// Шаблоны заявок: название, тема, текст, пункты чек-листа.
@@ -132,6 +150,16 @@ pub async fn localize(db: &mut PgConnection, lang: Lang) -> Result<u64, sqlx::Er
         lang,
     )
     .await?;
+    n += column(
+        db,
+        "UPDATE asset_relation_types SET name = $1 WHERE name = ANY($2)
+          AND NOT EXISTS (SELECT 1 FROM asset_relation_types o WHERE lower(o.name) = lower($1))",
+        RELATIONS,
+        lang,
+    )
+    .await?;
+    n += column(db, "UPDATE asset_relation_types SET reverse_name = $1 WHERE reverse_name = ANY($2)", RELATIONS, lang)
+        .await?;
     n += column(db, "UPDATE ticket_templates SET name = $1 WHERE name = ANY($2)", TEMPLATES, lang).await?;
     n += column(db, "UPDATE ticket_templates SET title = $1 WHERE title = ANY($2)", TEMPLATES, lang).await?;
     n +=
@@ -172,7 +200,7 @@ mod tests {
 
     #[test]
     fn every_starter_string_is_translated() {
-        for list in [CATEGORIES, ASSET_TYPES, ASSET_FIELDS, TEMPLATES, CHECKLIST, RESPONSES] {
+        for list in [CATEGORIES, ASSET_TYPES, ASSET_FIELDS, RELATIONS, TEMPLATES, CHECKLIST, RESPONSES] {
             for ru in list {
                 for lang in [Lang::En, Lang::Zh] {
                     let t = l10n::tr_to(lang, ru);

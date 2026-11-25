@@ -2,12 +2,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { api, ok, type Me, type MySession, type Profile, type Revoked, type TotpSetup, type TotpStatus, type UserPrefs } from "../api/client";
+import { api, ok, type Me, type MySession, type PasswordChanged, type Profile, type PushConfig, type PushTestResult, type Revoked, type TotpSetup, type TotpStatus, type UserPrefs } from "../api/client";
 import { formatDate, initials } from "../format";
 import { asLang, LANGUAGES } from "../i18n";
 import { changeLanguage, PAGE_SIZES, prefs, THEMES, useSavePrefs } from "../prefs";
 import { can, useMe, useModule } from "../session";
 import { Badge, Button, Card, ErrorBox, Input, PageHeader, Select, Spinner } from "../ui";
+import { currentEndpoint, pushSupported, subscribeBrowser, unsubscribeBrowser } from "../push";
 import { fullName } from "./phonebookUtil";
 
 function Section({ title, hint, children }: { title: string; hint?: ReactNode; children: ReactNode }) {
@@ -412,6 +413,130 @@ function TwoFactor() {
   );
 }
 
+function DevicePush() {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const cfg = useQuery({ queryKey: ["my-push"], queryFn: () => ok<PushConfig>(api.GET("/api/me/push")) });
+  const local = useQuery({ queryKey: ["push-endpoint"], queryFn: currentEndpoint, enabled: pushSupported() });
+  const refresh = () => {
+    void qc.invalidateQueries({ queryKey: ["my-push"] });
+    void qc.invalidateQueries({ queryKey: ["push-endpoint"] });
+  };
+  const on = useMutation({
+    mutationFn: async () => {
+      const key = cfg.data?.public_key;
+      if (!key) throw new Error(t("push.unavailable"));
+      let sub;
+      try {
+        sub = await subscribeBrowser(key);
+      } catch {
+        throw new Error(t("push.denied"));
+      }
+      await ok(api.POST("/api/me/push", { body: sub }));
+    },
+    onSuccess: refresh,
+  });
+  const off = useMutation({
+    mutationFn: async () => {
+      const endpoint = await unsubscribeBrowser();
+      if (endpoint) await ok(api.DELETE("/api/me/push", { body: { endpoint } }));
+    },
+    onSuccess: refresh,
+  });
+  const test = useMutation({ mutationFn: () => ok<PushTestResult>(api.POST("/api/me/push/test")) });
+  if (!cfg.data?.enabled) return null;
+  const subscribed = !!local.data;
+  return (
+    <Section title={t("push.title")} hint={t("push.hint")}>
+      {!pushSupported() ? (
+        <p className="text-sm text-muted">{t("push.unsupported")}</p>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <Badge tone={subscribed ? "ok" : "muted"}>{subscribed ? t("push.on") : t("push.off")}</Badge>
+          {subscribed ? (
+            <>
+              <Button disabled={off.isPending} onClick={() => off.mutate()}>
+                {t("push.disable")}
+              </Button>
+              <Button variant="ghost" disabled={test.isPending} onClick={() => test.mutate()}>
+                {t("push.test")}
+              </Button>
+            </>
+          ) : (
+            <Button variant="primary" disabled={on.isPending} onClick={() => on.mutate()}>
+              {t("push.enable")}
+            </Button>
+          )}
+          <span className="text-muted">{t("push.devices", { count: cfg.data.devices })}</span>
+        </div>
+      )}
+      {test.data && (
+        <p role="status" className="mt-2 text-sm">
+          {t("push.testResult", { sent: test.data.sent, failed: test.data.failed })}
+        </p>
+      )}
+      {(on.error ?? off.error ?? test.error) && <ErrorBox error={on.error ?? off.error ?? test.error} />}
+    </Section>
+  );
+}
+
+function PasswordForm() {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const [old, setOld] = useState("");
+  const [next, setNext] = useState("");
+  const [again, setAgain] = useState("");
+  const [done, setDone] = useState<PasswordChanged | null>(null);
+  const change = useMutation({
+    mutationFn: () => ok<PasswordChanged>(api.POST("/api/me/password", { body: { old_password: old, new_password: next } })),
+    onSuccess: (r) => {
+      setOld("");
+      setNext("");
+      setAgain("");
+      setDone(r);
+      void qc.invalidateQueries({ queryKey: ["my-sessions"] });
+    },
+  });
+  const mismatch = again !== "" && again !== next;
+  return (
+    <Section title={t("profile.password")} hint={t("profile.passwordHint")}>
+      <form
+        className="grid max-w-sm gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          setDone(null);
+          change.mutate();
+        }}
+      >
+        <label className="grid gap-1 text-sm">
+          {t("profile.passwordOld")}
+          <Input type="password" autoComplete="current-password" value={old} onChange={(e) => setOld(e.target.value)} required />
+        </label>
+        <label className="grid gap-1 text-sm">
+          {t("profile.passwordNew")}
+          <Input type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} required />
+        </label>
+        <label className="grid gap-1 text-sm">
+          {t("profile.passwordAgain")}
+          <Input type="password" autoComplete="new-password" value={again} onChange={(e) => setAgain(e.target.value)} required aria-invalid={mismatch} />
+        </label>
+        {mismatch && <p className="text-sm text-bad">{t("profile.passwordMismatch")}</p>}
+        {change.error && <ErrorBox error={change.error} />}
+        {done && (
+          <p role="status" className="text-sm text-ok">
+            {t("profile.passwordDone", { count: done.closed_sessions })}
+          </p>
+        )}
+        <div>
+          <Button type="submit" variant="primary" disabled={!old || !next || next !== again || change.isPending}>
+            {t("profile.passwordChange")}
+          </Button>
+        </div>
+      </form>
+    </Section>
+  );
+}
+
 export function ProfilePage() {
   const { t, i18n } = useTranslation();
   const me = useMe().data;
@@ -476,6 +601,8 @@ export function ProfilePage() {
       )}
       <div className="mt-4">
         <Personalization me={me} />
+        {prof?.can_change_password && <PasswordForm />}
+        <DevicePush />
         <TwoFactor />
         <Sessions />
       </div>

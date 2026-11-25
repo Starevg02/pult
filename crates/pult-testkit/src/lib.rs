@@ -366,6 +366,45 @@ impl Directory {
         self.0.lock().unwrap().iter().map(|u| u.usn).max().unwrap_or(1)
     }
 
+    /// Пользователь меняет свой пароль, как в AD: Delete старого + Add нового `unicodePwd`.
+    /// `00000056` — неверный старый пароль; `0000052D` — политика (не короче 8 символов и не прежний).
+    fn change_own_password(&self, m: &LdapModifyRequest) -> (LdapResultCode, &'static str) {
+        let pwd = |op: LdapModifyType| {
+            m.changes
+                .iter()
+                .find(|c| c.operation == op && c.modification.atype.eq_ignore_ascii_case("unicodePwd"))
+                .and_then(|c| c.modification.vals.first())
+                .map(|v| {
+                    let units: Vec<u16> = v.chunks_exact(2).map(|b| u16::from_le_bytes([b[0], b[1]])).collect();
+                    String::from_utf16_lossy(&units).trim_matches('"').to_string()
+                })
+        };
+        let (Some(old), Some(new)) = (pwd(LdapModifyType::Delete), pwd(LdapModifyType::Add)) else {
+            return (LdapResultCode::InsufficentAccessRights, "00002098: SecErr: DSID-03150F94, problem 4003\0");
+        };
+        let usn = self.next_usn();
+        let mut users = self.0.lock().unwrap();
+        let Some(u) = users.iter_mut().find(|u| u.dn().eq_ignore_ascii_case(&m.dn)) else {
+            return (LdapResultCode::NoSuchObject, "0000208D: NameErr: DSID-0310028D, problem 2001 (NO_OBJECT)\0");
+        };
+        if old != u.password.as_deref().unwrap_or(USER_PASS) {
+            return (
+                LdapResultCode::ConstraintViolation,
+                "00000056: AtrErr: DSID-03190F80, #1: 0: 00000056: problem 1005 (CONSTRAINT_ATT_TYPE), data 0, Att 9005a (unicodePwd)\0",
+            );
+        }
+        if new.chars().count() < 8 || new == old {
+            return (
+                LdapResultCode::ConstraintViolation,
+                "0000052D: AtrErr: DSID-03191083, #1: 0: 0000052D: problem 1005 (CONSTRAINT_ATT_TYPE), data 0, Att 9005a (unicodePwd)\0",
+            );
+        }
+        u.password = Some(new);
+        u.pwd_last_set = NOW_FILETIME + 1;
+        u.usn = usn;
+        (LdapResultCode::Success, "")
+    }
+
     fn next_usn(&self) -> u64 {
         self.highest_usn() + 1
     }
@@ -477,6 +516,8 @@ async fn serve(tls: tokio_rustls::server::TlsStream<tokio::net::TcpStream>, st: 
     let mut writer = FramedWrite::new(w, LdapCodec::default());
     let mut service = false;
     let mut writer_bound = false;
+    // DN пользователя, вошедшего на этом соединении: ему можно сменить свой пароль.
+    let mut user_bound: Option<String> = None;
     while let Some(Ok(msg)) = reader.next().await {
         let id = msg.msgid;
         let users = dir.snapshot();
@@ -488,12 +529,16 @@ async fn serve(tls: tokio_rustls::server::TlsStream<tokio::net::TcpStream>, st: 
                     service = true;
                     vec![bind_reply(id, (LdapResultCode::Success, String::new()))]
                 } else {
-                    vec![bind_reply(id, bind(&users, &b.dn, &pass, &st, &mut service))]
+                    let r = bind(&users, &b.dn, &pass, &st, &mut service);
+                    user_bound = (r.0 == LdapResultCode::Success && !service).then(|| b.dn.clone());
+                    vec![bind_reply(id, r)]
                 }
             }
             LdapOp::ModifyRequest(m) => {
                 let (code, text) = if writer_bound {
                     dir.modify(&m)
+                } else if user_bound.as_deref().is_some_and(|d| d.eq_ignore_ascii_case(&m.dn)) {
+                    dir.change_own_password(&m)
                 } else {
                     (
                         LdapResultCode::InsufficentAccessRights,

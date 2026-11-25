@@ -1,6 +1,7 @@
 //! Прикладное API: маршруты модулей ядра, людей и справочника на общем состоянии.
 
 use axum::extract::FromRef;
+use pult_chat::ChatModule;
 use pult_core::{Core, Module, Permission, api::CoreModule};
 use pult_directory::DirectoryModule;
 use pult_helpdesk::{HelpdeskState, api::HelpdeskModule};
@@ -49,7 +50,9 @@ pub fn modules() -> OpenApiRouter<ApiState> {
         .merge(<HelpdeskModule as Module<ApiState>>::routes(&HelpdeskModule))
         .merge(<DirectoryModule as Module<ApiState>>::routes(&DirectoryModule))
         .merge(<RemoteModule as Module<ApiState>>::routes(&RemoteModule))
+        .merge(<ChatModule as Module<ApiState>>::routes(&ChatModule))
         .merge(crate::setup::routes())
+        .routes(utoipa_axum::routes!(crate::negotiate::kerberos))
 }
 
 /// Все разрешения всех модулей — для матрицы ролей и начальной раздачи системным ролям.
@@ -60,6 +63,7 @@ pub fn permissions() -> Vec<Permission> {
     all.extend(<HelpdeskModule as Module<ApiState>>::permissions(&HelpdeskModule));
     all.extend(<DirectoryModule as Module<ApiState>>::permissions(&DirectoryModule));
     all.extend(<RemoteModule as Module<ApiState>>::permissions(&RemoteModule));
+    all.extend(<ChatModule as Module<ApiState>>::permissions(&ChatModule));
     all
 }
 

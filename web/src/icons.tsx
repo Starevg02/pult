@@ -73,6 +73,7 @@ export const IconPause = make("Pause", <><circle cx="12" cy="12" r="8.5" /><path
 export const IconMerge = make("Merge", <><circle cx="6.5" cy="5.5" r="2" /><circle cx="6.5" cy="18.5" r="2" /><circle cx="17.5" cy="12" r="2" /><path d="M6.5 7.5v9" /><path d="M6.5 8.5c0 3.5 3 3.5 9 3.5" /></>);
 export const IconFileText = make("FileText", <><path d="M14 3.5H6.5a1.5 1.5 0 0 0-1.5 1.5v14a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19V8.5Z" /><path d="M14 3.5v5h5" /><path d="M8.5 13h7" /><path d="M8.5 16.5h5" /></>);
 export const IconMegaphone = make("Megaphone", <><path d="M4 10v4a1 1 0 0 0 1 1h2.5L15 19V5L7.5 9H5a1 1 0 0 0-1 1Z" /><path d="M18.5 9a4 4 0 0 1 0 6" /><path d="M8 15l1.5 5" /></>);
+export const IconChat = make("Chat", <><path d="M4.5 5.5h15a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H10l-4.5 3.5v-3.5h-1a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1Z" /><path d="M8 10h8" /><path d="M8 13h5" /></>);
 export const IconLink = make("Link", <><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" /></>);
 export const IconShield = make("Shield", <><path d="M12 3.5 19.5 6v5.5c0 4.5-3.2 7.8-7.5 9-4.3-1.2-7.5-4.5-7.5-9V6Z" /><path d="m9 12 2 2 4-4" /></>);
 export const IconBan = make("Ban", <><circle cx="12" cy="12" r="8.5" /><path d="m6 6 12 12" /></>);

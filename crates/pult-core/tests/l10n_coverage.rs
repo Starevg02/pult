@@ -17,6 +17,7 @@ const SKIP: &[&str] = &[
     "pult-server/src/backup.rs",
     "pult-server/src/migrate.rs",
     "pult-server/src/demo.rs",
+    "pult-server/src/edge.rs",
     "pult-server/src/telemetry.rs",
     "pult-server/src/config.rs",
     "pult-server/src/static_files.rs",
@@ -24,8 +25,9 @@ const SKIP: &[&str] = &[
     "pult-phonebook/src/import.rs",
 ];
 
-/// Не текст для людей: раскладка клавиатуры и «ё→е» для поиска, образец текста ошибки LDAP.
-const SKIP_LITERAL: &[&str] = &["е", "йцукенгшщзхъфывапролджэячсмитьбюё", "код ldap 49"];
+/// Не текст для людей: раскладка клавиатуры и «ё→е» для поиска, образец текста ошибки LDAP,
+/// «да/нет» в ячейках импорта CSV.
+const SKIP_LITERAL: &[&str] = &["е", "йцукенгшщзхъфывапролджэячсмитьбюё", "код ldap 49", "да", "нет"];
 
 const SKIP_LINE: &[&str] = &[
     "expect(",

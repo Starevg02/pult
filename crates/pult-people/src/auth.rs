@@ -12,7 +12,7 @@ use pult_core::{
     ApiError, ApiResult, Core, CurrentUser, Secret,
     audit::{self, Actor, Entry, Source},
     rbac::ROLE_SUPERADMIN,
-    session,
+    session::{self, AuthMethod},
     settings::{self, SecuritySettings},
     totp,
 };
@@ -106,7 +106,7 @@ fn failure_code(f: BindFailure) -> &'static str {
     }
 }
 
-async fn attempt(core: &Core, login: &str, actor: &Actor, result: &str, external: bool) {
+pub(crate) async fn attempt(core: &Core, login: &str, actor: &Actor, result: &str, external: bool) {
     let r = sqlx::query("INSERT INTO login_attempts (login, ip, result, external) VALUES ($1, $2, $3, $4)")
         .bind(login.chars().take(200).collect::<String>())
         .bind(actor.ip.map(sqlx::types::ipnetwork::IpNetwork::from))
@@ -121,7 +121,7 @@ async fn attempt(core: &Core, login: &str, actor: &Actor, result: &str, external
 
 /// Сколько неудачных попыток за окно: по логину и по IP. Попытки из интернета и изнутри считаются
 /// раздельно: перебор снаружи не закрывает вход сотруднику в офисе.
-async fn failures(
+pub(crate) async fn failures(
     core: &Core,
     login: &str,
     actor: &Actor,
@@ -214,7 +214,7 @@ async fn code_needed(core: &Core, login: &str, required_roles: &[String]) -> Res
 
 /// То же для уже известного пользователя — после проверки пароля в AD. Страховка на случай, когда логин
 /// до AD не удалось сопоставить с учёткой (например, UPN, которого ещё нет в зеркале).
-async fn user_needs_code(
+pub(crate) async fn user_needs_code(
     db: &mut sqlx::PgConnection,
     user_id: Uuid,
     required_roles: &[String],
@@ -397,17 +397,7 @@ pub async fn login(
             message: BindFailure::AccountDisabled.user_message().into(),
         });
     }
-    let (user_id,): (Uuid,) = sqlx::query_as(
-        "INSERT INTO users (ad_account_id, person_id, last_login_at, locale)
-         VALUES ($1, (SELECT id FROM persons WHERE ad_account_id = $1), now(),
-                 coalesce((SELECT value->>'default_locale' FROM settings WHERE key = 'locale'), 'ru'))
-         ON CONFLICT (ad_account_id) DO UPDATE SET is_active = true, last_login_at = now(),
-                person_id = coalesce(users.person_id, EXCLUDED.person_id)
-         RETURNING id",
-    )
-    .bind(account_id)
-    .fetch_one(&mut *tx)
-    .await?;
+    let user_id = upsert_user(&mut tx, account_id).await?;
     let actor = Actor { user_id: Some(user_id), ..actor };
     // Логин до AD не сопоставился с учёткой, которой нужен код (UPN не из зеркала и т. п.): без кода не пускаем.
     if external && verified_user.is_none() && user_needs_code(&mut tx, user_id, &sec.totp_required_roles).await? {
@@ -435,13 +425,130 @@ pub async fn login(
     tx.commit().await?;
     attempt(core, &key, &actor, "ok", external).await;
 
-    let s = session::create(core, user_id, &actor).await?;
+    let method = if verified_user.is_some() { AuthMethod::LdapTotp } else { AuthMethod::Ldap };
+    session_response(core, user_id, &actor, method).await
+}
+
+/// Сотрудник по учётке AD: создать запись пользователя или оживить прежнюю.
+pub(crate) async fn upsert_user(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    account_id: Uuid,
+) -> Result<Uuid, sqlx::Error> {
+    sqlx::query_scalar(
+        "INSERT INTO users (ad_account_id, person_id, last_login_at, locale)
+         VALUES ($1, (SELECT id FROM persons WHERE ad_account_id = $1), now(),
+                 coalesce((SELECT value->>'default_locale' FROM settings WHERE key = 'locale'), 'ru'))
+         ON CONFLICT (ad_account_id) DO UPDATE SET is_active = true, last_login_at = now(),
+                person_id = coalesce(users.person_id, EXCLUDED.person_id)
+         RETURNING id",
+    )
+    .bind(account_id)
+    .fetch_one(&mut **tx)
+    .await
+}
+
+/// Новый сеанс: 204 и cookie сеанса и CSRF.
+async fn session_response(core: &Core, user_id: Uuid, actor: &Actor, method: AuthMethod) -> Result<Response, ApiError> {
+    Ok((StatusCode::NO_CONTENT, session_headers(core, user_id, actor, method).await?).into_response())
+}
+
+/// Новый сеанс: заголовки с cookie сеанса и CSRF.
+pub(crate) async fn session_headers(
+    core: &Core,
+    user_id: Uuid,
+    actor: &Actor,
+    method: AuthMethod,
+) -> Result<HeaderMap, ApiError> {
+    let s = session::create(core, user_id, actor, method).await?;
     let mut headers = HeaderMap::new();
     for c in core.cookies.issue(&s.token, &s.csrf, s.max_age_secs) {
         headers.append(header::SET_COOKIE, HeaderValue::from_str(&c).map_err(ApiError::internal)?);
     }
     headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
-    Ok((StatusCode::NO_CONTENT, headers).into_response())
+    Ok(headers)
+}
+
+// ------------------------------------------------------------------ Вход через домен (Kerberos)
+
+/// Принципал Kerberos → логин и область: `Ivanov@CORP.EXAMPLE` → (`ivanov`, `corp.example`).
+/// Служебные принципалы (`HTTP/host@…`) и пустые части — `None`.
+pub fn split_principal(p: &str) -> Option<(String, String)> {
+    let (user, realm) = p.trim().rsplit_once('@')?;
+    // Служба (`HTTP/…`) и учётка компьютера (`PC01$`) — не сотрудник.
+    if user.is_empty() || realm.is_empty() || user.contains('/') || user.ends_with('$') {
+        return None;
+    }
+    Some((user.to_lowercase(), realm.to_lowercase()))
+}
+
+/// Вход через домен включён и запрос — из сети организации. Проверяется до обмена Kerberos:
+/// выключенный вход отвечает 404 без `WWW-Authenticate`, чтобы браузер ничего не спрашивал.
+pub async fn kerberos_allowed(core: &Core, parts: &Parts) -> Result<(), ApiError> {
+    let sec: SecuritySettings = settings::load(&core.db).await?;
+    if !sec.kerberos_login {
+        return Err(ApiError::NotFound);
+    }
+    if session::request_is_external(parts, &sec) {
+        return Err(ApiError::bad_request("kerberos_external", "Вход через домен — только из сети организации."));
+    }
+    Ok(())
+}
+
+/// Вход по билету Kerberos, который уже проверил сервер (GSSAPI, keytab). Учётка — по логину и области
+/// (DNS-имя домена). Кода из приложения нет: из интернета этот вход закрыт (`kerberos_allowed`).
+pub async fn kerberos_login(core: &Core, parts: &Parts, principal: &str) -> Result<Response, ApiError> {
+    kerberos_allowed(core, parts).await?;
+    let actor = session::actor_from(parts, None);
+    let Some((login, realm)) = split_principal(principal) else {
+        return Err(ApiError::Forbidden);
+    };
+    let mut tx = core.db.begin().await?;
+    // Имя в билете — sAMAccountName, но при входе по UPN AD может выдать билет на часть UPN до «@».
+    // Если это имя у одной учётки — логин, а у другой — начало UPN, кого пускать, неясно: отказ.
+    let accounts: Vec<(Uuid, bool)> = sqlx::query_as(
+        "SELECT a.id, a.is_enabled AND NOT a.is_missing
+           FROM ad_accounts a JOIN ad_domains d ON d.id = a.domain_id
+          WHERE d.enabled AND lower(d.dns_name) = $2
+            AND (lower(a.sam_account_name) = $1
+                 OR (NOT a.is_missing AND lower(split_part(a.upn, '@', 1)) = $1))
+          LIMIT 2",
+    )
+    .bind(&login)
+    .bind(&realm)
+    .fetch_all(&mut *tx)
+    .await?;
+    let (account_id, enabled) = match accounts.as_slice() {
+        [one] => *one,
+        [] => {
+            attempt(core, &login, &actor, "not_allowed", false).await;
+            return Err(ApiError::Forbidden);
+        }
+        _ => {
+            tracing::warn!(login = %login, "вход через домен: имя совпадает у разных учёток (логин и UPN)");
+            attempt(core, &login, &actor, "ambiguous", false).await;
+            return Err(ApiError::Forbidden);
+        }
+    };
+    if !enabled {
+        attempt(core, &login, &actor, "account_disabled", false).await;
+        return Err(ApiError::BadRequest {
+            code: "account_disabled",
+            message: BindFailure::AccountDisabled.user_message().into(),
+        });
+    }
+    let user_id = upsert_user(&mut tx, account_id).await?;
+    let actor = Actor { user_id: Some(user_id), ..actor };
+    audit::record(
+        &mut *tx,
+        &actor,
+        Entry::new("auth.login", Source::Portal)
+            .object("user", user_id)
+            .details(json!({"method": "kerberos", "principal": principal, "external": false})),
+    )
+    .await?;
+    tx.commit().await?;
+    attempt(core, &login, &actor, "ok", false).await;
+    session_response(core, user_id, &actor, AuthMethod::Kerberos).await
 }
 
 /// Первый суперадминистратор: только пока суперадминистраторов нет.
@@ -510,7 +617,7 @@ pub(crate) async fn login_handler(
 
 /// Отказ во входе. Отказ AD (неверный пароль, отключена и т. п.) — 401 с кодом и текстом
 /// на языке запроса: тело собирается здесь, мимо `ApiError::into_response`, где переводятся остальные ошибки.
-fn login_error(e: ApiError) -> Response {
+pub fn login_error(e: ApiError) -> Response {
     match e {
         ApiError::BadRequest { code, message } => {
             let message = pult_core::l10n::tr(&message).into_owned();
@@ -611,6 +718,17 @@ pub(crate) async fn put_my_locale(
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn kerberos_principals() {
+        use super::split_principal;
+        assert_eq!(split_principal("Ivanov@CORP.EXAMPLE"), Some(("ivanov".into(), "corp.example".into())));
+        assert_eq!(split_principal("a@b@CORP"), Some(("a@b".into(), "corp".into())));
+        assert_eq!(split_principal("HTTP/portal@CORP"), None);
+        assert_eq!(split_principal("ivanov"), None);
+        assert_eq!(split_principal("@CORP"), None);
+        assert_eq!(split_principal("WS-042$@CORP"), None, "учётка компьютера");
+    }
     use super::*;
 
     #[test]

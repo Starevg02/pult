@@ -116,11 +116,19 @@ where
             .merge(crate::rules::routes())
             .merge(crate::templates::routes())
             .merge(crate::objects::routes())
+            .merge(crate::import::routes())
             .merge(crate::kb::routes())
             .merge(crate::service::routes())
             .merge(crate::reports::routes())
             .merge(crate::access::routes())
+            .merge(crate::vault::routes())
+            .merge(crate::assist::routes())
+            .merge(crate::cmdb::routes())
+            .merge(crate::inventory::routes())
+            .merge(crate::extensions::routes())
             .merge(crate::integrations::routes())
+            .merge(crate::monitoring::routes())
+            .merge(crate::itil::routes())
     }
 
     fn permissions(&self) -> Vec<Permission> {
@@ -151,6 +159,8 @@ pub struct TicketRow {
     pub id: Uuid,
     pub number: i64,
     pub title: String,
+    /// `incident`, `request`, `problem`, `change`.
+    pub kind: String,
     pub status: String,
     pub priority: String,
     pub line: String,
@@ -194,6 +204,8 @@ pub struct ListQuery {
     pub created_from: Option<String>,
     pub created_to: Option<String>,
     pub q: Option<String>,
+    /// `problem` или `change` — только они; без параметра — обращения (инциденты и запросы).
+    pub kind: Option<String>,
     /// `updated`, `created`, `number`, `priority`, `status`, `due`.
     pub sort: Option<String>,
     #[serde(default)]
@@ -247,7 +259,7 @@ async fn list_tickets(
     let dir = if q.asc { "ASC" } else { "DESC" };
     let col = sort_column(q.sort.as_deref());
     let sql = format!(
-        "SELECT t.id, t.number, t.title, t.status, t.priority, t.line, t.channel, t.is_major,
+        "SELECT t.id, t.number, t.title, t.kind, t.status, t.priority, t.line, t.channel, t.is_major,
                 t.parent_ticket_id IS NOT NULL AS linked,
                 (t.requester_id IS NULL AND t.requester_user_id IS NULL) AS unverified,
                 {NAMES}, t.assignee_id, t.created_at, t.updated_at,
@@ -272,6 +284,7 @@ async fn list_tickets(
             AND ($14::text IS NULL OR ({SLA_STATE}) = $14)
             AND ($15::date IS NULL OR t.created_at >= $15::date)
             AND ($16::date IS NULL OR t.created_at < $16::date + 1)
+            AND (($17::text IS NULL AND t.kind IN ('incident', 'request')) OR t.kind = $17)
             AND ($5::text[] IS NULL OR t.status = ANY($5))
             AND ($6::uuid IS NULL OR t.site_id = $6)
             AND ($7::uuid IS NULL OR t.category_id = $7)
@@ -298,6 +311,8 @@ async fn list_tickets(
         .bind(q.sla.as_deref().filter(|s| matches!(*s, "ok" | "warning" | "breached" | "paused" | "met")))
         .bind(date_param(q.created_from.as_deref())?)
         .bind(date_param(q.created_to.as_deref())?)
+        // Проблемы и изменения — только ИТ; сотрудник видит лишь свои обращения.
+        .bind(q.kind.as_deref().filter(|k| who.engineer && matches!(*k, "problem" | "change")))
         .fetch_all(&core.db)
         .await?;
     Ok(Json(rows))
@@ -494,6 +509,8 @@ pub struct TicketHead {
     pub created_by_name: Option<String>,
     pub parent_number: Option<i64>,
     pub follow_up_number: Option<i64>,
+    /// Инцидент — следствие этой проблемы.
+    pub problem_number: Option<i64>,
     #[serde(with = "time::serde::rfc3339")]
     #[schema(value_type = String, format = DateTime)]
     pub created_at: OffsetDateTime,
@@ -528,6 +545,10 @@ pub struct TicketHead {
     pub requester_vip: bool,
     pub rating: Option<String>,
     pub rating_comment: Option<String>,
+    /// Баллы подробного опроса 1–5: скорость, качество, вежливость.
+    pub rating_speed: Option<i16>,
+    pub rating_quality: Option<i16>,
+    pub rating_courtesy: Option<i16>,
     #[serde(skip)]
     pub requester_user_id: Option<Uuid>,
 }
@@ -584,6 +605,7 @@ async fn get_ticket(
                 (SELECT coalesce(ca.display_name, ca.sam_account_name) FROM users cu JOIN ad_accounts ca ON ca.id = cu.ad_account_id WHERE cu.id = t.created_by) AS created_by_name,
                 (SELECT number FROM tickets x WHERE x.id = t.parent_ticket_id) AS parent_number,
                 (SELECT number FROM tickets x WHERE x.id = t.follow_up_of) AS follow_up_number,
+                (SELECT number FROM tickets x WHERE x.id = t.problem_id) AS problem_number,
                 t.created_at, t.taken_at, t.first_response_at, t.resolved_at, t.auto_close_at, t.closure_code,
                 (SELECT coalesce(sum(w.minutes), 0) FROM ticket_worklogs w WHERE w.ticket_id = t.id) AS work_minutes,
                 t.impact, t.urgency, t.group_id, (SELECT g.name FROM engineer_groups g WHERE g.id = t.group_id) AS group_name,
@@ -591,7 +613,10 @@ async fn get_ticket(
                 t.response_due_at, t.resolve_due_at, t.sla_paused_at IS NOT NULL AS sla_paused,
                 coalesce(p.is_vip, false) AS requester_vip,
                 (SELECT value FROM ticket_ratings g WHERE g.ticket_id = t.id) AS rating,
-                (SELECT comment FROM ticket_ratings g WHERE g.ticket_id = t.id) AS rating_comment
+                (SELECT comment FROM ticket_ratings g WHERE g.ticket_id = t.id) AS rating_comment,
+                (SELECT speed FROM ticket_ratings g WHERE g.ticket_id = t.id) AS rating_speed,
+                (SELECT quality FROM ticket_ratings g WHERE g.ticket_id = t.id) AS rating_quality,
+                (SELECT courtesy FROM ticket_ratings g WHERE g.ticket_id = t.id) AS rating_courtesy
            {JOINS}
           WHERE t.number = $1 AND ($2 OR t.requester_user_id = $3 OR t.requester_id = $4
                 OR EXISTS (SELECT 1 FROM ticket_watchers w WHERE w.ticket_id = t.id AND w.person_id = $4))" // SAFE: константы

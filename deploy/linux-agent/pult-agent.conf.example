@@ -1,0 +1,7 @@
+# Настройки агента Pult для Linux. Скопируйте в /etc/pult-agent.conf и ограничьте права:
+#   install -m 0600 pult-agent.conf.example /etc/pult-agent.conf
+# Адрес портала (https).
+PortalUrl=https://pult.corp.example.test
+# Токен регистрации из «Удалённая поддержка» → «Токены регистрации». После регистрации его можно удалить:
+# ключ агента хранится в /var/lib/pult-agent.
+EnrollToken=

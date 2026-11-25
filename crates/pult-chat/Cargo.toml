@@ -1,0 +1,30 @@
+[package]
+name = "pult-chat"
+description = "Pult communications: direct and group chats with encrypted storage, edit history and AD-driven membership"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+pult-core.workspace = true
+axum.workspace = true
+sqlx.workspace = true
+uuid.workspace = true
+time.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+utoipa.workspace = true
+utoipa-axum.workspace = true
+
+[dev-dependencies]
+pult-people.workspace = true
+pult-testkit.workspace = true
+tokio = { workspace = true }
+tower = { workspace = true, features = ["util"] }
+http-body-util = "0.1"
+
+[lints]
+workspace = true

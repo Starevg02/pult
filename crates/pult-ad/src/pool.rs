@@ -8,15 +8,20 @@ use crate::{
     errors::{AdError, BindFailure, UnavailableReport},
     failover::{Attempt, try_in_order},
 };
-use ldap3::{Ldap, LdapConnAsync, LdapConnSettings, LdapError, Scope, SearchEntry, ldap_escape};
+use ldap3::{Ldap, LdapConnAsync, LdapConnSettings, LdapError, Mod, Scope, SearchEntry, ldap_escape};
 use pult_core::Secret;
-use std::sync::{
-    Arc,
-    atomic::{AtomicUsize, Ordering},
+use std::{
+    collections::HashSet,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 
 /// Код LDAP `invalidCredentials`.
 const RC_INVALID_CREDENTIALS: u32 = 49;
+/// Код LDAP `constraintViolation`: AD так отвечает на неверный старый пароль и на нарушение политики.
+const RC_CONSTRAINT_VIOLATION: u32 = 19;
 
 /// Пользователь, прошедший bind.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -217,6 +222,56 @@ impl DcPool {
         }
     }
 
+    /// Пользователь меняет свой пароль: вход им самим со старым паролем и замена `unicodePwd` (удалить
+    /// старый, добавить новый). Это та же операция, что смена пароля на компьютере: права администратора
+    /// не нужны, а длину, сложность, историю и минимальный срок проверяет домен. Только по LDAPS.
+    /// Возвращает контроллер, на котором сменён пароль.
+    pub async fn change_own_password(&self, dn: &str, old: &Secret, new: &Secret) -> Result<String, AdError> {
+        if self.cfg.tls != TlsMode::Ldaps {
+            return Err(AdError::Ldap { rc: 0, text: "смена пароля — только по LDAPS".into() });
+        }
+        if old.is_empty() {
+            // Пустой пароль — анонимный bind, который «успешен».
+            return Err(AdError::Bind(BindFailure::InvalidCredentials));
+        }
+        if new.is_empty() {
+            return Err(AdError::PasswordPolicy);
+        }
+        // Контроллер — тот, что сейчас отвечает служебной учётке.
+        let (dc, ()) = self
+            .with_service_conn(|mut ldap| async move {
+                let _ = ldap.unbind().await;
+                Ok(())
+            })
+            .await?;
+        let mut ldap = self.connect(&dc).await.map_err(|why| self.unavailable(vec![(self.index_of(&dc), why)]))?;
+        match ldap.simple_bind(dn, old.expose()).await {
+            Ok(r) if r.rc == 0 => {}
+            Ok(r) => {
+                let _ = ldap.unbind().await;
+                return Err(if r.rc == RC_INVALID_CREDENTIALS {
+                    AdError::Bind(BindFailure::from_ad_message(&r.text))
+                } else {
+                    AdError::Ldap { rc: r.rc, text: clean(&r.text) }
+                });
+            }
+            Err(e) => return Err(ldap_err(e)),
+        }
+        let attr = b"unicodePwd".to_vec();
+        let mods = vec![
+            Mod::Delete(attr.clone(), HashSet::from([crate::write::unicode_pwd(old.expose())])),
+            Mod::Add(attr, HashSet::from([crate::write::unicode_pwd(new.expose())])),
+        ];
+        let result = ldap.modify(dn, mods).await;
+        let _ = ldap.unbind().await;
+        match result {
+            Ok(r) if r.rc == 0 => Ok(dc.to_string()),
+            Ok(r) => Err(password_error(r.rc, &r.text)),
+            Err(LdapError::LdapResult { result }) => Err(password_error(result.rc, &result.text)),
+            Err(e) => Err(ldap_err(e)),
+        }
+    }
+
     fn index_of(&self, dc: &DcEndpoint) -> usize {
         self.endpoints.iter().position(|e| e == dc).unwrap_or(0)
     }
@@ -267,6 +322,16 @@ pub(crate) fn login_filter(login: &str) -> String {
 /// Сетевые ошибки и ошибки TLS — повод перейти к другому DC. Ответ сервера — нет.
 fn is_connectivity(e: &LdapError) -> bool {
     !matches!(e, LdapError::LdapResult { .. } | LdapError::FilterParsing)
+}
+
+/// Отказ AD при смене пароля. `00000056` — неверный старый пароль, `0000052D` — политика домена.
+fn password_error(rc: u32, text: &str) -> AdError {
+    let upper = text.to_ascii_uppercase();
+    match rc {
+        RC_CONSTRAINT_VIOLATION if upper.contains("00000056") => AdError::Bind(BindFailure::InvalidCredentials),
+        RC_CONSTRAINT_VIOLATION | 53 => AdError::PasswordPolicy,
+        _ => AdError::Ldap { rc, text: clean(text) },
+    }
 }
 
 fn ldap_err(e: LdapError) -> AdError {

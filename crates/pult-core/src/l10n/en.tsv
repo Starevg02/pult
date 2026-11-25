@@ -35,6 +35,7 @@ Pult: синхронизация с AD не удалась	Pult: AD synchronizat
 В чек-листе не больше 100 пунктов.	A checklist can have at most 100 items.
 Ваш телефон не зарегистрирован на АТС или номер не найден.	Your phone is not registered on the PBX or the number was not found.
 Ваша линия занята.	Your line is busy.
+Вебхук получает номера, темы и статусы заявок: добавьте в права расширения «helpdesk.ticket.work».	The webhook receives ticket numbers, titles and statuses: add «helpdesk.ticket.work» to the extension permissions.
 Вернуть в работу может заявитель решённой заявки.	Only the requester of a resolved ticket can reopen it.
 Вести каталог оборудования: добавлять, менять, списывать	Manage the asset catalog: add, change, write off
 Вести площадки и ответственных инженеров	Manage sites and responsible engineers
@@ -210,6 +211,7 @@ Pult: синхронизация с AD не удалась	Pult: AD synchronizat
 Права «{p}» нет у вас самого.	You do not have the “{p}” scope yourself.
 Править справочник: сотрудники, подразделения, должности, архив	Edit the directory: employees, departments, positions, archive
 Привязать можно только к другой главной заявке.	A ticket can be linked only to another parent ticket.
+Пробное уведомление уже отправлено: повторить можно через полминуты.	A test notification has just been sent: try again in half a minute.
 Просматривать и выгружать журнал аудита	View and export the audit log
 Просрочено сейчас	Overdue now
 Пункт без текста.	The item has no text.
@@ -302,6 +304,7 @@ Pult: синхронизация с AD не удалась	Pult: AD synchronizat
 Укажите тему.	Enter a subject.
 Укажите фамилию или имя.	Enter a last or first name.
 Укажите хотя бы один рабочий день.	Set at least one working day.
+Укажите, зачем нужно значение: причина попадёт в журнал.	Say why you need the value: the reason goes to the audit log.
 Учётка не найдена или отключена.	The account was not found or is disabled.
 Учётная запись заблокирована	Account locked
 Учётная запись заблокирована. Обратитесь в IT-службу.	Your account is locked. Contact IT support.
@@ -570,3 +573,240 @@ IP-адрес	IP address
 роли с обязательным кодом записаны неверно	invalid list of roles that require a code
 Вход уже проверяется. Повторите через несколько секунд.	Sign-in is already being checked. Try again in a few seconds.
 Слишком много неверных кодов. Попробуйте через 5 минут.	Too many invalid codes. Try again in 5 minutes.
+Выберите сотрудника.	Choose an employee.
+Списанное оборудование нельзя выдать, вернуть или передать.	Retired equipment cannot be issued, returned or transferred.
+Оборудование уже выдано — передайте или верните его.	The equipment is already issued: transfer or return it.
+Оборудование уже у этого сотрудника.	The equipment is already assigned to this employee.
+Оборудование ни за кем не закреплено.	The equipment is not assigned to anyone.
+Действие — issue, return или transfer.	The action must be issue, return or transfer.
+Название	Name
+Тип	Type
+Инв. номер	Inventory no.
+Серийный номер	Serial number
+Кабинет	Room
+Ответственный	Responsible
+Состояние	State
+Заметки	Notes
+Компьютер	Computer
+ОС	OS
+Не больше 5000 строк за один импорт.	No more than 5000 rows per import.
+Нужны колонки name (название) и type (тип).	The file needs the columns name and type.
+Нет названия.	Name is missing.
+Тип «{}» не найден.	Type “{}” not found.
+Площадка «{s}» не найдена.	Site “{s}” not found.
+Сотрудник «{r}» не найден (нужен e-mail или логин AD).	Employee “{r}” not found (use an e-mail or AD login).
+Состояние «{status}»: нужно in_use, in_stock, repair или retired.	State “{status}”: use in_use, in_stock, repair or retired.
+Источник	Source
+Узел	Host
+Важность	Severity
+критично	critical
+информация	information
+предупреждение	warning
+Важность — info, warning или critical.	Severity must be info, warning or critical.
+Мониторинг	Monitoring
+Вход через домен — только из сети организации.	Domain sign-in works only from the organization network.
+Введите хотя бы 3 символа.	Enter at least 3 characters.
+Неизвестный формат вебхука.	Unknown webhook format.
+Чат Telegram — числовой id (например, -1001234567890) или @имя канала.	Telegram chat: a numeric id (e.g. -1001234567890) or a @channel name.
+Токен бота Telegram — вида 123456789:AA… (его выдаёт @BotFather).	Telegram bot token looks like 123456789:AA… (issued by @BotFather).
+Новая заявка	New ticket
+Изменён статус	Status changed
+Изменён исполнитель	Assignee changed
+Изменён приоритет	Priority changed
+Изменена категория	Category changed
+Изменена площадка	Site changed
+Изменена тема	Subject changed
+Изменена линия поддержки	Support line changed
+Сменена группа	Group changed
+Изменены влияние и срочность	Impact and urgency changed
+Заявка возвращена в работу	Ticket reopened
+Объявлен массовый сбой	Major incident declared
+Заявка объединена с другой	Ticket merged into another
+Заявитель оценил решение	Requester rated the resolution
+Скоро срок SLA	SLA deadline soon
+Просрочен срок SLA	SLA deadline missed
+Мониторинг: проблема устранена	Monitoring: problem resolved
+Изменение заявки	Ticket updated
+Новая	New
+Назначена	Assigned
+В работе	In progress
+Ждёт ответа	Waiting for reply
+Ждёт согласования	Waiting for approval
+Отложена	On hold
+Решена	Resolved
+Закрыта	Closed
+Отменена	Canceled
+Низкий	Low
+Обычный	Normal
+Высокий	High
+Критический	Critical
+Статус	Status
+Приоритет	Priority
+Две колонки означают одно и то же (например, «name» и «Название») — оставьте одну.	Two columns mean the same thing (for example, “name” and the same header in another language): keep one.
+Риск — низкий, средний или высокий.	Risk must be low, medium or high.
+Изменение не согласовано: выполнить его можно после согласования.	The change is not approved: it can be carried out only after approval.
+Тип — проблема или изменение.	Type must be problem or change.
+Нет такого приоритета.	No such priority.
+Причина слишком длинная.	The cause is too long.
+Обходное решение слишком длинное.	The workaround is too long.
+Известная ошибка — с обходным решением: опишите его.	A known error needs a workaround: describe it.
+План слишком длинный.	The plan is too long.
+План отката слишком длинный.	The rollback plan is too long.
+Окончание работ — не раньше начала.	The end of work cannot be earlier than the start.
+Изменение уже на согласовании или согласовано.	The change is already awaiting approval or approved.
+Опишите план работ.	Describe the work plan.
+Для среднего и высокого риска опишите план отката.	For medium and high risk, describe the rollback plan.
+Согласовать своё изменение нельзя: попросите администратора добавить другого согласующего.	You cannot approve your own change: ask an administrator to add another approver.
+Напишите, почему изменение не согласовано.	Write why the change is not approved.
+Это согласование уже завершено.	This approval is already finished.
+Проблема закрыта.	The problem is closed.
+Инцидент не найден.	Incident not found.
+Напишите, как решены инциденты: заявители получат это письмом.	Write how the incidents were resolved: requesters will get this by email.
+У сотрудника нет учётки в портале: согласовать он не сможет.	The employee has no portal account, so they cannot approve.
+Такое правило уже есть.	This rule already exists.
+Адрес провайдера записан неверно.	The provider address is invalid.
+Нужен адрес https:// без логина и фрагмента.	An https:// address without login or fragment is required.
+Провайдер не ответил вовремя.	The provider did not respond in time.
+Нет связи с провайдером.	Cannot reach the provider.
+Ответ провайдера слишком большой.	The provider response is too large.
+Провайдер ответил не в формате JSON.	The provider did not respond with JSON.
+Провайдер называет себя другим издателем: проверьте адрес.	The provider reports a different issuer: check the address.
+Провайдер не выдал ID-токен.	The provider did not issue an ID token.
+Надпись на кнопке — не длиннее 60 символов.	The button label must be at most 60 characters.
+Адрес издателя — без параметров.	The issuer address must have no query parameters.
+Укажите идентификатор клиента.	Enter the client ID.
+Адрес возврата должен заканчиваться на /api/auth/oidc/callback.	The redirect URI must end with /api/auth/oidc/callback.
+Издатель или клиент изменились — введите секрет клиента заново.	The issuer or client has changed: enter the client secret again.
+Укажите издателя.	Enter the issuer.
+Отправить на согласование можно изменение в работе: сначала верните его в работу.	Only a change in progress can be submitted for approval: return it to work first.
+Согласующий по правилу недоступен (учётка отключена): попросите администратора назначить другого.	The approver from the rule is unavailable (account disabled): ask an administrator to assign another one.
+Адреса провайдера должны быть на том же сервере, что и издатель.	Provider addresses must be on the same server as the issuer.
+Пользоваться хранилищем секретов: видеть открытые мне секреты и заводить свои	Use the secrets vault: see secrets shared with me and create my own
+Смотреть значения секретов, к которым есть доступ (каждый просмотр — в журнале аудита)	View the values of accessible secrets (every view is recorded in the audit log)
+Название — одна строка до 200 символов.	Name: one line, up to 200 characters.
+Описание — до 2000 символов, без управляющих символов.	Description: up to 2000 characters, no control characters.
+Логин — одна строка до 200 символов.	Login: one line, up to 200 characters.
+Адрес — одна строка до 500 символов.	Address: one line, up to 500 characters.
+Значение секрета пустое.	The secret value is empty.
+Значение — не больше 8 КБ.	The value must be at most 8 KB.
+изменено	changed
+Не больше 100 записей доступа.	At most 100 access entries.
+Уровень доступа — view, reveal или manage.	Access level: view, reveal or manage.
+Пользователь не найден.	User not found.
+У сотрудника нет учётки в портале: доступ ему не открыть.	The employee has no portal account: access cannot be granted.
+Нет такой роли.	No such role.
+Укажите либо сотрудника, либо роль.	Specify either an employee or a role.
+Кто-то должен управлять секретом: оставьте хотя бы один доступ «Управление» у сотрудника.	Someone must manage the secret: keep at least one "Manage" access for an employee.
+Пользоваться помощником: вопросы по базе знаний, подсказка категории, для инженеров — черновик ответа и краткое содержание заявки	Use the assistant: questions about the knowledge base, category hints, and for engineers a reply draft and a ticket summary
+Адрес API — вида http://сервер:порт/v1, без логина, пароля и параметров.	API address: like http://server:port/v1, without login, password or parameters.
+Укажите модель.	Enter the model.
+Модель — одна строка до 200 символов.	Model: one line, up to 200 characters.
+Время ожидания — от 5 до 300 секунд.	Timeout: from 5 to 300 seconds.
+Длина ответа — от 64 до 8192 токенов.	Answer length: from 64 to 8192 tokens.
+Модель не ответила вовремя.	The model did not respond in time.
+Нет связи с сервером модели.	Cannot connect to the model server.
+Ответ модели слишком большой.	The model response is too large.
+Модель ответила не в формате JSON.	The model did not respond in JSON format.
+В ответе модели нет текста.	The model response contains no text.
+Помощник занят другими запросами, повторите через минуту.	The assistant is busy with other requests, try again in a minute.
+Помощник сейчас недоступен. Попробуйте позже.	The assistant is unavailable right now. Try again later.
+Не больше 20 сообщений в беседе: начните новую.	At most 20 messages per conversation: start a new one.
+Задайте вопрос.	Ask a question.
+Роль сообщения — user или assistant.	Message role: user or assistant.
+Сообщение — от 1 до 4000 символов.	Message: from 1 to 4000 characters.
+Беседа слишком длинная: начните новую.	The conversation is too long: start a new one.
+Тема — от 1 до 300 символов.	Subject: from 1 to 300 characters.
+Ключ API — одна строка до 4096 символов.	API key: one line, up to 4096 characters.
+Адрес API изменился — введите ключ API заново.	The API address has changed: enter the API key again.
+Укажите адрес API и модель.	Enter the API address and the model.
+Служебный адрес link-local не подходит для сервера модели.	A link-local service address cannot be used for the model server.
+Слишком много вопросов подряд: подождите минуту.	Too many questions in a row: wait a minute.
+Сервис / ИС	Service / IS
+Сервер	Server
+Владелец	Owner
+Адрес	Address
+Зависит от	Depends on
+Нужен для	Required by
+Подключено к	Connected to
+К нему подключено	Connected to it
+Установлено на	Installed on
+На нём установлено	Installed on it
+Входит в	Part of
+Состоит из	Consists of
+Укажите оба названия связи, до 100 знаков.	Enter both relation names, up to 100 characters.
+Неверное направление связи.	Invalid relation direction.
+Объект не может быть связан сам с собой.	An item cannot be related to itself.
+Объект или вид связи не найден.	The item or relation type was not found.
+Такая связь уже есть.	This relation already exists.
+Переход возможен только между разными состояниями этого типа.	A transition is only possible between different states of this type.
+Нужны переходы «на складе → в работе» и «в работе → на складе»: их делают выдача и возврат.	The transitions “in stock → in use” and “in use → in stock” are required: issue and return use them.
+У этого типа нет такого состояния.	This type does not have this state.
+Жизненный цикл типа не разрешает такой переход.	The type's lifecycle does not allow this transition.
+Есть объекты этого типа в состоянии, которое вы убираете: сначала переведите их в другое.	Some items of this type are in a state you are removing: move them to another state first.
+Укажите название лицензии, до 200 знаков.	Enter the license name, up to 200 characters.
+Часть названия программы — от 2 до 200 знаков.	The program name fragment must be 2 to 200 characters.
+Число мест не может быть отрицательным.	The number of seats cannot be negative.
+Заметки — не длиннее 2000 знаков.	Notes must be at most 2000 characters.
+Дата окончания — в виде ГГГГ-ММ-ДД.	The end date must be in YYYY-MM-DD format.
+Состояния «{status}» нет в жизненном цикле этого типа.	The state “{status}” is not in this type's lifecycle.
+Адрес NetBox — http:// или https:// без логина, пароля и параметров.	The NetBox address must be http:// or https:// without a user name, password or parameters.
+Служебный адрес link-local не подходит для NetBox.	A link-local service address cannot be used for NetBox.
+Токен — одна строка до 4096 символов.	The token must be a single line of up to 4096 characters.
+Адрес изменился — введите токен заново.	The address has changed: enter the token again.
+Укажите токен API NetBox.	Enter the NetBox API token.
+Ответ NetBox слишком большой.	The NetBox response is too large.
+NetBox ответил {code}.	NetBox responded with {code}.
+NetBox вернул не JSON.	NetBox did not return JSON.
+В NetBox больше 50 000 объектов: синхронизация остановлена.	NetBox has more than 50,000 objects: synchronization stopped.
+NetBox прислал ссылку на другой сервер.	NetBox returned a link to another server.
+Чат временно недоступен: назначается новый владелец.	The chat is temporarily unavailable: a new owner is being assigned.
+Сообщение пустое.	The message is empty.
+Сообщение длиннее 4000 символов.	The message is longer than 4000 characters.
+Название — от 1 до 200 символов, в одну строку.	The title must be 1 to 200 characters on a single line.
+Сотрудник не найден или его учётка отключена.	The employee was not found or their account is disabled.
+Нельзя написать самому себе.	You cannot message yourself.
+Слишком много участников за один раз.	Too many members at once.
+Закрепить можно только чат, в котором вы состоите.	You can only pin a chat you are a member of.
+Скрыть можно только групповой чат, из которого вы вышли.	You can only hide a group chat you have left.
+Вы вышли из чата — история доступна только для чтения.	You are no longer in this chat — the history is read-only.
+Править сообщение можно только 15 минут после отправки.	A message can only be edited within 15 minutes of sending.
+Чтобы выйти из чата, используйте «Выйти».	To leave the chat, use “Leave”.
+Роль — администратор или участник.	The role must be administrator or member.
+Из личного диалога выйти нельзя.	You cannot leave a direct conversation.
+Владелец не может выйти из чата: сначала нужно передать владение.	The owner cannot leave the chat: ownership must be transferred first.
+Прежний владелец: администратор, участник или исключить.	Previous owner: administrator, member or remove.
+Этот сотрудник уже владелец чата.	This employee already owns the chat.
+Манифест не читается: {e}	The manifest cannot be read: {e}
+Неподдерживаемая версия манифеста: нужна 1.	Unsupported manifest version: 1 is required.
+Идентификатор — от 3 до 100 символов: строчные латинские буквы, цифры, точка, дефис.	The identifier must be 3 to 100 characters: lowercase Latin letters, digits, dot, hyphen.
+Название (до 100 символов) и версия (до 40) обязательны, описание — до 2000 символов.	The name (up to 100 characters) and version (up to 40) are required, the description is up to 2000 characters.
+Адрес страницы расширения — https://…	The extension page address must be https://…
+Адрес вебхука — https://… (http — только для localhost).	The webhook address must be https://… (http only for localhost).
+События вебхука — коды вида `created`, `status`.	Webhook events are codes such as `created`, `status`.
+Не больше 10 ссылок в меню.	No more than 10 menu links.
+Ссылка в меню: подпись до 60 символов и адрес https://…	Menu link: a title up to 60 characters and an https://… address.
+Не удалось получить {url}: {e}	Could not fetch {url}: {e}
+больше 1 МБ	larger than 1 MB
+Адрес каталога — https://…	The catalog address must be https://…
+Каталог — JSON-массив манифестов.	The catalog must be a JSON array of manifests.
+Нужен файл манифеста или его адрес.	A manifest file or its address is required.
+Это расширение уже установлено: чтобы обновить, удалите его и установите заново.	This extension is already installed: to update it, remove it and install it again.
+Хранить можно от 1 до 365 копий.	You can keep 1 to 365 copies.
+Учётная запись не из домена: пароль в портале не меняется.	The account is not from the domain: its password is not changed in the portal.
+Смена пароля в портале работает только при подключении к домену по LDAPS.	Password change in the portal works only with an LDAPS connection to the domain.
+Текущий пароль неверен.	The current password is incorrect.
+Новый пароль не подходит под политику домена: длина, сложность, повтор прежних паролей или слишком ранняя смена.	The new password does not meet the domain policy: length, complexity, reuse of previous passwords, or changing it too soon.
+пароль не подходит под политику домена	the password does not meet the domain policy
+Пульт: новое уведомление	Pult: new notification
+Откройте портал, чтобы прочитать.	Open the portal to read it.
+Пульт: проверка уведомлений	Pult: notification test
+Уведомления на это устройство работают.	Notifications to this device work.
+Подписка браузера не подходит: нужен адрес известной службы push и ключи.	The browser subscription is not valid: it needs the address of a known push service and keys.
+Контакт — mailto:адрес или https://…	The contact must be mailto:address or https://…
+Подключение — только к ПК с Windows: с этого устройства агент передаёт сеансы и оборудование.	Connections are only to Windows PCs: from this device the agent sends sessions and hardware.
+Баллы — от 1 до 5.	Scores range from 1 to 5.
+Ответили на подробный опрос	Detailed survey responses
+Скорость, средний балл (1–5)	Speed, average score (1–5)
+Качество решения, средний балл (1–5)	Solution quality, average score (1–5)
+Вежливость, средний балл (1–5)	Courtesy, average score (1–5)
+Описание — не длиннее 500 символов.	The description must be at most 500 characters.

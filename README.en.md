@@ -4,7 +4,7 @@
 
 A self-hosted internal IT-support portal for organizations on Active Directory. Tickets, a staff directory,
 access requests and AD operations, and remote support for PCs in one window. Employees sign in with their
-Windows password. Open source, MIT License. Version 0.1.0.
+Windows password. Open source, MIT License. Version 0.2.0.
 
 ![Portal home page](docs/screenshots/home-zh.jpg)
 

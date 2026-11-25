@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT"
@@ -22,6 +22,7 @@ pult-testkit = { path = "crates/pult-testkit" }
 pult-helpdesk = { path = "crates/pult-helpdesk" }
 pult-directory = { path = "crates/pult-directory" }
 pult-remote = { path = "crates/pult-remote" }
+pult-chat = { path = "crates/pult-chat" }
 
 anyhow = "1"
 thiserror = "2"

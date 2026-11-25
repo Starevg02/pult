@@ -9,11 +9,6 @@ ignore = [
   # `paste` не сопровождается (не уязвимость): proc-macro времени компиляции, в бинарник не попадает.
   # Приходит через utoipa-axum (макрос routes!). Снять, когда utoipa-axum уйдёт с `paste`.
   { id = "RUSTSEC-2024-0436", reason = "unmaintained proc-macro paste via utoipa-axum; compile-time only" },
-  # rand 0.7 unsound только при своём логгере, который сам зовёт rand::thread_rng (у нас такого нет).
-  # Приходит через tiberius → winauth (вход в SQL Server под Windows): в сборку для Linux не попадает.
-  { id = "RUSTSEC-2026-0097", reason = "rand 0.7 via tiberius/winauth, Windows-only; needs a custom logger calling rand" },
-  # pin-utils не сопровождается (не уязвимость): приходит через futures-util, готового обновления нет.
-  { id = "RUSTSEC-2026-0441", reason = "unmaintained pin-utils via futures-util; no vulnerability" },
 ]
 
 [licenses]

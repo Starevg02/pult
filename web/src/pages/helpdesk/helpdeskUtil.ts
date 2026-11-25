@@ -69,10 +69,18 @@ export function useServerEvents(enabled: boolean) {
     es.addEventListener("ticket", tickets);
     es.addEventListener("notification", notifications);
     es.addEventListener("announcement", announcements);
+    // Переписка: список, открытый чат и его сообщения перечитываются (текст в событии не передаётся).
+    const chats = () => {
+      void qc.invalidateQueries({ queryKey: ["chats"] });
+      void qc.invalidateQueries({ queryKey: ["chat"] });
+      void qc.invalidateQueries({ queryKey: ["chat-messages"] });
+    };
+    es.addEventListener("chat", chats);
     es.addEventListener("refresh", () => {
       tickets();
       notifications();
       announcements();
+      chats();
     });
     return () => es.close();
   }, [enabled, qc]);

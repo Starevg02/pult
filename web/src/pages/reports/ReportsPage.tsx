@@ -113,6 +113,11 @@ export function ReportsPage() {
             <Stat label={t("reports.overdueNow")} value={s.overdue_now} />
             <Stat label={t("reports.slaShare")} value={pct(s.sla_share)} hint={`${s.sla_met} / ${s.sla_total}`} />
             <Stat label={t("reports.rating")} value={pct(s.rating_share)} hint={`👍 ${s.rating_up} · 👎 ${s.rating_down}`} />
+            <Stat
+              label={t("reports.survey")}
+              value={[s.avg_speed, s.avg_quality, s.avg_courtesy].map((v) => num(v, 1)).join(" / ")}
+              hint={t("reports.surveyHint", { count: s.survey_count })}
+            />
             <Stat label={t("reports.firstResponse")} value={num(s.avg_first_response_minutes)} hint={t("reports.minutesUnit")} />
             <Stat label={t("reports.avgResolve")} value={num(s.avg_resolve_hours, 1)} hint={t("reports.hoursUnit")} />
             <Stat label={t("reports.reopened")} value={pct(s.reopened_share)} hint={String(s.reopened)} />

@@ -62,13 +62,15 @@ pub fn delete_tree(path: &str) {
 }
 
 /// Схема `pult:` → `"<helper.exe>" open "%1"`, адрес портала — в настройках helper.
-pub fn register(exe: &str, portal: &str, prompt_credentials: bool) -> windows::core::Result<()> {
+pub fn register(exe: &str, portal: &str, prompt_credentials: bool, run_as: Option<&str>) -> windows::core::Result<()> {
     set(SCHEME_KEY, None, "URL:Pult")?;
     set(SCHEME_KEY, Some("URL Protocol"), "")?;
     set(&format!(r"{SCHEME_KEY}\DefaultIcon"), None, &format!("\"{exe}\",0"))?;
     set(&format!(r"{SCHEME_KEY}\shell\open\command"), None, &format!("\"{exe}\" open \"%1\""))?;
     set(SETTINGS_KEY, Some("Portal"), portal)?;
-    set(SETTINGS_KEY, Some("PromptCredentials"), if prompt_credentials { "1" } else { "0" })
+    set(SETTINGS_KEY, Some("PromptCredentials"), if prompt_credentials { "1" } else { "0" })?;
+    // Пустое значение читается как «не задано»: повторная регистрация без --run-as его снимает.
+    set(SETTINGS_KEY, Some("RunAs"), run_as.unwrap_or(""))
 }
 
 pub fn unregister() {

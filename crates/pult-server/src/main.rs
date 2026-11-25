@@ -5,6 +5,7 @@ mod backup;
 mod config;
 #[cfg(feature = "demo")]
 mod demo;
+mod edge;
 mod http;
 mod jobs;
 mod migrate;
@@ -63,6 +64,39 @@ enum Command {
     Openapi,
     /// Показать версию.
     Version,
+    /// Конфигурация пограничного прокси для публикации портала в Интернет.
+    Edge {
+        #[command(subcommand)]
+        what: EdgeWhat,
+    },
+}
+
+#[derive(Subcommand)]
+enum EdgeWhat {
+    /// Вывести конфигурацию nginx для узла в DMZ (сохраните в /etc/nginx/conf.d/pult-edge.conf).
+    Nginx {
+        /// Внешнее имя портала, например pult.example.com.
+        #[arg(long)]
+        host: String,
+        /// Внутренний адрес портала, например https://10.0.0.10.
+        #[arg(long)]
+        upstream: String,
+        /// Сертификат внешнего имени (с цепочкой) на узле прокси.
+        #[arg(long)]
+        cert: String,
+        /// Ключ сертификата на узле прокси.
+        #[arg(long)]
+        key: String,
+        /// CA внутреннего сертификата портала: прокси проверит, что говорит именно с порталом.
+        #[arg(long)]
+        upstream_ca: Option<String>,
+        /// Наибольший размер запроса, МБ (больше лимита вложений заявок).
+        #[arg(long, default_value_t = 26)]
+        body_mb: u32,
+        /// Попыток входа в минуту с одного адреса.
+        #[arg(long, default_value_t = 10)]
+        login_per_minute: u32,
+    },
 }
 
 #[derive(Subcommand)]
@@ -154,6 +188,14 @@ async fn main() -> anyhow::Result<()> {
         say(&format!("pult {}", env!("CARGO_PKG_VERSION")));
         return Ok(());
     }
+    if let Command::Edge {
+        what: EdgeWhat::Nginx { host, upstream, cert, key, upstream_ca, body_mb, login_per_minute },
+    } = cli.command
+    {
+        let o = edge::EdgeOptions { host, upstream, cert, key, upstream_ca, body_mb, login_per_minute };
+        say(&edge::nginx(&o).map_err(anyhow::Error::msg)?);
+        return Ok(());
+    }
     let mut cfg = Config::load(cli.config.as_deref(), &ProcessEnv)?;
     telemetry::init_tracing(cfg.log_format);
     cfg.ensure_secret_key()?;
@@ -163,8 +205,16 @@ async fn main() -> anyhow::Result<()> {
         Command::Demo => demo::run(cfg).await,
         Command::Migrate => migrate(&cfg).await,
         Command::Backup => {
-            let (path, size) = backup::run(&backup_config(&cfg)?).await.map_err(anyhow::Error::msg)?;
-            say(&format!("Резервная копия: {} ({size} байт)", path.display()));
+            // Политика (сколько хранить, проверять ли) и итог — в базе, как у ежедневной задачи.
+            let pool = db_pool(&cfg, false).await?;
+            let s = backup::run_and_record(&backup_config(&cfg)?, &pool).await?;
+            if !s.ok {
+                anyhow::bail!(s.error.unwrap_or_default());
+            }
+            say(&format!("Резервная копия: {} ({} байт)", s.path.unwrap_or_default(), s.size_bytes));
+            if let Some(n) = s.objects {
+                say(&format!("Проверена: в дампе {n} объектов"));
+            }
             if let Some(d) = &cfg.data_dir {
                 say(&format!(
                     "Ключ шифрования в копию не входит — храните его отдельно: {}",
@@ -196,7 +246,7 @@ async fn main() -> anyhow::Result<()> {
             let args = PhonebookArgs { mssql, user, windows_auth, ca_cert, skip_tls_verify: insecure_skip_tls_verify };
             import_phonebook(&cfg, args, save_snapshot, from_snapshot, dry_run).await
         }
-        Command::Version | Command::Openapi => unreachable!(),
+        Command::Version | Command::Openapi | Command::Edge { .. } => unreachable!(),
     }
 }
 
@@ -307,6 +357,7 @@ async fn serve(cfg: Config) -> anyhow::Result<()> {
     };
     spawn_bootstrap(api_state.clone(), cfg.ad.clone());
     api_state.core.events.spawn_listener(db.clone());
+    spawn_push(api_state.core.clone());
     let events = api_state.core.events.clone();
     let (stop, stopped) = tokio::sync::watch::channel(false);
     let runner = if cfg.jobs.enabled {
@@ -624,4 +675,28 @@ async fn check_ad(cfg: &Config, login: Option<String>, since_usn: Option<u64>, p
         batch.highest_usn
     ));
     Ok(())
+}
+
+/// Уведомления на устройства уходят сразу по событию «уведомление», а не ждут минутной задачи.
+/// Рассылка забирает уведомления атомарно, так что несколько копий сервера не пришлют одно дважды.
+fn spawn_push(core: pult_core::Core) {
+    let mut rx = core.events.subscribe();
+    let mut stopped = core.events.stopped();
+    tokio::spawn(async move {
+        loop {
+            let event = tokio::select! {
+                e = rx.recv() => e,
+                _ = stopped.wait_for(|s| *s) => return,
+            };
+            match event {
+                Ok(e) if e.kind == "notification" => {
+                    if let Err(e) = pult_people::push::deliver(&core).await {
+                        tracing::warn!(error = %e, "рассылка уведомлений на устройства");
+                    }
+                }
+                Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
+            }
+        }
+    });
 }

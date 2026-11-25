@@ -5,15 +5,20 @@ import { useTranslation } from "react-i18next";
 import {
   api,
   ok,
+  type Alert,
+  type AlertSource,
   type ApiToken,
   type AssetType,
   type Calendar,
   type Category,
+  type CreatedSource,
   type CreatedToken,
   type EngineerView,
   type Group,
+  type Lifecycle,
   type Person,
   type Recurring,
+  type RelationType,
   type ResponseTemplate,
   type Rule,
   type Site,
@@ -29,6 +34,8 @@ import { fullName } from "../phonebookUtil";
 import { useGroups } from "../helpdesk/cardUtil";
 import { dyn, PRIORITIES } from "../helpdesk/helpdeskUtil";
 import { PersonPicker } from "../helpdesk/NewTicketPage";
+import { TicketLink } from "../helpdesk/parts";
+import { LifecycleEditor } from "../assets/CmdbParts";
 
 const DAYS = [1, 2, 3, 4, 5, 6, 7];
 const area = "w-full rounded-lg border border-control bg-paper px-3 py-2 text-sm";
@@ -886,10 +893,16 @@ function AssetTypeDialog({ value, onClose }: { value: AssetType | "new"; onClose
   const x = value === "new" ? null : value;
   const [name, setName] = useState(x?.name ?? "");
   const [active, setActive] = useState(x?.is_active ?? true);
+  const [showStatus, setShowStatus] = useState(x?.show_status ?? false);
   const [fields, setFields] = useState<TypeField[]>(((x?.fields ?? []) as TypeField[]).map((f) => ({ ...f, required: f.required ?? false, options: f.options ?? [] })));
+  const [life, setLife] = useState<Lifecycle>(() => x?.lifecycle ?? { statuses: ["in_use", "in_stock", "repair", "retired"], transitions: [] });
   const action = useSave(["asset-types"], onClose);
-  const body = { name, is_active: active, fields };
-  const save = action(() => (x ? ok(api.PUT("/api/admin/helpdesk/asset-types/{id}", { params: { path: { id: x.id } }, body })) : ok(api.POST("/api/admin/helpdesk/asset-types", { body }))));
+  const body = { name, is_active: active, fields, show_status: showStatus };
+  const save = action(async () => {
+    if (!x) return ok(api.POST("/api/admin/helpdesk/asset-types", { body }));
+    await ok(api.PUT("/api/admin/helpdesk/asset-types/{id}", { params: { path: { id: x.id } }, body }));
+    return ok(api.PUT("/api/admin/helpdesk/asset-types/{id}/lifecycle", { params: { path: { id: x.id } }, body: life }));
+  });
   const edit = (i: number, p: Partial<TypeField>) => setFields(fields.map((f, n) => (n === i ? { ...f, ...p } : f)));
   return (
     <Dialog open onClose={onClose} title={x ? x.name : t("svc.newAssetType")} wide>
@@ -918,6 +931,14 @@ function AssetTypeDialog({ value, onClose }: { value: AssetType | "new"; onClose
             {t("admin.helpdesk.addField")}
           </Button>
         </div>
+        {x ? <LifecycleEditor value={life} onChange={setLife} /> : <p className="text-xs text-muted">{t("cmdb.lifecycleLater")}</p>}
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" className="mt-1" checked={showStatus} onChange={(e) => setShowStatus(e.target.checked)} />
+          <span>
+            {t("cmdb.showStatus")}
+            <span className="block text-xs text-muted">{t("cmdb.showStatusHint")}</span>
+          </span>
+        </label>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> {t("admin.helpdesk.active")}
         </label>
@@ -949,7 +970,72 @@ export function AssetTypesAdminPage() {
         )}
       />
       {x && <AssetTypeDialog value={x} onClose={() => setX(null)} />}
+      <RelationTypesSection />
     </div>
+  );
+}
+
+function RelationTypeDialog({ value, onClose }: { value: RelationType | "new"; onClose: () => void }) {
+  const { t } = useTranslation();
+  const x = value === "new" ? null : value;
+  const [name, setName] = useState(x?.name ?? "");
+  const [reverse, setReverse] = useState(x?.reverse_name ?? "");
+  const [impact, setImpact] = useState(x?.impact ?? true);
+  const [active, setActive] = useState(x?.is_active ?? true);
+  const action = useSave(["asset-relation-types"], onClose);
+  const body = { name, reverse_name: reverse, impact, is_active: active };
+  const save = action(() =>
+    x ? ok(api.PUT("/api/admin/helpdesk/asset-relation-types/{id}", { params: { path: { id: x.id } }, body })) : ok(api.POST("/api/admin/helpdesk/asset-relation-types", { body })),
+  );
+  return (
+    <Dialog open onClose={onClose} title={x ? x.name : t("cmdb.newRelationType")}>
+      <div className="space-y-3">
+        <Field label={t("cmdb.relationName")} hint={t("cmdb.relationNameHint")}>
+          <Input value={name} maxLength={100} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field label={t("cmdb.reverseName")} hint={t("cmdb.reverseNameHint")}>
+          <Input value={reverse} maxLength={100} onChange={(e) => setReverse(e.target.value)} />
+        </Field>
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" className="mt-1" checked={impact} onChange={(e) => setImpact(e.target.checked)} />
+          <span>
+            {t("cmdb.impactFlag")}
+            <span className="block text-xs text-muted">{t("cmdb.impactFlagHint")}</span>
+          </span>
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> {t("admin.helpdesk.active")}
+        </label>
+        <Footer onClose={onClose} onSave={() => save.mutate(undefined)} disabled={!name.trim() || !reverse.trim() || save.isPending} error={save.error} />
+      </div>
+    </Dialog>
+  );
+}
+
+function RelationTypesSection() {
+  const { t } = useTranslation();
+  const types = useList("asset-relation-types", () => ok<RelationType[]>(api.GET("/api/helpdesk/asset-relation-types")));
+  const [x, setX] = useState<RelationType | "new" | null>(null);
+  return (
+    <>
+      {types.error && <ErrorBox error={types.error} />}
+      <ListSection
+        title={t("cmdb.relationTypes")}
+        items={types.data}
+        onNew={() => setX("new")}
+        empty={t("cmdb.noRelationTypes")}
+        row={(r) => (
+          <button type="button" className={rowBtn} onClick={() => setX(r)}>
+            <span className="font-medium">{r.name}</span>
+            <span className="text-muted">↔ {r.reverse_name}</span>
+            {r.impact && <Badge tone="accent">{t("cmdb.impactShort")}</Badge>}
+            {!r.is_active && <Badge>{t("admin.helpdesk.inactive")}</Badge>}
+            <span className="ml-auto text-xs text-muted">{r.count}</span>
+          </button>
+        )}
+      />
+      {x && <RelationTypeDialog value={x} onClose={() => setX(null)} />}
+    </>
   );
 }
 
@@ -1015,9 +1101,29 @@ function TokenDialog({ onClose }: { onClose: () => void }) {
 function WebhookDialog({ value, onClose }: { value: Webhook | "new"; onClose: () => void }) {
   const { t } = useTranslation();
   const x = value === "new" ? null : value;
-  const [f, setF] = useState({ name: x?.name ?? "", url: x?.url ?? "", events: (x?.events ?? []).join(", "), secret: "", is_active: x?.is_active ?? true });
+  const [f, setF] = useState({
+    name: x?.name ?? "",
+    format: x?.format ?? "pult",
+    url: x?.format === "telegram" ? "" : (x?.url ?? ""),
+    chat_id: x?.chat_id ?? "",
+    events: (x?.events ?? []).join(", "),
+    secret: "",
+    is_active: x?.is_active ?? true,
+  });
   const action = useSave(["webhooks"], onClose);
-  const body = { name: f.name, url: f.url, events: f.events.split(/[\s,]+/).filter(Boolean), secret: f.secret || null, is_active: f.is_active };
+  const tg = f.format === "telegram";
+  const body = {
+    name: f.name,
+    format: f.format,
+    url: tg ? "" : f.url,
+    chat_id: tg ? f.chat_id : null,
+    events: f.events.split(/[\s,]+/).filter(Boolean),
+    secret: f.format === "chat" ? null : f.secret || null,
+    is_active: f.is_active,
+  };
+  // Новый секрет нужен при создании и при смене формата (кроме чата — ему секрет не нужен).
+  const needSecret = f.format !== "chat" && (!x || x.format !== f.format);
+  const secretOk = f.format === "chat" || (f.secret ? (tg ? /^\d{5,15}:[\w-]{30,64}$/.test(f.secret.trim()) : f.secret.trim().length >= 16) : !needSecret);
   const save = action(() => (x ? ok(api.PUT("/api/admin/webhooks/{id}", { params: { path: { id: x.id } }, body })) : ok(api.POST("/api/admin/webhooks", { body }))));
   const del = action(() => ok(api.DELETE("/api/admin/webhooks/{id}", { params: { path: { id: x?.id ?? "" } } })));
   return (
@@ -1026,21 +1132,197 @@ function WebhookDialog({ value, onClose }: { value: Webhook | "new"; onClose: ()
         <Field label={t("svc.name")}>
           <Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
         </Field>
-        <Field label="URL" hint={t("svc.webhookUrlHint")}>
-          <Input value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} placeholder="https://" />
+        <Field label={t("svc.format")} hint={t(`svc.formatHint.${f.format as "pult" | "chat" | "telegram"}`)}>
+          <Select value={f.format} onChange={(e) => setF({ ...f, format: e.target.value })}>
+            {(["pult", "chat", "telegram"] as const).map((k) => (
+              <option key={k} value={k}>
+                {t(`svc.formats.${k}`)}
+              </option>
+            ))}
+          </Select>
         </Field>
+        {tg ? (
+          <Field label={t("svc.chatId")} hint={t("svc.chatIdHint")}>
+            <Input value={f.chat_id} onChange={(e) => setF({ ...f, chat_id: e.target.value })} placeholder="-1001234567890" />
+          </Field>
+        ) : (
+          <Field label="URL" hint={f.format === "chat" ? t("svc.chatUrlHint") : t("svc.webhookUrlHint")}>
+            <Input value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} placeholder="https://" />
+          </Field>
+        )}
         <Field label={t("svc.events")} hint={t("svc.eventsHint")}>
           <Input value={f.events} onChange={(e) => setF({ ...f, events: e.target.value })} placeholder="created, status, assigned" />
         </Field>
-        <Field label={t("svc.secret")} hint={x ? t("svc.secretKeep") : t("svc.secretHint")}>
-          <Input type="password" autoComplete="new-password" value={f.secret} onChange={(e) => setF({ ...f, secret: e.target.value })} />
-        </Field>
+        {f.format !== "chat" && (
+          <Field label={tg ? t("svc.botToken") : t("svc.secret")} hint={needSecret ? (tg ? t("svc.botTokenHint") : t("svc.secretHint")) : t("svc.secretKeep")}>
+            <Input type="password" autoComplete="new-password" value={f.secret} onChange={(e) => setF({ ...f, secret: e.target.value })} />
+          </Field>
+        )}
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={f.is_active} onChange={(e) => setF({ ...f, is_active: e.target.checked })} /> {t("admin.helpdesk.active")}
         </label>
-        <Footer onClose={onClose} onSave={() => save.mutate(undefined)} disabled={!f.name.trim() || !f.url.trim() || (!x && f.secret.length < 16) || save.isPending} onDelete={x ? () => del.mutate(undefined) : undefined} error={save.error ?? del.error} />
+        <Footer onClose={onClose} onSave={() => save.mutate(undefined)} disabled={!f.name.trim() || (tg ? !f.chat_id.trim() : !f.url.trim()) || !secretOk || save.isPending} onDelete={x ? () => del.mutate(undefined) : undefined} error={save.error ?? del.error} />
       </div>
     </Dialog>
+  );
+}
+
+const SEVERITIES = ["info", "warning", "critical"] as const;
+
+/** Источник оповещений мониторинга. Токен показывается один раз — сразу после создания. */
+function AlertSourceDialog({ value, onClose }: { value: AlertSource | "new"; onClose: () => void }) {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const x = value === "new" ? null : value;
+  const sites = useQuery({ queryKey: ["sites"], queryFn: () => ok<Site[]>(api.GET("/api/sites")) });
+  const cats = useQuery({ queryKey: ["admin-categories"], queryFn: () => ok<Category[]>(api.GET("/api/helpdesk/categories", { params: { query: { all: true } } })) });
+  const [f, setF] = useState({
+    name: x?.name ?? "",
+    create_tickets: x?.create_tickets ?? false,
+    min_severity: x?.min_severity ?? "warning",
+    category_id: x?.category_id ?? "",
+    site_id: x?.site_id ?? "",
+    is_active: x?.is_active ?? true,
+  });
+  const [token, setToken] = useState<string | null>(null);
+  const action = useSave(["alert-sources"], onClose);
+  const body = { ...f, name: f.name.trim(), category_id: f.category_id || null, site_id: f.site_id || null };
+  const create = useMutation({
+    mutationFn: () => ok<CreatedSource>(api.POST("/api/admin/monitoring/sources", { body })),
+    onSuccess: (r) => {
+      setToken(r.token);
+      void qc.invalidateQueries({ queryKey: ["alert-sources"] });
+    },
+  });
+  const save = action(() => ok(api.PUT("/api/admin/monitoring/sources/{id}", { params: { path: { id: x?.id ?? "" } }, body })));
+  const del = action(() => ok(api.DELETE("/api/admin/monitoring/sources/{id}", { params: { path: { id: x?.id ?? "" } } })));
+  const url = `${window.location.origin}/api/helpdesk/monitoring/alerts`;
+  if (token)
+    return (
+      <Dialog open onClose={onClose} title={f.name} wide>
+        <div className="space-y-3 text-sm">
+          <p>{t("svc.monitoring.tokenOnce")}</p>
+          <div className="flex items-center gap-2 rounded-lg border border-line bg-sunken px-3 py-2 font-mono text-xs break-all">
+            {token} <CopyButton value={token} label={t("common.copy")} />
+          </div>
+          <p className="text-muted">{t("svc.monitoring.alertmanager")}</p>
+          <pre className="overflow-x-auto rounded-lg bg-sunken px-3 py-2 font-mono text-xs">{`receivers:\n  - name: pult\n    webhook_configs:\n      - url: ${url}\n        http_config:\n          authorization:\n            credentials: <token>`}</pre>
+          <p className="text-muted">{t("svc.monitoring.generic")}</p>
+          <pre className="overflow-x-auto rounded-lg bg-sunken px-3 py-2 font-mono text-xs">{`POST ${url}\nAuthorization: Bearer <token>\n\n{"id": "{EVENT.ID}", "title": "{EVENT.NAME}", "status": "{EVENT.VALUE}", "severity": "{EVENT.NSEVERITY}", "host": "{HOST.NAME}"}`}</pre>
+          <div className="flex justify-end">
+            <Button variant="primary" onClick={onClose}>
+              {t("common.close")}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+    );
+  return (
+    <Dialog open onClose={onClose} title={x ? x.name : t("svc.monitoring.new")}>
+      <div className="space-y-3">
+        <Field label={t("svc.name")}>
+          <Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Zabbix" />
+        </Field>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={f.create_tickets} onChange={(e) => setF({ ...f, create_tickets: e.target.checked })} /> {t("svc.monitoring.createTickets")}
+        </label>
+        {f.create_tickets && (
+          <>
+            <Field label={t("svc.monitoring.minSeverity")}>
+              <Select value={f.min_severity} onChange={(e) => setF({ ...f, min_severity: e.target.value })}>
+                {SEVERITIES.map((s) => (
+                  <option key={s} value={s}>
+                    {dyn(t, `svc.monitoring.severity.${s}`)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label={t("helpdesk.category")}>
+              <Select value={f.category_id} onChange={(e) => setF({ ...f, category_id: e.target.value })}>
+                <option value="">—</option>
+                {cats.data
+                  ?.filter((c) => c.is_active)
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+              </Select>
+            </Field>
+            <Field label={t("helpdesk.site")}>
+              <Select value={f.site_id} onChange={(e) => setF({ ...f, site_id: e.target.value })}>
+                <option value="">—</option>
+                {sites.data?.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </>
+        )}
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={f.is_active} onChange={(e) => setF({ ...f, is_active: e.target.checked })} /> {t("admin.helpdesk.active")}
+        </label>
+        <Footer
+          onClose={onClose}
+          onSave={() => (x ? save.mutate(undefined) : create.mutate())}
+          disabled={!f.name.trim() || save.isPending || create.isPending}
+          onDelete={x ? () => window.confirm(t("svc.monitoring.deleteConfirm")) && del.mutate(undefined) : undefined}
+          error={create.error ?? save.error ?? del.error}
+        />
+      </div>
+    </Dialog>
+  );
+}
+
+/** Источники мониторинга и открытые оповещения. */
+function MonitoringSection() {
+  const { t, i18n } = useTranslation();
+  const sources = useList("alert-sources", () => ok<AlertSource[]>(api.GET("/api/admin/monitoring/sources")));
+  const alerts = useQuery({ queryKey: ["alerts", "open"], queryFn: () => ok<Alert[]>(api.GET("/api/helpdesk/monitoring/alerts", { params: { query: { open: true } } })) });
+  const [edit, setEdit] = useState<AlertSource | "new" | null>(null);
+  return (
+    <>
+      {(sources.error || alerts.error) && <ErrorBox error={sources.error ?? alerts.error} />}
+      <ListSection
+        title={t("svc.monitoring.title")}
+        items={sources.data}
+        onNew={() => setEdit("new")}
+        empty={t("svc.monitoring.empty")}
+        row={(x) => (
+          <button type="button" className={rowBtn} onClick={() => setEdit(x)}>
+            <span className="font-medium">{x.name}</span>
+            {x.open_alerts > 0 && <Badge tone="bad">{t("svc.monitoring.open", { count: x.open_alerts })}</Badge>}
+            {x.create_tickets && <Badge tone="accent">{t("svc.monitoring.tickets")}</Badge>}
+            {x.last_alert_at && <span className="text-xs text-muted">{t("svc.lastUsed", { at: formatDate(x.last_alert_at, i18n.language) })}</span>}
+            {!x.is_active && <Badge>{t("admin.helpdesk.inactive")}</Badge>}
+          </button>
+        )}
+      />
+      <p className="-mt-6 text-xs text-muted">{t("svc.monitoring.usage")}</p>
+      {alerts.data && alerts.data.length > 0 && (
+        <Card>
+          <ul className="divide-y divide-line">
+            {alerts.data.map((a) => (
+              <li key={a.id} className="flex flex-wrap items-center gap-2 px-4 py-2 text-sm">
+                <Badge tone={a.severity === "critical" ? "bad" : a.severity === "warning" ? "accent" : "muted"}>{dyn(t, `svc.monitoring.severity.${a.severity}`)}</Badge>
+                <span className="font-medium">{a.title}</span>
+                {a.host && <span className="font-mono text-xs text-muted">{a.host}</span>}
+                <span className="text-xs text-muted">{a.source_name}</span>
+                {a.ticket_number != null && (
+                  <TicketLink number={a.ticket_number} className="text-xs text-accent">
+                    #{a.ticket_number}
+                  </TicketLink>
+                )}
+                <span className="ml-auto text-xs text-muted">{formatDate(a.started_at, i18n.language)}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+      {edit && <AlertSourceDialog value={edit} onClose={() => setEdit(null)} />}
+    </>
   );
 }
 
@@ -1086,7 +1368,8 @@ export function IntegrationsPage() {
         row={(x) => (
           <button type="button" className={rowBtn} onClick={() => setHook(x)}>
             <span className="font-medium">{x.name}</span>
-            <span className="truncate font-mono text-xs text-muted">{x.url}</span>
+            {x.format !== "pult" && <Badge>{t(`svc.formats.${x.format as "chat" | "telegram"}`)}</Badge>}
+            <span className="truncate font-mono text-xs text-muted">{x.format === "telegram" ? x.chat_id : x.url}</span>
             {x.last_status != null && <Badge tone={x.last_status >= 200 && x.last_status < 300 ? "ok" : "bad"}>{x.last_status}</Badge>}
             {x.last_error && <span className="truncate text-xs text-bad">{x.last_error}</span>}
             {!x.is_active && <Badge>{t("admin.helpdesk.inactive")}</Badge>}
@@ -1094,6 +1377,7 @@ export function IntegrationsPage() {
         )}
       />
       <p className="-mt-6 text-xs text-muted">{t("svc.webhookUsage")}</p>
+      <MonitoringSection />
       {newToken && <TokenDialog onClose={() => setNewToken(false)} />}
       {hook && <WebhookDialog value={hook} onClose={() => setHook(null)} />}
     </div>

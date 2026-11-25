@@ -1,6 +1,6 @@
 // Вход паролем AD, текущий пользователь, экран «Нет связи с доменом».
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { api, ApiError, ok, type Me, type SetupStatus } from "./api/client";
 import { asLang, LANGUAGES, setLanguage } from "./i18n";
@@ -25,9 +25,33 @@ const loginCodes = [
   "invalid_otp",
 ] as const;
 
+/** Вход через домен: браузер сам отвечает на `WWW-Authenticate: Negotiate` билетом Kerberos. */
+const kerberosCodes = ["negotiate_required", "ntlm_not_supported", "rejected", "kerberos_external", "forbidden", "account_disabled", "busy", "not_available"] as const;
+
+/** Вход через провайдера OpenID Connect: сервер возвращает на страницу входа с `?oidc_error=<код>`. */
+const oidcCodes = ["state", "denied", "external", "unavailable", "token", "no_account", "ambiguous", "account_disabled", "identity_mismatch", "otp_required", "error"] as const;
+
+function takeOidcError() {
+  const c = new URLSearchParams(window.location.search).get("oidc_error");
+  if (!c) return null;
+  return oidcCodes.find((k) => k === c) ?? "error";
+}
+
 export function LoginPage() {
   const { t } = useTranslation();
+  const [oidcError] = useState(takeOidcError);
+  // Код ошибки показан — из адреса его убираем, чтобы он не остался после входа и в закладках.
+  useEffect(() => {
+    if (oidcError) window.history.replaceState(null, "", window.location.pathname);
+  }, [oidcError]);
   const qc = useQueryClient();
+  const setup = useQuery({ queryKey: ["setup"], queryFn: () => ok<SetupStatus>(api.GET("/api/setup/status")), retry: false });
+  const domain = useMutation({
+    mutationFn: () => ok(api.GET("/api/auth/kerberos")),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["me"] }),
+  });
+  const domainCode = domain.error instanceof ApiError ? domain.error.code : null;
+  const domainKnown = domainCode && (kerberosCodes as readonly string[]).includes(domainCode) ? (domainCode as (typeof kerberosCodes)[number]) : null;
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
@@ -98,6 +122,30 @@ export function LoginPage() {
           <Button type="submit" variant="primary" className="w-full py-2.5" disabled={m.isPending || !login.trim() || !password || (needOtp && !otp.trim())}>
             {m.isPending ? t("login.signingIn") : t("login.submit")}
           </Button>
+          {setup.data?.oidc != null && (
+            <>
+              <Button type="button" className="w-full py-2.5" onClick={() => window.location.assign("/api/auth/oidc/start")}>
+                {setup.data.oidc || t("login.oidc.button")}
+              </Button>
+              {oidcError && (
+                <div role="alert" className="rounded-lg bg-bad/5 px-3 py-2 text-sm text-bad">
+                  {t(`login.oidc.errors.${oidcError}`)}
+                </div>
+              )}
+            </>
+          )}
+          {setup.data?.kerberos && (
+            <>
+              <Button type="button" className="w-full py-2.5" disabled={domain.isPending} onClick={() => domain.mutate()}>
+                {domain.isPending ? t("login.signingIn") : t("login.kerberos.button")}
+              </Button>
+              {domain.error && (
+                <div role="alert" className="rounded-lg bg-bad/5 px-3 py-2 text-sm text-bad">
+                  {domainKnown ? t(`login.kerberos.errors.${domainKnown}`) : domain.error.message}
+                </div>
+              )}
+            </>
+          )}
         </div>
         {helpdesk && (
           <p className="mt-6 border-t border-line pt-4 text-xs text-muted">

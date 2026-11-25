@@ -5,7 +5,9 @@
 use anyhow::Context;
 use clap::{Parser, Subcommand};
 use pult_api_types::{ConnectParams, ConnectResult, ExchangeRequest, RemoteAction};
-use pult_helper::{PROBE_PORTS, launch, parse_link, portal_base, validate_computer};
+use pult_helper::{
+    PROBE_PORTS, launch, netonly_args, netonly_supported, parse_link, portal_base, validate_account, validate_computer,
+};
 use std::{
     net::{TcpStream, ToSocketAddrs},
     path::PathBuf,
@@ -29,6 +31,10 @@ enum Command {
         /// Для теневого подключения спрашивать учётные данные (отдельная админская учётка инженера).
         #[arg(long)]
         prompt_credentials: bool,
+        /// Админская учётка инженера (ДОМЕН\имя): «Управление компьютером» и PowerShell запускаются
+        /// через `runas /netonly` под ней, теневое подключение спрашивает учётные данные.
+        #[arg(long, value_name = "ДОМЕН\\имя")]
+        run_as: Option<String>,
     },
     /// Убрать схему ссылок и настройки helper.
     Unregister,
@@ -61,15 +67,21 @@ fn main() {
 
 fn run(c: Command) -> anyhow::Result<()> {
     match c {
-        Command::Register { portal, prompt_credentials } => {
+        Command::Register { portal, prompt_credentials, run_as } => {
             let base = portal_base(&portal)?;
+            if let Some(a) = &run_as {
+                validate_account(a)?;
+            }
+            let prompt_credentials = prompt_credentials || run_as.is_some();
             let exe = install_self()?.to_string_lossy().into_owned();
-            register(&exe, base.as_str(), prompt_credentials)?;
-            let creds = if prompt_credentials {
-                "\nТеневое подключение: с запросом учётных данных"
-            } else {
-                ""
-            };
+            register(&exe, base.as_str(), prompt_credentials, run_as.as_deref())?;
+            let mut creds = String::new();
+            if prompt_credentials {
+                creds.push_str("\nТеневое подключение: с запросом учётных данных");
+            }
+            if let Some(a) = &run_as {
+                creds.push_str(&format!("\nУправление компьютером и PowerShell: runas /netonly от {a}"));
+            }
             say(&format!("Готово: ссылки pult:// открывает {exe}\nПортал: {base}{creds}"));
             Ok(())
         }
@@ -83,8 +95,8 @@ fn run(c: Command) -> anyhow::Result<()> {
 }
 
 #[cfg(windows)]
-fn register(exe: &str, portal: &str, prompt_credentials: bool) -> anyhow::Result<()> {
-    pult_helper::win::register(exe, portal, prompt_credentials).context("запись в реестр (HKCU)")
+fn register(exe: &str, portal: &str, prompt_credentials: bool, run_as: Option<&str>) -> anyhow::Result<()> {
+    pult_helper::win::register(exe, portal, prompt_credentials, run_as).context("запись в реестр (HKCU)")
 }
 
 #[cfg(windows)]
@@ -102,8 +114,13 @@ fn prompt_credentials() -> bool {
     pult_helper::win::get(pult_helper::win::SETTINGS_KEY, "PromptCredentials").as_deref() == Some("1")
 }
 
+#[cfg(windows)]
+fn run_as() -> Option<String> {
+    pult_helper::win::get(pult_helper::win::SETTINGS_KEY, "RunAs")
+}
+
 #[cfg(not(windows))]
-fn register(_: &str, _: &str, _: bool) -> anyhow::Result<()> {
+fn register(_: &str, _: &str, _: bool, _: Option<&str>) -> anyhow::Result<()> {
     anyhow::bail!("helper работает только в Windows")
 }
 
@@ -118,6 +135,11 @@ fn configured_portal() -> Option<String> {
 #[cfg(not(windows))]
 fn prompt_credentials() -> bool {
     false
+}
+
+#[cfg(not(windows))]
+fn run_as() -> Option<String> {
+    None
 }
 
 fn client() -> anyhow::Result<reqwest::blocking::Client> {
@@ -146,10 +168,13 @@ fn open(link: &str) -> anyhow::Result<()> {
     let target = p.target_user.as_deref().map(|u| format!(", пользователь {u}")).unwrap_or_default();
     say(&format!("Pult: {} → {}{target}", action_name(p.action), p.computer));
     let (ok, error, details) = match launch(&p, prompt_credentials()) {
-        Ok(Some((program, args))) => match std::process::Command::new(system_path(program)).args(&args).spawn() {
-            // Аргументы — списком, без командной оболочки.
-            Ok(_) => (true, None, None),
-            Err(e) => (false, Some(format!("{program}: {e}")), None),
+        Ok(Some((program, args))) => match run_as().filter(|_| netonly_supported(p.action)) {
+            Some(account) => netonly(&account, program, &args),
+            None => match std::process::Command::new(system_path(program)).args(&args).spawn() {
+                // Аргументы — списком, без командной оболочки.
+                Ok(_) => (true, None, None),
+                Err(e) => (false, Some(format!("{program}: {e}")), None),
+            },
         },
         Ok(None) => {
             let d = probe(&p.computer);
@@ -170,6 +195,22 @@ fn open(link: &str) -> anyhow::Result<()> {
             }
             Ok(())
         }
+    }
+}
+
+/// Запуск под админской учёткой через `runas /netonly`: пароль спрашивает `runas` в этом окне,
+/// helper ждёт его завершения (runas выходит сразу после запуска программы), чтобы сообщить итог.
+fn netonly(account: &str, program: &str, args: &[String]) -> (bool, Option<String>, Option<serde_json::Value>) {
+    let full = system_path(program).to_string_lossy().into_owned();
+    let runas_args = match netonly_args(account, &full, args) {
+        Ok(a) => a,
+        Err(e) => return (false, Some(e.to_string()), None),
+    };
+    say(&format!("Запуск от {account} (runas /netonly): введите пароль этой учётной записи."));
+    match std::process::Command::new(system_path(r"System32\runas.exe")).args(&runas_args).status() {
+        Ok(s) if s.success() => (true, None, None),
+        Ok(s) => (false, Some(format!("runas: код {}", s.code().unwrap_or(-1))), None),
+        Err(e) => (false, Some(format!("runas: {e}")), None),
     }
 }
 

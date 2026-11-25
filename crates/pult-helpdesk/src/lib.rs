@@ -4,12 +4,20 @@ pub mod access;
 pub mod admin;
 pub mod api;
 pub mod assignment;
+pub mod assist;
 pub mod card;
 pub mod checklist;
+pub mod cmdb;
+mod egress;
+pub mod extensions;
 pub mod files;
+pub mod import;
 pub mod integrations;
+pub mod inventory;
+pub mod itil;
 pub mod jobs;
 pub mod kb;
+pub mod monitoring;
 pub mod notify;
 pub mod objects;
 pub mod public;
@@ -22,6 +30,7 @@ pub mod sla;
 pub mod starter;
 pub mod templates;
 pub mod tickets;
+pub mod vault;
 
 use pult_core::Permission;
 use std::path::PathBuf;
@@ -50,7 +59,18 @@ pub mod perm {
 }
 
 pub fn permissions() -> Vec<Permission> {
-    vec![perm::WORK, perm::ON_BEHALF, perm::ADMIN, objects::MANAGE_ASSETS, kb::EDIT, reports::VIEW, access::RESOURCES]
+    vec![
+        perm::WORK,
+        perm::ON_BEHALF,
+        perm::ADMIN,
+        objects::MANAGE_ASSETS,
+        kb::EDIT,
+        reports::VIEW,
+        access::RESOURCES,
+        vault::USE,
+        vault::REVEAL,
+        assist::USE,
+    ]
 }
 
 /// Состояние модуля.

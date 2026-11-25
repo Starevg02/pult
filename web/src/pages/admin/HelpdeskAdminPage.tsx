@@ -50,6 +50,7 @@ function CategoryDialog({ value, all, onClose }: { value: Category | "new"; all:
   const qc = useQueryClient();
   const c = value === "new" ? null : value;
   const [name, setName] = useState(c?.name ?? "");
+  const [description, setDescription] = useState(c?.description ?? "");
   const [parent, setParent] = useState(c?.parent_id ?? "");
   const [kind, setKind] = useState(c?.kind ?? "incident");
   const [priority, setPriority] = useState(c?.default_priority ?? "normal");
@@ -58,7 +59,7 @@ function CategoryDialog({ value, all, onClose }: { value: Category | "new"; all:
   const [fields, setFields] = useState<FormField[]>((c?.form_schema ?? []) as unknown as FormField[]);
   const save = useMutation({
     mutationFn: () => {
-      const body = { name, parent_id: parent || null, kind, default_priority: priority, is_active: active, sort, form_schema: fields, version: c?.version ?? 0 };
+      const body = { name, description, parent_id: parent || null, kind, default_priority: priority, is_active: active, sort, form_schema: fields, version: c?.version ?? 0 };
       return c ? ok(api.PUT("/api/admin/helpdesk/categories/{id}", { params: { path: { id: c.id } }, body })) : ok(api.POST("/api/admin/helpdesk/categories", { body }));
     },
     onSuccess: () => {
@@ -99,6 +100,9 @@ function CategoryDialog({ value, all, onClose }: { value: Category | "new"; all:
             <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> {t("admin.helpdesk.active")}
           </label>
         </div>
+        <Field label={t("admin.helpdesk.description")} hint={t("admin.helpdesk.descriptionHint")}>
+          <Input value={description} maxLength={500} onChange={(e) => setDescription(e.target.value)} />
+        </Field>
         <div>
           <div className="mb-1 text-sm font-medium">{t("admin.helpdesk.fields")}</div>
           {fields.map((f, i) => (

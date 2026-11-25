@@ -1,10 +1,12 @@
 //! Windows: сбор сведений о ПК и установка обновления.
 
-use crate::{AgentReport, client, config, run, sys, wts};
+use crate::{AgentReport, client, config, inventory, run, sys, wts};
+use pult_api_types::HardwareInventory;
 use std::{
     net::{IpAddr, UdpSocket},
     path::{Path, PathBuf},
 };
+use windows::Win32::System::Registry::HKEY_LOCAL_MACHINE;
 
 pub struct WindowsHost {
     /// Хост и порт портала — чтобы узнать адрес ПК, с которого агент к нему ходит.
@@ -38,6 +40,26 @@ impl run::Host for WindowsHost {
                 .map(|i| i.to_string())
                 .into_iter()
                 .collect(),
+            inventory: None,
+        })
+    }
+
+    fn inventory(&self) -> Option<HardwareInventory> {
+        const BIOS: &str = r"HARDWARE\DESCRIPTION\System\BIOS";
+        const CPU: &str = r"HARDWARE\DESCRIPTION\System\CentralProcessor\0";
+        let smb = sys::smbios().map(|t| inventory::parse_smbios(&t)).unwrap_or_default();
+        // Тот же SMBIOS, разобранный Windows, — если таблицу прочитать не вышло.
+        let bios = |name: &str| sys::reg_string(HKEY_LOCAL_MACHINE, BIOS, name).filter(|s| !inventory::placeholder(s));
+        Some(HardwareInventory {
+            manufacturer: smb.manufacturer.or_else(|| bios("SystemManufacturer")),
+            model: smb.product.or_else(|| bios("SystemProductName")),
+            serial_number: smb.serial,
+            bios_version: smb.bios_version.or_else(|| bios("BIOSVersion")),
+            cpu: sys::reg_string(HKEY_LOCAL_MACHINE, CPU, "ProcessorNameString")
+                .map(|s| s.split_whitespace().collect::<Vec<_>>().join(" ")),
+            memory_mb: sys::installed_memory_mb(),
+            disks: sys::fixed_disks(),
+            software: inventory::software(sys::uninstall_entries()),
         })
     }
 

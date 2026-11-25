@@ -69,6 +69,9 @@ impl BindFailure {
 pub enum AdError {
     #[error(transparent)]
     Config(#[from] ConfigError),
+    /// Новый пароль отклонён политикой домена: длина, сложность, история или минимальный срок.
+    #[error("пароль не подходит под политику домена")]
+    PasswordPolicy,
     /// Не ответил ни один контроллер.
     #[error("нет связи ни с одним контроллером домена: {0}")]
     Unavailable(UnavailableReport),

@@ -53,6 +53,46 @@ pub enum HelperError {
     BadPortal(String),
     #[error("портал не прислал номер сессии")]
     NoSession,
+    #[error("учётная запись должна быть вида ДОМЕН\\имя или имя@домен: {0}")]
+    BadAccount(String),
+    #[error("путь или аргумент с пробелом или кавычкой не передать через runas: {0}")]
+    BadProgramPath(String),
+}
+
+/// Учётка для `runas /netonly`: `ДОМЕН\имя` или `имя@домен`, только символы имён AD.
+pub fn validate_account(account: &str) -> Result<(), HelperError> {
+    let bad = || HelperError::BadAccount(account.chars().take(80).collect());
+    let (left, right) = account.split_once('\\').or_else(|| account.split_once('@')).ok_or_else(bad)?;
+    let part = |s: &str| {
+        !s.is_empty() && !s.starts_with(['-', '.']) && s.chars().all(|c| c.is_ascii_alphanumeric() || "-._".contains(c))
+    };
+    if account.len() <= 120 && part(left) && part(right) { Ok(()) } else { Err(bad()) }
+}
+
+/// Действия, которые можно запустить под другой учёткой через `runas /netonly` (аналог NetOnly):
+/// учётные данные используются только для обращений к удалённому ПК. Проводник (диск C$) так не
+/// запускается — Windows передаёт окно уже открытому Проводнику текущего пользователя.
+pub fn netonly_supported(action: RemoteAction) -> bool {
+    matches!(action, RemoteAction::Manage | RemoteAction::Powershell)
+}
+
+/// Аргументы `runas.exe /netonly /user:<учётка> "<программа> <аргументы>"`. `runas` принимает
+/// командную строку одной строкой, поэтому пробелы и кавычки в пути и кавычки в аргументах запрещены;
+/// имя ПК в аргументах уже проверено. Пароль спрашивает сам `runas`, helper его не видит.
+pub fn netonly_args(account: &str, program: &str, args: &[String]) -> Result<Vec<String>, HelperError> {
+    validate_account(account)?;
+    if program.contains([' ', '"']) {
+        return Err(HelperError::BadProgramPath(program.chars().take(120).collect()));
+    }
+    let mut line = program.to_string();
+    for a in args {
+        if a.contains('"') {
+            return Err(HelperError::BadProgramPath(a.chars().take(120).collect()));
+        }
+        line.push(' ');
+        line.push_str(a);
+    }
+    Ok(vec!["/netonly".into(), format!("/user:{account}"), line])
 }
 
 /// Адрес портала из настройки helper: только HTTPS (кроме localhost для разработки).
@@ -186,6 +226,23 @@ mod tests {
             Some(("explorer.exe", vec![r"\\ws-1\C$".into()])),
             "остальные действия — как раньше"
         );
+    }
+
+    #[test]
+    fn netonly_runs_with_other_account() {
+        let p = params(RemoteAction::Manage, "ws-1");
+        let (prog, args) = launch(&p, false).unwrap().unwrap();
+        let full = format!(r"C:\Windows\{prog}");
+        assert_eq!(
+            netonly_args(r"CORP\adm-ivanov", &full, &args).unwrap(),
+            ["/netonly", r"/user:CORP\adm-ivanov", r"C:\Windows\System32\mmc.exe compmgmt.msc /computer=\\ws-1"]
+        );
+        assert!(netonly_args("adm@corp.example.test", &full, &args).is_ok());
+        for bad in ["adm", r"CORP\adm ivanov", r"CORP\", "adm\"&calc@x", "@corp", r"CORP\adm /savecred", "-x@corp"] {
+            assert!(netonly_args(bad, &full, &args).is_err(), "{bad}");
+        }
+        assert!(netonly_args(r"CORP\adm", r"C:\Program Files\x.exe", &args).is_err());
+        assert!(netonly_supported(RemoteAction::Powershell) && !netonly_supported(RemoteAction::Files));
     }
 
     #[test]

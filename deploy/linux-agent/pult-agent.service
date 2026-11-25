@@ -1,0 +1,27 @@
+# Агент Pult для Linux: сеансы пользователей, сведения о системе и оборудование → портал.
+# Установка: бинарник в /usr/local/bin/pult-agent, настройки в /etc/pult-agent.conf (права 0600),
+# затем: systemctl daemon-reload && systemctl enable --now pult-agent
+[Unit]
+Description=Pult agent
+After=network-online.target systemd-logind.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/pult-agent service
+Restart=always
+RestartSec=30
+StateDirectory=pult-agent
+StateDirectoryMode=0700
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target

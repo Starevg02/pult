@@ -386,6 +386,9 @@ async fn stage1_acceptance() {
 
     checklist(&pool, &core, &dir, &mut admin, &mut emp, &app).await;
     second_factor(&mut admin, &app, &pool).await;
+    kerberos(&core, &pool).await;
+    push(&core, &mut admin, &mut emp, &pool).await;
+    oidc(&mut admin, &app, &pool).await;
 
     // --- Выход ---
     assert_eq!(admin.post("/api/auth/logout", json!({})).await.0, StatusCode::NO_CONTENT);
@@ -1000,6 +1003,89 @@ async fn profile(admin: &mut Browser, emp: &mut Browser, app: &Router, pool: &Pg
     let mut anon = Browser::new(app.clone());
     assert_eq!(anon.get("/api/me/profile").await.0, StatusCode::UNAUTHORIZED);
     assert_eq!(anon.get("/api/me/sessions").await.0, StatusCode::UNAUTHORIZED);
+
+    // Смена своего пароля AD: выключена по умолчанию; старый пароль и политику проверяет домен.
+    let change = |old: &str, new: &str| json!({"old_password": old, "new_password": new});
+    const NEW_PASS: &str = "New-Pass-789"; // SAFE: пароль поддельного DC
+    assert_eq!(emp.get("/api/me/profile").await.1["can_change_password"], false);
+    assert_eq!(emp.post("/api/me/password", change(USER_PASS, NEW_PASS)).await.0, StatusCode::FORBIDDEN);
+    let mut sec: pult_core::settings::SecuritySettings = pult_core::settings::load(pool).await.unwrap();
+    sec.ad_password_change = true;
+    pult_core::settings::save(pool, &sec, None).await.unwrap();
+    assert_eq!(emp.get("/api/me/profile").await.1["can_change_password"], true);
+    let (code, e) = emp.post("/api/me/password", change("wrong-password", NEW_PASS)).await;
+    assert_eq!((code, e["error"].as_str()), (StatusCode::BAD_REQUEST, Some("wrong_password")), "{e}");
+    let (code, e) = emp.post("/api/me/password", change(USER_PASS, "short")).await;
+    assert_eq!((code, e["error"].as_str()), (StatusCode::BAD_REQUEST, Some("password_policy")), "{e}");
+    let mut fourth = Browser::new(app.clone());
+    assert_eq!(fourth.login("sidorov", USER_PASS).await.0, StatusCode::NO_CONTENT);
+    let (code, r) = emp.post("/api/me/password", change(USER_PASS, NEW_PASS)).await;
+    assert_eq!(code, StatusCode::OK, "{r}");
+    assert_eq!(r["closed_sessions"], 1, "{r}");
+    assert_eq!(fourth.get("/api/me").await.0, StatusCode::UNAUTHORIZED, "сеансы на других устройствах закрыты");
+    assert_eq!(emp.get("/api/me").await.0, StatusCode::OK, "текущий сеанс жив");
+    let mut fifth = Browser::new(app.clone());
+    assert_eq!(fifth.login("sidorov", USER_PASS).await.0, StatusCode::UNAUTHORIZED, "старый пароль не подходит");
+    assert_eq!(fifth.login("sidorov", NEW_PASS).await.0, StatusCode::NO_CONTENT, "вход новым паролем");
+    // В аудите — итог и причина отказа, паролей нет.
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT action, details::text FROM audit_log WHERE action LIKE 'auth.password_change%' ORDER BY id",
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap();
+    let actions: Vec<&str> = rows.iter().map(|(a, _)| a.as_str()).collect();
+    assert_eq!(actions, ["auth.password_change_failed", "auth.password_change_failed", "auth.password_changed"]);
+    assert!(rows.iter().all(|(_, d)| !d.contains(NEW_PASS) && !d.contains(USER_PASS)), "{rows:?}");
+    // Вернуть прежний пароль: дальше тесты входят с ним.
+    assert_eq!(emp.post("/api/me/password", change(NEW_PASS, USER_PASS)).await.0, StatusCode::OK);
+    sec.ad_password_change = false;
+    pult_core::settings::save(pool, &sec, None).await.unwrap();
+}
+
+/// Уведомления на устройства: выключены по умолчанию, подписки — только к службам push, закрытый ключ VAPID
+/// зашифрован, рассылка забирает каждое уведомление один раз.
+async fn push(core: &Core, admin: &mut Browser, emp: &mut Browser, pool: &PgPool) {
+    use base64::Engine;
+    let b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    let (code, c) = emp.get("/api/me/push").await;
+    assert_eq!((code, c["enabled"].as_bool(), c["public_key"].is_null()), (StatusCode::OK, Some(false), true), "{c}");
+    let mut p256 = vec![7u8; 65];
+    p256[0] = 4;
+    let sub = |endpoint: &str| json!({"endpoint": endpoint, "keys": {"p256dh": b64.encode(&p256), "auth": b64.encode([9u8; 16])}});
+    const FCM: &str = "https://fcm.googleapis.com/fcm/send/stage1";
+    assert_eq!(emp.post("/api/me/push", sub(FCM)).await.0, StatusCode::FORBIDDEN, "выключено");
+    assert_eq!(emp.put("/api/admin/push", json!({"enabled": true})).await.0, StatusCode::FORBIDDEN);
+    let (code, e) = admin.put("/api/admin/push", json!({"enabled": true, "contact": "it@pult.test"})).await;
+    assert_eq!((code, e["error"].as_str()), (StatusCode::BAD_REQUEST, Some("invalid_settings")), "{e}");
+    let (code, s) = admin.put("/api/admin/push", json!({"enabled": true, "contact": "mailto:it@pult.test"})).await;
+    assert_eq!(code, StatusCode::OK, "{s}");
+    let key = emp.get("/api/me/push").await.1["public_key"].as_str().unwrap().to_string();
+    assert_eq!(b64.decode(&key).unwrap().len(), 65, "открытый ключ VAPID — точка P-256");
+    assert_eq!(emp.get("/api/me/push").await.1["public_key"], key.as_str(), "ключ постоянный");
+    let private: String = sqlx::query_scalar("SELECT value->>'private' FROM settings WHERE key = 'push_keys'")
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    let blob = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(private).unwrap();
+    assert_ne!(blob.first(), Some(&0x30), "закрытый ключ хранится зашифрованным, а не DER");
+    let (code, e) = emp.post("/api/me/push", sub("https://10.0.0.5/push")).await;
+    assert_eq!((code, e["error"].as_str()), (StatusCode::BAD_REQUEST, Some("invalid_subscription")), "{e}");
+    assert_eq!(emp.post("/api/me/push", sub(FCM)).await.0, StatusCode::NO_CONTENT);
+    assert_eq!(emp.get("/api/me/push").await.1["devices"], 1);
+    assert_eq!(
+        emp.call(Method::DELETE, "/api/me/push", Some(json!({"endpoint": FCM})), true).await.0,
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(emp.get("/api/me/push").await.1["devices"], 0);
+    // Рассылка забирает уведомление один раз (подписок нет — в сеть не ходит).
+    let me = emp.get("/api/me").await.1["user_id"].as_str().unwrap().parse::<uuid::Uuid>().unwrap();
+    pult_core::notify::notify(pool, me, "system.test", json!({})).await.unwrap();
+    assert_eq!(pult_people::push::deliver(core).await.unwrap(), 0);
+    let left: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM notifications WHERE pushed_at IS NULL").fetch_one(pool).await.unwrap();
+    assert_eq!(left, 0, "уведомление забрано рассылкой");
+    assert_eq!(admin.put("/api/admin/push", json!({"enabled": false})).await.0, StatusCode::OK);
 }
 
 /// Второй фактор для входа из интернета: код проверяется до AD, подключается только изнутри сети,
@@ -1212,4 +1298,273 @@ async fn second_factor(admin: &mut Browser, app: &Router, pool: &PgPool) {
         .await
         .unwrap();
     assert_eq!(n, 5, "неверные коды — в аудите");
+}
+
+/// Вход через домен: билет уже проверил сервер (GSSAPI) — здесь путь от принципала до сеанса.
+/// Поддельный провайдер OpenID Connect: что подписать в следующем ID-токене и какой PKCE ждать.
+#[derive(Default)]
+struct Idp {
+    challenge: String,
+    nonce: String,
+    user: String,
+    /// Свой `sub` вместо логина: другой пользователь провайдера с тем же логином.
+    sub: Option<String>,
+}
+
+/// Запрос мимо `Browser`: нужны заголовки `Location` и `Set-Cookie` (как `имя=значение`).
+async fn raw(app: &Router, uri: &str, cookie: Option<&str>, ip: &str) -> (StatusCode, String, Vec<String>) {
+    let mut req = Request::builder().uri(uri);
+    if let Some(c) = cookie {
+        req = req.header(header::COOKIE, c);
+    }
+    let mut req = req.body(Body::empty()).unwrap();
+    req.extensions_mut().insert(ConnectInfo(ip.parse::<SocketAddr>().unwrap()));
+    let r = app.clone().oneshot(req).await.unwrap();
+    let loc = r.headers().get(header::LOCATION).map(|v| v.to_str().unwrap().to_string()).unwrap_or_default();
+    let cookies = r
+        .headers()
+        .get_all(header::SET_COOKIE)
+        .iter()
+        .map(|v| v.to_str().unwrap().split(';').next().unwrap().to_string())
+        .collect();
+    (r.status(), loc, cookies)
+}
+
+/// Вход через провайдера целиком: начало, «согласие» у провайдера, возврат. Ответ — куда отправил портал.
+async fn oidc_round(
+    app: &Router,
+    idp: &std::sync::Mutex<Idp>,
+    user: &str,
+    ip: &str,
+    tamper: bool,
+) -> (String, Vec<String>) {
+    let (code, loc, cookies) = raw(app, "/api/auth/oidc/start", None, ip).await;
+    assert_eq!(code, StatusCode::SEE_OTHER);
+    let Ok(url) = reqwest::Url::parse(&loc) else { return (loc, cookies) };
+    let q: HashMap<String, String> = url.query_pairs().into_owned().collect();
+    assert_eq!((q["code_challenge_method"].as_str(), q["client_id"].as_str()), ("S256", "pult"), "{loc}");
+    {
+        let mut i = idp.lock().unwrap();
+        i.challenge = q["code_challenge"].clone();
+        i.nonce = q["nonce"].clone();
+        i.user = user.to_string();
+    }
+    let state = if tamper { "forged" } else { q["state"].as_str() };
+    let jar = cookies.join("; ");
+    let (code, loc, cookies) =
+        raw(app, &format!("/api/auth/oidc/callback?code=good&state={state}"), Some(&jar), ip).await;
+    assert_eq!(code, StatusCode::SEE_OTHER);
+    (loc, cookies)
+}
+
+async fn oidc(admin: &mut Browser, app: &Router, pool: &PgPool) {
+    use axum::{
+        Form,
+        routing::{get, post},
+    };
+    use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+    use pult_core::settings::{self, SecuritySettings};
+    use ring::{
+        rand::SystemRandom,
+        signature::{ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair, KeyPair},
+    };
+    use std::sync::{Arc, Mutex};
+
+    const IN: &str = "10.1.1.9:5000";
+    const OUT: &str = "203.0.113.5:5000";
+    assert_eq!(raw(app, "/api/auth/oidc/start", None, IN).await.0, StatusCode::NOT_FOUND, "выключено по умолчанию");
+
+    let rng = SystemRandom::new();
+    let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, &rng).unwrap();
+    let kp = Arc::new(EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, pkcs8.as_ref(), &rng).unwrap());
+    let pk = kp.public_key().as_ref().to_vec();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
+    let idp = Arc::new(Mutex::new(Idp::default()));
+    let meta = json!({"issuer": base, "authorization_endpoint": format!("{base}/auth"),
+        "token_endpoint": format!("{base}/token"), "jwks_uri": format!("{base}/jwks")});
+    let jwks = json!({"keys": [{"kty": "EC", "crv": "P-256", "kid": "k1", "use": "sig",
+        "x": URL_SAFE_NO_PAD.encode(&pk[1..33]), "y": URL_SAFE_NO_PAD.encode(&pk[33..65])}]});
+    let token = {
+        let (idp, kp, iss) = (idp.clone(), kp.clone(), base.clone());
+        move |Form(f): Form<HashMap<String, String>>| {
+            let (idp, kp, iss) = (idp.clone(), kp.clone(), iss.clone());
+            async move {
+                let i = idp.lock().unwrap();
+                let field = |k: &str| f.get(k).map(String::as_str).unwrap_or_default();
+                let pkce = URL_SAFE_NO_PAD
+                    .encode(ring::digest::digest(&ring::digest::SHA256, field("code_verifier").as_bytes()));
+                if field("code") != "good"
+                    || pkce != i.challenge
+                    || field("client_secret") != "s3cret"
+                    || field("client_id") != "pult"
+                {
+                    return (StatusCode::BAD_REQUEST, axum::Json(json!({"error": "invalid_grant"})));
+                }
+                let now = time::OffsetDateTime::now_utc().unix_timestamp();
+                let sub = i.sub.clone().unwrap_or_else(|| i.user.to_lowercase());
+                let claims = json!({"iss": iss, "aud": "pult", "sub": sub, "exp": now + 300, "iat": now,
+                    "nonce": i.nonce, "preferred_username": i.user});
+                let msg = format!(
+                    "{}.{}",
+                    URL_SAFE_NO_PAD.encode(r#"{"alg":"ES256","kid":"k1"}"#),
+                    URL_SAFE_NO_PAD.encode(claims.to_string())
+                );
+                let sig = kp.sign(&SystemRandom::new(), msg.as_bytes()).unwrap();
+                let id_token = format!("{msg}.{}", URL_SAFE_NO_PAD.encode(sig.as_ref()));
+                (StatusCode::OK, axum::Json(json!({"id_token": id_token, "token_type": "Bearer"})))
+            }
+        }
+    };
+    let server = axum::Router::new()
+        .route("/.well-known/openid-configuration", get(move || std::future::ready(axum::Json(meta.clone()))))
+        .route("/jwks", get(move || std::future::ready(axum::Json(jwks.clone()))))
+        .route("/token", post(token));
+    tokio::spawn(async move { axum::serve(listener, server).await.unwrap() });
+
+    // Настройка: адрес возврата проверяется, секрет не показывается.
+    let mut s = json!({"enabled": true, "issuer": base, "client_id": "pult",
+        "redirect_uri": "https://pult.test/", "username_claim": "preferred_username"});
+    let (code, b) = admin.put("/api/admin/oidc", json!({"settings": s})).await;
+    assert_eq!((code, b["error"].as_str()), (StatusCode::BAD_REQUEST, Some("invalid_settings")), "{b}");
+    s["redirect_uri"] = json!("https://pult.test/api/auth/oidc/callback");
+    let (code, b) = admin.put("/api/admin/oidc", json!({"settings": s, "client_secret": "s3cret"})).await;
+    assert_eq!((code, b["has_secret"].as_bool()), (StatusCode::OK, Some(true)), "{b}");
+    assert!(!admin.get("/api/admin/oidc").await.1.to_string().contains("s3cret"));
+    let (_, t) = admin.post("/api/admin/oidc/test", json!({})).await;
+    assert_eq!((t["ok"].as_bool(), t["keys"].as_i64()), (Some(true), Some(1)), "{t}");
+    let mut other = s.clone();
+    other["client_id"] = json!("other");
+    let (code, b) = admin.put("/api/admin/oidc", json!({"settings": other})).await;
+    assert_eq!((code, b["error"].as_str()), (StatusCode::BAD_REQUEST, Some("secret_required")), "{b}");
+
+    // Вход: на главную с cookie сеанса; сеанс — «oidc».
+    let (loc, cookies) = oidc_round(app, &idp, "Ivanov", IN, false).await;
+    assert_eq!(loc, "/", "{cookies:?}");
+    let mut b = Browser::new(app.clone());
+    for c in &cookies {
+        let (k, v) = c.split_once('=').unwrap();
+        if !v.is_empty() {
+            b.cookies.insert(k.into(), v.into());
+        }
+    }
+    assert!(!b.cookies.contains_key("__Host-pult_oidc"), "cookie входа снята");
+    let (code, me) = b.get("/api/me").await;
+    assert_eq!((code, me["login"].as_str()), (StatusCode::OK, Some("ivanov")), "{me}");
+    let method: String = sqlx::query_scalar(
+        "SELECT s.auth_method FROM sessions s JOIN users u ON u.id = s.user_id JOIN ad_accounts a ON a.id = u.ad_account_id
+          WHERE a.sam_account_name = 'ivanov' ORDER BY s.created_at DESC LIMIT 1",
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    assert_eq!(method, "oidc");
+    // UPN тоже логин; чужой state, отключённая и неизвестная учётки — отказ.
+    assert_eq!(oidc_round(app, &idp, "anna.petrova@pult.test", IN, false).await.0, "/");
+    assert_eq!(oidc_round(app, &idp, "ivanov", IN, true).await.0, "/?oidc_error=state");
+    assert_eq!(oidc_round(app, &idp, "uvolen", IN, false).await.0, "/?oidc_error=account_disabled");
+    assert_eq!(oidc_round(app, &idp, "ghost", IN, false).await.0, "/?oidc_error=no_account");
+    // Переименовался у провайдера в чужой логин: `sub` уже привязан к другому пользователю.
+    idp.lock().unwrap().sub = Some("someone-else".into());
+    assert_eq!(oidc_round(app, &idp, "ivanov", IN, false).await.0, "/?oidc_error=identity_mismatch");
+    idp.lock().unwrap().sub = None;
+    let failed: i64 = sqlx::query_scalar("SELECT count(*) FROM login_attempts WHERE result = 'identity_mismatch'")
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    assert_eq!(failed, 0, "отказы провайдера не копятся в лимитах подбора пароля");
+    let (_, loc, _) = raw(app, "/api/auth/oidc/callback?code=good&state=x", None, IN).await;
+    assert_eq!(loc, "/?oidc_error=state", "без cookie входа");
+    // Из интернета — только если разрешено, и не тем, кому снаружи нужен код.
+    assert_eq!(oidc_round(app, &idp, "ivanov", OUT, false).await.0, "/?oidc_error=external");
+    s["allow_external"] = json!(true);
+    assert_eq!(admin.put("/api/admin/oidc", json!({"settings": s})).await.0, StatusCode::OK);
+    let mut sec: SecuritySettings = settings::load(pool).await.unwrap();
+    let before = sec.totp_required_roles.clone();
+    sec.totp_required_roles = vec![pult_core::rbac::ROLE_SUPERADMIN.into()];
+    settings::save(pool, &sec, None).await.unwrap();
+    assert_eq!(oidc_round(app, &idp, "ivanov", OUT, false).await.0, "/?oidc_error=otp_required");
+    assert_eq!(oidc_round(app, &idp, "sidorov", OUT, false).await.0, "/", "без обязательного кода");
+    sec.totp_required_roles = before;
+    settings::save(pool, &sec, None).await.unwrap();
+    let audited: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM audit_log WHERE action = 'auth.login' AND details->>'method' = 'oidc'",
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    assert_eq!(audited, 3);
+    let (_, v) = admin.get("/api/admin/oidc").await;
+    assert_eq!(v["identities"], 3, "{v}");
+    let (code, _) = admin.delete("/api/admin/oidc/identities").await;
+    assert_eq!(code, StatusCode::OK);
+    let (_, v) = admin.get("/api/admin/oidc").await;
+    assert_eq!(v["identities"], 0, "{v}");
+    s["enabled"] = json!(false);
+    assert_eq!(admin.put("/api/admin/oidc", json!({"settings": s})).await.0, StatusCode::OK);
+}
+
+async fn kerberos(core: &Core, pool: &PgPool) {
+    use axum::response::IntoResponse;
+    use pult_core::settings::{self, SecuritySettings};
+    let parts = |ip: &str| {
+        let mut req = Request::builder().uri("/api/auth/kerberos").body(()).unwrap();
+        req.extensions_mut().insert(ConnectInfo(ip.parse::<SocketAddr>().unwrap()));
+        req.into_parts().0
+    };
+    let status = |r: Result<axum::response::Response, pult_core::ApiError>| match r {
+        Ok(r) => r.status(),
+        Err(e) => e.into_response().status(),
+    };
+    let inside = parts("10.1.1.9:5000");
+    let login = |p: &'static str| pult_people::auth::kerberos_login(core, &inside, p);
+    assert_eq!(status(login("ivanov@PULT.TEST").await), StatusCode::NOT_FOUND, "выключено по умолчанию");
+    let mut sec: SecuritySettings = settings::load(pool).await.unwrap();
+    sec.kerberos_login = true;
+    settings::save(pool, &sec, None).await.unwrap();
+    let r = login("Ivanov@PULT.TEST").await.unwrap();
+    assert_eq!(r.status(), StatusCode::NO_CONTENT);
+    assert!(r.headers().get_all(header::SET_COOKIE).iter().count() >= 2, "cookie сеанса и CSRF");
+    let method: String = sqlx::query_scalar(
+        "SELECT s.auth_method FROM sessions s JOIN users u ON u.id = s.user_id JOIN ad_accounts a ON a.id = u.ad_account_id
+          WHERE a.sam_account_name = 'ivanov' ORDER BY s.created_at DESC LIMIT 1",
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    assert_eq!(method, "kerberos");
+    for p in ["ghost@PULT.TEST", "ivanov@OTHER.TEST", "HTTP/portal.pult.test@PULT.TEST", "ivanov", "@PULT.TEST"] {
+        assert_eq!(status(login(p).await), StatusCode::FORBIDDEN, "{p}");
+    }
+    assert_eq!(status(login("uvolen@PULT.TEST").await), StatusCode::BAD_REQUEST, "отключённая учётка");
+    // Чужой UPN с тем же началом, что логин Иванова: неясно, чей билет, — отказ, а не вход за Иванова.
+    let old_upn: Option<String> = sqlx::query_scalar("SELECT upn FROM ad_accounts WHERE sam_account_name = 'petrova'")
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE ad_accounts SET upn = 'Ivanov@pult.test' WHERE sam_account_name = 'petrova'")
+        .execute(pool)
+        .await
+        .unwrap();
+    assert_eq!(status(login("ivanov@PULT.TEST").await), StatusCode::FORBIDDEN, "имя совпадает у двух учёток");
+    sqlx::query("UPDATE ad_accounts SET upn = $1 WHERE sam_account_name = 'petrova'")
+        .bind(&old_upn)
+        .execute(pool)
+        .await
+        .unwrap();
+    let outside = parts("203.0.113.5:5000");
+    assert_eq!(
+        status(pult_people::auth::kerberos_login(core, &outside, "ivanov@PULT.TEST").await),
+        StatusCode::BAD_REQUEST,
+        "из интернета вход через домен закрыт"
+    );
+    let audited: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM audit_log WHERE action = 'auth.login' AND details->>'method' = 'kerberos'",
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    assert_eq!(audited, 1);
+    sec.kerberos_login = false;
+    settings::save(pool, &sec, None).await.unwrap();
 }

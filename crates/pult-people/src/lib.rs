@@ -5,7 +5,9 @@ pub mod auth;
 pub mod computers;
 pub mod domain;
 pub mod health;
+pub mod oidc;
 pub mod profile;
+pub mod push;
 pub mod sites;
 pub mod sync;
 pub mod twofactor;
@@ -50,6 +52,8 @@ pub mod jobs {
     pub const SYNC_FULL: &str = "ad.sync.full";
     pub const HEALTH: &str = "ad.health";
     pub const COMPUTERS: &str = "ad.computers";
+    /// Рассылка уведомлений на устройства; кроме расписания, запускается сразу по событию уведомления.
+    pub const PUSH: &str = "notify.push";
 }
 
 impl<S> Module<S> for PeopleModule
@@ -71,6 +75,10 @@ where
             .routes(routes!(auth::put_my_locale))
             .routes(routes!(profile::put_my_prefs))
             .routes(routes!(profile::get_my_profile))
+            .routes(routes!(profile::change_my_password))
+            .routes(routes!(push::get_my_push, push::subscribe_my_push, push::unsubscribe_my_push))
+            .routes(routes!(push::test_my_push))
+            .routes(routes!(push::get_push_settings, push::put_push_settings))
             .routes(routes!(profile::list_my_sessions))
             .routes(routes!(profile::revoke_my_session))
             .routes(routes!(profile::revoke_other_sessions))
@@ -92,6 +100,11 @@ where
             .routes(routes!(admin::list_candidates))
             .routes(routes!(admin::decide_candidate))
             .routes(routes!(admin::get_link_settings, admin::put_link_settings))
+            .routes(routes!(oidc::oidc_start))
+            .routes(routes!(oidc::oidc_callback))
+            .routes(routes!(oidc::get_oidc, oidc::put_oidc))
+            .routes(routes!(oidc::test_oidc))
+            .routes(routes!(oidc::reset_oidc_identities))
     }
 
     fn permissions(&self) -> Vec<Permission> {
@@ -104,6 +117,7 @@ where
             pult_core::JobDefinition { name: jobs::SYNC_FULL, schedule: Some("0 3 * * *") },
             pult_core::JobDefinition { name: jobs::HEALTH, schedule: Some("* * * * *") },
             pult_core::JobDefinition { name: jobs::COMPUTERS, schedule: Some("*/15 * * * *") },
+            pult_core::JobDefinition { name: jobs::PUSH, schedule: Some("* * * * *") },
         ]
     }
 }

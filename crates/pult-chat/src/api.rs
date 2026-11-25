@@ -1,0 +1,1191 @@
+//! API модуля «Коммуникации». Доступ ко всему решает членство: чужой чат для сотрудника
+//! не существует (404), а администраторские маршруты не отдают ни текста, ни участников личных диалогов.
+
+use crate::kind;
+use axum::{
+    Json,
+    extract::{FromRef, Path, Query, State},
+    http::StatusCode,
+};
+use pult_core::{
+    ApiError, ApiResult, Core, CurrentUser, Secret,
+    audit::{self, Entry, Source},
+    events, notify,
+};
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use sqlx::{PgExecutor, Postgres, Transaction};
+use time::OffsetDateTime;
+use utoipa::{IntoParams, ToSchema};
+use utoipa_axum::{router::OpenApiRouter, routes};
+use uuid::Uuid;
+
+/// Сколько минут автор может править сообщение.
+pub const EDIT_MINUTES: i64 = 15;
+/// Длина сообщения в символах.
+const MAX_BODY: usize = 4000;
+/// Длина названия группового чата.
+const MAX_TITLE: usize = 200;
+/// Участников за один раз.
+const MAX_ADD: usize = 500;
+/// Сообщений за один запрос.
+const PAGE: i64 = 100;
+/// Обезличенная статистика: меньшие числа не показываются, чтобы по ним нельзя было узнать переписку.
+const MIN_COUNT: i64 = 5;
+
+/// Имя сотрудника по учётке: ФИО из справочника, иначе отображаемое имя или логин из AD.
+const NAME: &str =
+    "coalesce(nullif(trim(concat_ws(' ', p.last_name, p.first_name)), ''), a.display_name, a.sam_account_name)";
+/// Соединение `u` (users) с учёткой AD и карточкой сотрудника для [`NAME`].
+const PEOPLE: &str = "JOIN ad_accounts a ON a.id = u.ad_account_id LEFT JOIN persons p ON p.id = u.person_id";
+
+pub fn routes<S>() -> OpenApiRouter<S>
+where
+    S: Clone + Send + Sync + 'static,
+    Core: FromRef<S>,
+{
+    OpenApiRouter::new()
+        .routes(routes!(chat_list))
+        .routes(routes!(chat_people))
+        .routes(routes!(chat_open_direct))
+        .routes(routes!(chat_create_group))
+        .routes(routes!(chat_get))
+        .routes(routes!(chat_rename))
+        .routes(routes!(chat_set_prefs))
+        .routes(routes!(chat_mark_read))
+        .routes(routes!(chat_list_messages, chat_send_message))
+        .routes(routes!(chat_edit_message))
+        .routes(routes!(chat_message_versions))
+        .routes(routes!(chat_add_members))
+        .routes(routes!(chat_remove_member))
+        .routes(routes!(chat_set_role))
+        .routes(routes!(chat_leave))
+        .routes(routes!(chat_member_events))
+        .routes(routes!(chat_admin_list))
+        .routes(routes!(chat_admin_assign_owner))
+        .routes(routes!(chat_admin_stats))
+}
+
+// ------------------------------------------------------------------ Типы
+
+/// Строка списка переписок.
+#[derive(Serialize, sqlx::FromRow, ToSchema)]
+pub struct ChatItem {
+    pub id: Uuid,
+    /// `direct` или `group`.
+    pub kind: String,
+    /// Название группового чата или имя собеседника.
+    pub title: String,
+    /// Собеседник в личном диалоге.
+    pub peer_id: Option<Uuid>,
+    /// Моя роль: `owner`, `admin`, `member`.
+    pub role: String,
+    /// Я участник (не вышел и не исключён).
+    pub active: bool,
+    /// Чат временно заблокирован: владельца нет.
+    pub locked: bool,
+    /// Закреплён (только у действующих).
+    pub pinned: bool,
+    pub hidden: bool,
+    pub unread: i64,
+    #[serde(with = "time::serde::rfc3339::option")]
+    #[schema(value_type = Option<String>, format = DateTime)]
+    pub last_message_at: Option<OffsetDateTime>,
+    /// Начало последнего доступного мне сообщения.
+    #[sqlx(skip)]
+    pub preview: Option<String>,
+    #[serde(skip)]
+    #[schema(ignore)]
+    pub preview_body: Option<Vec<u8>>,
+}
+
+#[derive(Serialize, sqlx::FromRow, ToSchema)]
+pub struct ChatMember {
+    pub user_id: Uuid,
+    pub name: String,
+    pub role: String,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct ChatDetail {
+    pub chat: ChatItem,
+    /// Действующие участники (бывшему участнику не показываются).
+    pub members: Vec<ChatMember>,
+    /// Могу писать: участник и чат не заблокирован.
+    pub can_write: bool,
+    /// Могу вести состав: владелец или администратор группового чата.
+    pub can_manage: bool,
+}
+
+#[derive(Serialize, sqlx::FromRow, ToSchema)]
+pub struct ChatMessage {
+    pub id: Uuid,
+    pub author_id: Uuid,
+    pub author_name: String,
+    #[sqlx(skip)]
+    pub body: String,
+    #[serde(skip)]
+    #[schema(ignore)]
+    pub enc: Vec<u8>,
+    #[serde(with = "time::serde::rfc3339")]
+    #[schema(value_type = String, format = DateTime)]
+    pub created_at: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339::option")]
+    #[schema(value_type = Option<String>, format = DateTime)]
+    pub edited_at: Option<OffsetDateTime>,
+    pub version: i32,
+    /// Я могу его править сейчас.
+    pub editable: bool,
+}
+
+#[derive(Serialize, sqlx::FromRow, ToSchema)]
+pub struct ChatMessageVersion {
+    pub version: i32,
+    #[sqlx(skip)]
+    pub body: String,
+    #[serde(skip)]
+    #[schema(ignore)]
+    pub enc: Vec<u8>,
+    #[serde(with = "time::serde::rfc3339")]
+    #[schema(value_type = String, format = DateTime)]
+    pub created_at: OffsetDateTime,
+}
+
+#[derive(Serialize, sqlx::FromRow, ToSchema)]
+pub struct ChatPerson {
+    pub id: Uuid,
+    pub name: String,
+    pub department: Option<String>,
+}
+
+#[derive(Serialize, sqlx::FromRow, ToSchema)]
+pub struct ChatMemberEvent {
+    pub user_name: String,
+    pub actor_name: Option<String>,
+    /// `created`, `added`, `removed`, `left`, `blocked`, `admin`, `member`, `owner`, `locked`, `unlocked`.
+    pub action: String,
+    #[serde(with = "time::serde::rfc3339")]
+    #[schema(value_type = String, format = DateTime)]
+    pub created_at: OffsetDateTime,
+}
+
+/// Групповой чат для суперадминистратора — без сообщений.
+#[derive(Serialize, sqlx::FromRow, ToSchema)]
+pub struct AdminChat {
+    pub id: Uuid,
+    pub title: String,
+    pub members: i64,
+    pub owner_name: Option<String>,
+    pub locked: bool,
+    #[serde(with = "time::serde::rfc3339")]
+    #[schema(value_type = String, format = DateTime)]
+    pub created_at: OffsetDateTime,
+}
+
+/// Обезличенная статистика за месяц по всему порталу. Число меньше 5 не показывается (`null`).
+#[derive(Serialize, ToSchema)]
+pub struct ChatStatsMonth {
+    /// ГГГГ-ММ.
+    pub month: String,
+    pub messages: Option<i64>,
+    pub direct_messages: Option<i64>,
+    pub group_messages: Option<i64>,
+    pub edited: Option<i64>,
+    pub senders: Option<i64>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct ChatStats {
+    pub direct_chats: Option<i64>,
+    pub group_chats: Option<i64>,
+    pub months: Vec<ChatStatsMonth>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct ChatCreated {
+    pub id: Uuid,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct ChatDirectInput {
+    pub user_id: Uuid,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct ChatGroupInput {
+    pub title: String,
+    #[serde(default)]
+    pub members: Vec<Uuid>,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct ChatTitleInput {
+    pub title: String,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct ChatPrefsInput {
+    pub pinned: Option<bool>,
+    pub hidden: Option<bool>,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct ChatMessageInput {
+    pub body: String,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct ChatMembersInput {
+    pub user_ids: Vec<Uuid>,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct ChatRoleInput {
+    /// `admin` или `member`.
+    pub role: String,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct ChatOwnerInput {
+    pub user_id: Uuid,
+    /// Что станет с прежним владельцем: `admin`, `member` или `remove`.
+    pub previous: String,
+}
+
+#[derive(Deserialize, IntoParams)]
+pub struct ChatListQuery {
+    /// Скрытые бывшие чаты вместо основного списка.
+    #[serde(default)]
+    pub hidden: bool,
+}
+
+#[derive(Deserialize, IntoParams)]
+pub struct ChatPeopleQuery {
+    #[serde(default)]
+    pub q: String,
+}
+
+#[derive(Deserialize, IntoParams)]
+pub struct ChatPageQuery {
+    /// Сообщения раньше этого.
+    pub before: Option<Uuid>,
+}
+
+// ------------------------------------------------------------------ Общие проверки
+
+/// Моё участие в чате. Не участник — 404: чужой чат не существует.
+#[derive(sqlx::FromRow)]
+struct Membership {
+    kind: String,
+    title: Option<String>,
+    locked: bool,
+    role: String,
+    left_at: Option<OffsetDateTime>,
+}
+
+impl Membership {
+    fn active(&self) -> bool {
+        self.left_at.is_none()
+    }
+    fn group(&self) -> bool {
+        self.kind == "group"
+    }
+    fn manager(&self) -> bool {
+        self.group() && self.active() && matches!(self.role.as_str(), "owner" | "admin")
+    }
+    fn require_manager(&self) -> ApiResult<()> {
+        if self.manager() { self.require_unlocked() } else { Err(ApiError::Forbidden) }
+    }
+    fn require_unlocked(&self) -> ApiResult<()> {
+        if self.locked {
+            Err(ApiError::Refused {
+                code: "chat_locked",
+                message: "Чат временно недоступен: назначается новый владелец.".into(),
+            })
+        } else {
+            Ok(())
+        }
+    }
+}
+
+async fn membership(db: impl PgExecutor<'_>, chat: Uuid, user: Uuid) -> ApiResult<Membership> {
+    let row: Option<Membership> = sqlx::query_as(
+        "SELECT c.kind, c.title, c.locked, m.role, m.left_at
+           FROM chat_members m JOIN chats c ON c.id = m.chat_id
+          WHERE m.chat_id = $1 AND m.user_id = $2",
+    )
+    .bind(chat)
+    .bind(user)
+    .fetch_optional(db)
+    .await?;
+    row.ok_or(ApiError::NotFound)
+}
+
+fn encrypt(core: &Core, text: &str) -> ApiResult<Vec<u8>> {
+    core.secrets.encrypt(&Secret::new(text)).map_err(ApiError::internal)
+}
+
+fn decrypt(core: &Core, blob: &[u8]) -> ApiResult<String> {
+    Ok(core.secrets.decrypt(blob).map_err(ApiError::internal)?.expose().to_string())
+}
+
+fn clean_body(s: &str) -> ApiResult<String> {
+    let s = s.trim();
+    if s.is_empty() {
+        return Err(ApiError::bad_request("empty_message", "Сообщение пустое."));
+    }
+    if s.chars().count() > MAX_BODY {
+        return Err(ApiError::bad_request("message_too_long", "Сообщение длиннее 4000 символов."));
+    }
+    Ok(s.to_string())
+}
+
+fn clean_title(s: &str) -> ApiResult<String> {
+    let s = s.trim();
+    if s.is_empty() || s.chars().count() > MAX_TITLE || s.chars().any(char::is_control) {
+        return Err(ApiError::bad_request("invalid_title", "Название — от 1 до 200 символов, в одну строку."));
+    }
+    Ok(s.to_string())
+}
+
+/// Сотрудников в одном событии: `pg_notify` принимает до 8000 байт, uuid в JSON — около 40.
+const NOTIFY_CHUNK: usize = 150;
+
+/// «Что-то поменялось в чате» — действующим участникам; браузер перечитает через API.
+/// Большая группа уходит несколькими событиями: одно на всех упёрлось бы в предел `pg_notify`.
+pub(crate) async fn changed(conn: &mut sqlx::PgConnection, chat: Uuid, also: &[Uuid]) -> Result<(), sqlx::Error> {
+    let users: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT DISTINCT u FROM (
+            SELECT user_id AS u FROM chat_members WHERE chat_id = $1 AND left_at IS NULL
+            UNION SELECT unnest($2::uuid[])) x",
+    )
+    .bind(chat)
+    .bind(also)
+    .fetch_all(&mut *conn)
+    .await?;
+    for part in users.chunks(NOTIFY_CHUNK) {
+        sqlx::query("SELECT pg_notify($1, json_build_object('kind', 'chat', 'users', $2::uuid[])::text)")
+            .bind(events::CHANNEL)
+            .bind(part)
+            .execute(&mut *conn)
+            .await?;
+    }
+    Ok(())
+}
+
+async fn log_member(
+    db: impl PgExecutor<'_>,
+    chat: Uuid,
+    user: Uuid,
+    actor: Option<Uuid>,
+    action: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("INSERT INTO chat_member_events (chat_id, user_id, actor_id, action) VALUES ($1, $2, $3, $4)")
+        .bind(chat)
+        .bind(user)
+        .bind(actor)
+        .bind(action)
+        .execute(db)
+        .await?;
+    Ok(())
+}
+
+/// Строки списка: мои переписки (`chat` — одна), с непрочитанным и последним доступным мне сообщением.
+async fn chat_items(core: &Core, me: Uuid, hidden: Option<bool>, chat: Option<Uuid>) -> ApiResult<Vec<ChatItem>> {
+    let sql = format!(
+        "SELECT c.id, c.kind,
+                CASE WHEN c.kind = 'group' THEN c.title
+                     ELSE coalesce((SELECT {NAME} FROM chat_members o JOIN users u ON u.id = o.user_id {PEOPLE}
+                                     WHERE o.chat_id = c.id AND o.user_id <> $1 LIMIT 1), '') END AS title,
+                CASE WHEN c.kind = 'direct'
+                     THEN (SELECT o.user_id FROM chat_members o WHERE o.chat_id = c.id AND o.user_id <> $1 LIMIT 1) END AS peer_id,
+                m.role, m.left_at IS NULL AS active, c.locked,
+                (m.pinned AND m.left_at IS NULL) AS pinned, m.hidden,
+                (SELECT count(*) FROM chat_messages x
+                  WHERE x.chat_id = c.id AND x.author_id <> $1
+                    AND x.created_at > coalesce(m.last_read_at, '-infinity')
+                    AND x.created_at <= coalesce(m.left_at, 'infinity')) AS unread,
+                last.created_at AS last_message_at,
+                CASE WHEN c.locked THEN NULL ELSE last.body END AS preview_body
+           FROM chat_members m
+           JOIN chats c ON c.id = m.chat_id
+           LEFT JOIN LATERAL (SELECT x.created_at, x.body FROM chat_messages x
+                               WHERE x.chat_id = c.id AND x.created_at <= coalesce(m.left_at, 'infinity')
+                               ORDER BY x.created_at DESC, x.id DESC LIMIT 1) last ON true
+          WHERE m.user_id = $1
+            AND ($2::boolean IS NULL OR m.hidden = $2)
+            AND ($3::uuid IS NULL OR c.id = $3)
+          ORDER BY (m.pinned AND m.left_at IS NULL) DESC, coalesce(last.created_at, m.joined_at) DESC"
+    );
+    let mut items: Vec<ChatItem> = sqlx::query_as(&sql).bind(me).bind(hidden).bind(chat).fetch_all(&core.db).await?;
+    for i in &mut items {
+        if let Some(b) = i.preview_body.take() {
+            let text = decrypt(core, &b)?;
+            let line = text.lines().next().unwrap_or_default();
+            i.preview = Some(line.chars().take(120).collect());
+        }
+    }
+    Ok(items)
+}
+
+// ------------------------------------------------------------------ Список и создание
+
+#[utoipa::path(get, path = "/api/chat", tag = "chat", params(ChatListQuery),
+    responses((status = 200, body = Vec<ChatItem>)))]
+async fn chat_list(
+    State(core): State<Core>,
+    user: CurrentUser,
+    Query(q): Query<ChatListQuery>,
+) -> ApiResult<Json<Vec<ChatItem>>> {
+    Ok(Json(chat_items(&core, user.user_id, Some(q.hidden), None).await?))
+}
+
+/// Сотрудники, с которыми можно начать диалог или кого добавить в чат (действующие учётки).
+#[utoipa::path(get, path = "/api/chat/people", tag = "chat", params(ChatPeopleQuery),
+    responses((status = 200, body = Vec<ChatPerson>)))]
+async fn chat_people(
+    State(core): State<Core>,
+    user: CurrentUser,
+    Query(q): Query<ChatPeopleQuery>,
+) -> ApiResult<Json<Vec<ChatPerson>>> {
+    let q = q.q.trim().to_lowercase().replace('ё', "е");
+    if q.chars().count() < 2 {
+        return Ok(Json(Vec::new()));
+    }
+    let like = format!("%{}%", q.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_"));
+    let sql = format!(
+        "SELECT u.id, {NAME} AS name, d.name AS department
+           FROM users u {PEOPLE} LEFT JOIN departments d ON d.id = p.department_id
+          WHERE u.is_active AND u.id <> $1
+            AND (replace(lower({NAME}), chr(1105), chr(1077)) LIKE $2 OR lower(a.sam_account_name) LIKE $2)
+          ORDER BY 2 LIMIT 20"
+    );
+    Ok(Json(sqlx::query_as(&sql).bind(user.user_id).bind(like).fetch_all(&core.db).await?))
+}
+
+async fn active_user(db: impl PgExecutor<'_>, id: Uuid) -> ApiResult<()> {
+    let ok: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM users WHERE id = $1 AND is_active)")
+        .bind(id)
+        .fetch_one(db)
+        .await?;
+    if ok {
+        Ok(())
+    } else {
+        Err(ApiError::bad_request("unknown_user", "Сотрудник не найден или его учётка отключена."))
+    }
+}
+
+/// Личный диалог с сотрудником: открыть существующий или начать.
+#[utoipa::path(post, path = "/api/chat/direct", tag = "chat", request_body = ChatDirectInput,
+    responses((status = 200, body = ChatCreated)))]
+async fn chat_open_direct(
+    State(core): State<Core>,
+    user: CurrentUser,
+    Json(b): Json<ChatDirectInput>,
+) -> ApiResult<Json<ChatCreated>> {
+    if b.user_id == user.user_id {
+        return Err(ApiError::bad_request("self_chat", "Нельзя написать самому себе."));
+    }
+    let (a, z) = if user.user_id < b.user_id { (user.user_id, b.user_id) } else { (b.user_id, user.user_id) };
+    let key = format!("{a}:{z}");
+    if let Some(id) = sqlx::query_scalar::<_, Uuid>("SELECT id FROM chats WHERE direct_key = $1")
+        .bind(&key)
+        .fetch_optional(&core.db)
+        .await?
+    {
+        return Ok(Json(ChatCreated { id }));
+    }
+    active_user(&core.db, b.user_id).await?;
+    let mut tx = core.db.begin().await?;
+    let id: Option<Uuid> = sqlx::query_scalar(
+        "INSERT INTO chats (kind, direct_key, created_by) VALUES ('direct', $1, $2)
+         ON CONFLICT (direct_key) DO NOTHING RETURNING id",
+    )
+    .bind(&key)
+    .bind(user.user_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some(id) = id else {
+        // Собеседник открыл диалог одновременно с нами.
+        tx.rollback().await?;
+        let id =
+            sqlx::query_scalar("SELECT id FROM chats WHERE direct_key = $1").bind(&key).fetch_one(&core.db).await?;
+        return Ok(Json(ChatCreated { id }));
+    };
+    sqlx::query("INSERT INTO chat_members (chat_id, user_id) VALUES ($1, $2), ($1, $3)")
+        .bind(id)
+        .bind(a)
+        .bind(z)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(Json(ChatCreated { id }))
+}
+
+/// Групповой чат: создатель — владелец, участники добавляются сразу и получают уведомление.
+#[utoipa::path(post, path = "/api/chat/groups", tag = "chat", request_body = ChatGroupInput,
+    responses((status = 201, body = ChatCreated)))]
+async fn chat_create_group(
+    State(core): State<Core>,
+    user: CurrentUser,
+    Json(b): Json<ChatGroupInput>,
+) -> ApiResult<(StatusCode, Json<ChatCreated>)> {
+    let title = clean_title(&b.title)?;
+    if b.members.len() > MAX_ADD {
+        return Err(ApiError::bad_request("too_many_members", "Слишком много участников за один раз."));
+    }
+    let mut tx = core.db.begin().await?;
+    let id: Uuid =
+        sqlx::query_scalar("INSERT INTO chats (kind, title, created_by) VALUES ('group', $1, $2) RETURNING id")
+            .bind(&title)
+            .bind(user.user_id)
+            .fetch_one(&mut *tx)
+            .await?;
+    sqlx::query("INSERT INTO chat_members (chat_id, user_id, role, admin_since) VALUES ($1, $2, 'owner', now())")
+        .bind(id)
+        .bind(user.user_id)
+        .execute(&mut *tx)
+        .await?;
+    log_member(&mut *tx, id, user.user_id, Some(user.user_id), "created").await?;
+    let others: Vec<Uuid> = b.members.into_iter().filter(|u| *u != user.user_id).collect();
+    add(&mut tx, id, &title, &others, user.user_id).await?;
+    changed(&mut tx, id, &[]).await?;
+    tx.commit().await?;
+    Ok((StatusCode::CREATED, Json(ChatCreated { id })))
+}
+
+/// Добавить действующих сотрудников; бывшие участники возвращаются (скрытый чат снова виден).
+async fn add(
+    tx: &mut Transaction<'_, Postgres>,
+    chat: Uuid,
+    title: &str,
+    users: &[Uuid],
+    actor: Uuid,
+) -> ApiResult<()> {
+    for u in users {
+        active_user(&mut **tx, *u).await?;
+        let added: Option<Uuid> = sqlx::query_scalar(
+            "INSERT INTO chat_members (chat_id, user_id) VALUES ($1, $2)
+             ON CONFLICT (chat_id, user_id) DO UPDATE
+                SET left_at = NULL, left_reason = NULL, role = 'member', admin_since = NULL, hidden = false
+              WHERE chat_members.left_at IS NOT NULL
+             RETURNING user_id",
+        )
+        .bind(chat)
+        .bind(u)
+        .fetch_optional(&mut **tx)
+        .await?;
+        if added.is_some() {
+            log_member(&mut **tx, chat, *u, Some(actor), "added").await?;
+            notify::notify(&mut **tx, *u, kind::ADDED, json!({"chat": chat, "title": title})).await?;
+        }
+    }
+    Ok(())
+}
+
+// ------------------------------------------------------------------ Чат
+
+#[utoipa::path(get, path = "/api/chat/{id}", tag = "chat", params(("id" = Uuid, Path)),
+    responses((status = 200, body = ChatDetail)))]
+async fn chat_get(State(core): State<Core>, user: CurrentUser, Path(id): Path<Uuid>) -> ApiResult<Json<ChatDetail>> {
+    let m = membership(&core.db, id, user.user_id).await?;
+    let chat = chat_items(&core, user.user_id, None, Some(id)).await?.into_iter().next().ok_or(ApiError::NotFound)?;
+    let members = if m.active() {
+        let sql = format!(
+            "SELECT m.user_id, {NAME} AS name, m.role
+               FROM chat_members m JOIN users u ON u.id = m.user_id {PEOPLE}
+              WHERE m.chat_id = $1 AND m.left_at IS NULL
+              ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END, 2"
+        );
+        sqlx::query_as(&sql).bind(id).fetch_all(&core.db).await?
+    } else {
+        Vec::new()
+    };
+    Ok(Json(ChatDetail { chat, members, can_write: m.active() && !m.locked, can_manage: m.manager() && !m.locked }))
+}
+
+#[utoipa::path(put, path = "/api/chat/{id}/title", tag = "chat", params(("id" = Uuid, Path)), request_body = ChatTitleInput,
+    responses((status = 204)))]
+async fn chat_rename(
+    State(core): State<Core>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+    Json(b): Json<ChatTitleInput>,
+) -> ApiResult<StatusCode> {
+    membership(&core.db, id, user.user_id).await?.require_manager()?;
+    let title = clean_title(&b.title)?;
+    let mut tx = core.db.begin().await?;
+    sqlx::query("UPDATE chats SET title = $2 WHERE id = $1").bind(id).bind(title).execute(&mut *tx).await?;
+    changed(&mut tx, id, &[]).await?;
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Закрепить (личный диалог или действующий групповой чат) и скрыть (только бывший групповой чат).
+#[utoipa::path(put, path = "/api/chat/{id}/prefs", tag = "chat", params(("id" = Uuid, Path)), request_body = ChatPrefsInput,
+    responses((status = 204)))]
+async fn chat_set_prefs(
+    State(core): State<Core>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+    Json(b): Json<ChatPrefsInput>,
+) -> ApiResult<StatusCode> {
+    let m = membership(&core.db, id, user.user_id).await?;
+    if b.pinned == Some(true) && m.group() && !m.active() {
+        return Err(ApiError::bad_request("pin_inactive", "Закрепить можно только чат, в котором вы состоите."));
+    }
+    if b.hidden == Some(true) && (!m.group() || m.active()) {
+        return Err(ApiError::bad_request("hide_active", "Скрыть можно только групповой чат, из которого вы вышли."));
+    }
+    sqlx::query(
+        "UPDATE chat_members SET pinned = coalesce($3, pinned), hidden = coalesce($4, hidden)
+          WHERE chat_id = $1 AND user_id = $2",
+    )
+    .bind(id)
+    .bind(user.user_id)
+    .bind(b.pinned)
+    .bind(b.hidden)
+    .execute(&core.db)
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(post, path = "/api/chat/{id}/read", tag = "chat", params(("id" = Uuid, Path)),
+    responses((status = 204)))]
+async fn chat_mark_read(State(core): State<Core>, user: CurrentUser, Path(id): Path<Uuid>) -> ApiResult<StatusCode> {
+    let m = membership(&core.db, id, user.user_id).await?;
+    m.require_unlocked()?;
+    sqlx::query("UPDATE chat_members SET last_read_at = now() WHERE chat_id = $1 AND user_id = $2")
+        .bind(id)
+        .bind(user.user_id)
+        .execute(&core.db)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ------------------------------------------------------------------ Сообщения
+
+const MESSAGE_COLS: &str = "x.id, x.author_id, x.body AS enc, x.created_at, x.edited_at, x.version";
+
+fn message_sql(filter: &str) -> String {
+    format!(
+        "SELECT {MESSAGE_COLS}, {NAME} AS author_name,
+                (x.author_id = $2 AND $3 AND x.created_at > now() - make_interval(mins => {EDIT_MINUTES}::int)) AS editable
+           FROM chat_messages x JOIN users u ON u.id = x.author_id {PEOPLE}
+          WHERE x.chat_id = $1 {filter}"
+    )
+}
+
+fn open(core: &Core, mut v: Vec<ChatMessage>) -> ApiResult<Vec<ChatMessage>> {
+    for m in &mut v {
+        m.body = decrypt(core, &m.enc)?;
+    }
+    Ok(v)
+}
+
+/// Сообщения по 100, от новых к старым страницами (`before`), внутри страницы — по времени.
+/// Бывшему участнику — только до момента выхода.
+#[utoipa::path(get, path = "/api/chat/{id}/messages", tag = "chat", params(("id" = Uuid, Path), ChatPageQuery),
+    responses((status = 200, body = Vec<ChatMessage>)))]
+async fn chat_list_messages(
+    State(core): State<Core>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+    Query(q): Query<ChatPageQuery>,
+) -> ApiResult<Json<Vec<ChatMessage>>> {
+    let m = membership(&core.db, id, user.user_id).await?;
+    m.require_unlocked()?;
+    let sql = message_sql(&format!(
+        "AND x.created_at <= coalesce($4, 'infinity') AND ($5::uuid IS NULL OR x.id < $5)
+         ORDER BY x.id DESC LIMIT {PAGE}"
+    ));
+    let mut v: Vec<ChatMessage> = sqlx::query_as(&sql)
+        .bind(id)
+        .bind(user.user_id)
+        .bind(m.active())
+        .bind(m.left_at)
+        .bind(q.before)
+        .fetch_all(&core.db)
+        .await?;
+    v.reverse();
+    Ok(Json(open(&core, v)?))
+}
+
+async fn one_message(core: &Core, chat: Uuid, id: Uuid, me: Uuid, active: bool) -> ApiResult<ChatMessage> {
+    let sql = message_sql("AND x.id = $4");
+    let m: ChatMessage = sqlx::query_as(&sql).bind(chat).bind(me).bind(active).bind(id).fetch_one(&core.db).await?;
+    Ok(open(core, vec![m])?.remove(0))
+}
+
+#[utoipa::path(post, path = "/api/chat/{id}/messages", tag = "chat", params(("id" = Uuid, Path)), request_body = ChatMessageInput,
+    responses((status = 201, body = ChatMessage)))]
+async fn chat_send_message(
+    State(core): State<Core>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+    Json(b): Json<ChatMessageInput>,
+) -> ApiResult<(StatusCode, Json<ChatMessage>)> {
+    let m = membership(&core.db, id, user.user_id).await?;
+    if !m.active() {
+        return Err(ApiError::Refused {
+            code: "read_only",
+            message: "Вы вышли из чата — история доступна только для чтения.".into(),
+        });
+    }
+    m.require_unlocked()?;
+    let body = clean_body(&b.body)?;
+    let enc = encrypt(&core, &body)?;
+    let mut tx = core.db.begin().await?;
+    let mid: Uuid =
+        sqlx::query_scalar("INSERT INTO chat_messages (chat_id, author_id, body) VALUES ($1, $2, $3) RETURNING id")
+            .bind(id)
+            .bind(user.user_id)
+            .bind(enc)
+            .fetch_one(&mut *tx)
+            .await?;
+    sqlx::query("UPDATE chats SET last_message_at = now() WHERE id = $1").bind(id).execute(&mut *tx).await?;
+    // Своё сообщение прочитано.
+    sqlx::query("UPDATE chat_members SET last_read_at = now() WHERE chat_id = $1 AND user_id = $2")
+        .bind(id)
+        .bind(user.user_id)
+        .execute(&mut *tx)
+        .await?;
+    changed(&mut tx, id, &[]).await?;
+    tx.commit().await?;
+    Ok((StatusCode::CREATED, Json(one_message(&core, id, mid, user.user_id, true).await?)))
+}
+
+/// Правка своего сообщения в течение 15 минут; прежний текст остаётся в версиях.
+#[utoipa::path(put, path = "/api/chat/{id}/messages/{message}", tag = "chat",
+    params(("id" = Uuid, Path), ("message" = Uuid, Path)), request_body = ChatMessageInput,
+    responses((status = 200, body = ChatMessage)))]
+async fn chat_edit_message(
+    State(core): State<Core>,
+    user: CurrentUser,
+    Path((id, message)): Path<(Uuid, Uuid)>,
+    Json(b): Json<ChatMessageInput>,
+) -> ApiResult<Json<ChatMessage>> {
+    let m = membership(&core.db, id, user.user_id).await?;
+    if !m.active() {
+        return Err(ApiError::Refused {
+            code: "read_only",
+            message: "Вы вышли из чата — история доступна только для чтения.".into(),
+        });
+    }
+    m.require_unlocked()?;
+    let body = clean_body(&b.body)?;
+    let mut tx = core.db.begin().await?;
+    let row: Option<(Uuid, Vec<u8>, i32, OffsetDateTime, bool)> = sqlx::query_as(
+        "SELECT author_id, body, version, coalesce(edited_at, created_at),
+                created_at > now() - make_interval(mins => $3::int)
+           FROM chat_messages WHERE id = $1 AND chat_id = $2 FOR UPDATE",
+    )
+    .bind(message)
+    .bind(id)
+    .bind(EDIT_MINUTES as i32)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let (author, old, version, since, fresh) = row.ok_or(ApiError::NotFound)?;
+    if author != user.user_id {
+        return Err(ApiError::Forbidden);
+    }
+    if !fresh {
+        return Err(ApiError::Refused {
+            code: "edit_expired",
+            message: "Править сообщение можно только 15 минут после отправки.".into(),
+        });
+    }
+    if decrypt(&core, &old)? == body {
+        tx.rollback().await?;
+        return Ok(Json(one_message(&core, id, message, user.user_id, true).await?));
+    }
+    sqlx::query("INSERT INTO chat_message_versions (message_id, version, body, created_at) VALUES ($1, $2, $3, $4)")
+        .bind(message)
+        .bind(version)
+        .bind(old)
+        .bind(since)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("UPDATE chat_messages SET body = $2, edited_at = now(), version = version + 1 WHERE id = $1")
+        .bind(message)
+        .bind(encrypt(&core, &body)?)
+        .execute(&mut *tx)
+        .await?;
+    changed(&mut tx, id, &[]).await?;
+    tx.commit().await?;
+    Ok(Json(one_message(&core, id, message, user.user_id, true).await?))
+}
+
+/// Прежние версии: в личном диалоге — обоим, в групповом чате — автору, владельцу и администраторам.
+#[utoipa::path(get, path = "/api/chat/{id}/messages/{message}/versions", tag = "chat",
+    params(("id" = Uuid, Path), ("message" = Uuid, Path)),
+    responses((status = 200, body = Vec<ChatMessageVersion>)))]
+async fn chat_message_versions(
+    State(core): State<Core>,
+    user: CurrentUser,
+    Path((id, message)): Path<(Uuid, Uuid)>,
+) -> ApiResult<Json<Vec<ChatMessageVersion>>> {
+    let m = membership(&core.db, id, user.user_id).await?;
+    m.require_unlocked()?;
+    let row: Option<(Uuid,)> = sqlx::query_as(
+        "SELECT author_id FROM chat_messages WHERE id = $1 AND chat_id = $2 AND created_at <= coalesce($3, 'infinity')",
+    )
+    .bind(message)
+    .bind(id)
+    .bind(m.left_at)
+    .fetch_optional(&core.db)
+    .await?;
+    let (author,) = row.ok_or(ApiError::NotFound)?;
+    if m.group() && author != user.user_id && !m.manager() {
+        return Err(ApiError::Forbidden);
+    }
+    let mut v: Vec<ChatMessageVersion> = sqlx::query_as(
+        "SELECT version, body AS enc, created_at FROM chat_message_versions WHERE message_id = $1 ORDER BY version",
+    )
+    .bind(message)
+    .fetch_all(&core.db)
+    .await?;
+    for x in &mut v {
+        x.body = decrypt(&core, &x.enc)?;
+    }
+    Ok(Json(v))
+}
+
+// ------------------------------------------------------------------ Состав
+
+#[utoipa::path(post, path = "/api/chat/{id}/members", tag = "chat", params(("id" = Uuid, Path)), request_body = ChatMembersInput,
+    responses((status = 204)))]
+async fn chat_add_members(
+    State(core): State<Core>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+    Json(b): Json<ChatMembersInput>,
+) -> ApiResult<StatusCode> {
+    let m = membership(&core.db, id, user.user_id).await?;
+    m.require_manager()?;
+    if b.user_ids.len() > MAX_ADD {
+        return Err(ApiError::bad_request("too_many_members", "Слишком много участников за один раз."));
+    }
+    let mut tx = core.db.begin().await?;
+    add(&mut tx, id, m.title.as_deref().unwrap_or_default(), &b.user_ids, user.user_id).await?;
+    changed(&mut tx, id, &[]).await?;
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Выбыть из чата: роль сбрасывается, история до этого момента остаётся для чтения.
+async fn depart(db: impl PgExecutor<'_>, chat: Uuid, user: Uuid, reason: &str) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE chat_members SET left_at = now(), left_reason = $3, role = 'member', admin_since = NULL
+          WHERE chat_id = $1 AND user_id = $2",
+    )
+    .bind(chat)
+    .bind(user)
+    .bind(reason)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+async fn target_role(db: impl PgExecutor<'_>, chat: Uuid, user: Uuid) -> ApiResult<String> {
+    sqlx::query_scalar("SELECT role FROM chat_members WHERE chat_id = $1 AND user_id = $2 AND left_at IS NULL")
+        .bind(chat)
+        .bind(user)
+        .fetch_optional(db)
+        .await?
+        .ok_or(ApiError::NotFound)
+}
+
+/// Исключить: владелец — любого, администратор — обычного участника. Владельца исключить нельзя.
+#[utoipa::path(delete, path = "/api/chat/{id}/members/{user}", tag = "chat",
+    params(("id" = Uuid, Path), ("user" = Uuid, Path)), responses((status = 204)))]
+async fn chat_remove_member(
+    State(core): State<Core>,
+    user: CurrentUser,
+    Path((id, target)): Path<(Uuid, Uuid)>,
+) -> ApiResult<StatusCode> {
+    let m = membership(&core.db, id, user.user_id).await?;
+    m.require_manager()?;
+    if target == user.user_id {
+        return Err(ApiError::bad_request("use_leave", "Чтобы выйти из чата, используйте «Выйти»."));
+    }
+    let mut tx = core.db.begin().await?;
+    let role = target_role(&mut *tx, id, target).await?;
+    if role == "owner" || (role == "admin" && m.role != "owner") {
+        return Err(ApiError::Forbidden);
+    }
+    depart(&mut *tx, id, target, "removed").await?;
+    log_member(&mut *tx, id, target, Some(user.user_id), "removed").await?;
+    notify::notify(&mut *tx, target, kind::REMOVED, json!({"chat": id, "title": m.title})).await?;
+    changed(&mut tx, id, &[target]).await?;
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Назначить или снять администратора чата (владелец и администраторы; владельца это не касается).
+#[utoipa::path(put, path = "/api/chat/{id}/members/{user}/role", tag = "chat",
+    params(("id" = Uuid, Path), ("user" = Uuid, Path)), request_body = ChatRoleInput, responses((status = 204)))]
+async fn chat_set_role(
+    State(core): State<Core>,
+    user: CurrentUser,
+    Path((id, target)): Path<(Uuid, Uuid)>,
+    Json(b): Json<ChatRoleInput>,
+) -> ApiResult<StatusCode> {
+    let m = membership(&core.db, id, user.user_id).await?;
+    m.require_manager()?;
+    if !matches!(b.role.as_str(), "admin" | "member") {
+        return Err(ApiError::bad_request("invalid_role", "Роль — администратор или участник."));
+    }
+    let mut tx = core.db.begin().await?;
+    let role = target_role(&mut *tx, id, target).await?;
+    if role == "owner" {
+        return Err(ApiError::Forbidden);
+    }
+    if role != b.role {
+        sqlx::query(
+            "UPDATE chat_members SET role = $3, admin_since = CASE WHEN $3 = 'admin' THEN now() END
+              WHERE chat_id = $1 AND user_id = $2",
+        )
+        .bind(id)
+        .bind(target)
+        .bind(&b.role)
+        .execute(&mut *tx)
+        .await?;
+        log_member(&mut *tx, id, target, Some(user.user_id), &b.role).await?;
+        changed(&mut tx, id, &[]).await?;
+    }
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Выйти из группового чата. Владелец выйти не может: владение передаёт суперадминистратор.
+#[utoipa::path(post, path = "/api/chat/{id}/leave", tag = "chat", params(("id" = Uuid, Path)),
+    responses((status = 204)))]
+async fn chat_leave(State(core): State<Core>, user: CurrentUser, Path(id): Path<Uuid>) -> ApiResult<StatusCode> {
+    let m = membership(&core.db, id, user.user_id).await?;
+    if !m.group() {
+        return Err(ApiError::bad_request("direct_leave", "Из личного диалога выйти нельзя."));
+    }
+    if !m.active() {
+        return Ok(StatusCode::NO_CONTENT);
+    }
+    if m.role == "owner" {
+        return Err(ApiError::bad_request(
+            "owner_cannot_leave",
+            "Владелец не может выйти из чата: сначала нужно передать владение.",
+        ));
+    }
+    let mut tx = core.db.begin().await?;
+    depart(&mut *tx, id, user.user_id, "left").await?;
+    log_member(&mut *tx, id, user.user_id, Some(user.user_id), "left").await?;
+    changed(&mut tx, id, &[user.user_id]).await?;
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// История состава — владельцу и администраторам чата.
+#[utoipa::path(get, path = "/api/chat/{id}/member-events", tag = "chat", params(("id" = Uuid, Path)),
+    responses((status = 200, body = Vec<ChatMemberEvent>)))]
+async fn chat_member_events(
+    State(core): State<Core>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<Vec<ChatMemberEvent>>> {
+    if !membership(&core.db, id, user.user_id).await?.manager() {
+        return Err(ApiError::Forbidden);
+    }
+    let sql = format!(
+        "SELECT (SELECT {NAME} FROM users u {PEOPLE} WHERE u.id = e.user_id) AS user_name,
+                (SELECT {NAME} FROM users u {PEOPLE} WHERE u.id = e.actor_id) AS actor_name,
+                e.action, e.created_at
+           FROM chat_member_events e WHERE e.chat_id = $1 ORDER BY e.created_at DESC, e.id DESC LIMIT 500"
+    );
+    Ok(Json(sqlx::query_as(&sql).bind(id).fetch_all(&core.db).await?))
+}
+
+// ------------------------------------------------------------------ Суперадминистратор
+
+/// Групповые чаты: название, число участников, владелец, блокировка. Без сообщений; личных диалогов здесь нет.
+#[utoipa::path(get, path = "/api/admin/chats", tag = "chat", responses((status = 200, body = Vec<AdminChat>)))]
+async fn chat_admin_list(State(core): State<Core>, user: CurrentUser) -> ApiResult<Json<Vec<AdminChat>>> {
+    user.require_superadmin()?;
+    let sql = format!(
+        "SELECT c.id, c.title,
+                (SELECT count(*) FROM chat_members m WHERE m.chat_id = c.id AND m.left_at IS NULL) AS members,
+                (SELECT {NAME} FROM chat_members m JOIN users u ON u.id = m.user_id {PEOPLE}
+                  WHERE m.chat_id = c.id AND m.role = 'owner' AND m.left_at IS NULL) AS owner_name,
+                c.locked, c.created_at
+           FROM chats c WHERE c.kind = 'group'
+          ORDER BY c.locked DESC, lower(c.title)"
+    );
+    Ok(Json(sqlx::query_as(&sql).fetch_all(&core.db).await?))
+}
+
+/// Назначить владельца группового чата (в том числе себя). Сразу, без согласия; прежний владелец
+/// становится администратором, участником или выбывает. Заблокированный чат разблокируется.
+#[utoipa::path(post, path = "/api/admin/chats/{id}/owner", tag = "chat", params(("id" = Uuid, Path)), request_body = ChatOwnerInput,
+    responses((status = 204)))]
+async fn chat_admin_assign_owner(
+    State(core): State<Core>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+    Json(b): Json<ChatOwnerInput>,
+) -> ApiResult<StatusCode> {
+    user.require_superadmin()?;
+    if !matches!(b.previous.as_str(), "admin" | "member" | "remove") {
+        return Err(ApiError::bad_request(
+            "invalid_previous",
+            "Прежний владелец: администратор, участник или исключить.",
+        ));
+    }
+    let mut tx = core.db.begin().await?;
+    let row: Option<(String, Option<String>, bool)> =
+        sqlx::query_as("SELECT kind, title, locked FROM chats WHERE id = $1 FOR UPDATE")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    let (chat_kind, title, locked) = row.ok_or(ApiError::NotFound)?;
+    if chat_kind != "group" {
+        return Err(ApiError::NotFound);
+    }
+    active_user(&mut *tx, b.user_id).await?;
+    let previous: Option<Uuid> = sqlx::query_scalar(
+        "SELECT user_id FROM chat_members WHERE chat_id = $1 AND role = 'owner' AND left_at IS NULL",
+    )
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if previous == Some(b.user_id) {
+        return Err(ApiError::bad_request("already_owner", "Этот сотрудник уже владелец чата."));
+    }
+    if let Some(p) = previous {
+        if b.previous == "remove" {
+            depart(&mut *tx, id, p, "removed").await?;
+            log_member(&mut *tx, id, p, Some(user.user_id), "removed").await?;
+            notify::notify(&mut *tx, p, kind::REMOVED, json!({"chat": id, "title": title})).await?;
+        } else {
+            sqlx::query(
+                "UPDATE chat_members SET role = $3, admin_since = CASE WHEN $3 = 'admin' THEN now() END
+                  WHERE chat_id = $1 AND user_id = $2",
+            )
+            .bind(id)
+            .bind(p)
+            .bind(&b.previous)
+            .execute(&mut *tx)
+            .await?;
+            log_member(&mut *tx, id, p, Some(user.user_id), &b.previous).await?;
+        }
+    }
+    sqlx::query(
+        "INSERT INTO chat_members (chat_id, user_id, role, admin_since) VALUES ($1, $2, 'owner', now())
+         ON CONFLICT (chat_id, user_id) DO UPDATE
+            SET role = 'owner', left_at = NULL, left_reason = NULL, hidden = false,
+                admin_since = CASE WHEN chat_members.left_at IS NULL THEN coalesce(chat_members.admin_since, now()) ELSE now() END",
+    )
+    .bind(id)
+    .bind(b.user_id)
+    .execute(&mut *tx)
+    .await?;
+    log_member(&mut *tx, id, b.user_id, Some(user.user_id), "owner").await?;
+    if locked {
+        sqlx::query("UPDATE chats SET locked = false WHERE id = $1").bind(id).execute(&mut *tx).await?;
+        log_member(&mut *tx, id, b.user_id, Some(user.user_id), "unlocked").await?;
+        let members: Vec<Uuid> =
+            sqlx::query_scalar("SELECT user_id FROM chat_members WHERE chat_id = $1 AND left_at IS NULL")
+                .bind(id)
+                .fetch_all(&mut *tx)
+                .await?;
+        for u in members {
+            notify::notify(&mut *tx, u, kind::UNLOCKED, json!({"chat": id, "title": title})).await?;
+        }
+    } else {
+        if b.user_id != user.user_id {
+            notify::notify(&mut *tx, b.user_id, kind::OWNER, json!({"chat": id, "title": title})).await?;
+        }
+        // Владельца назначил суперадминистратор (в том числе себя): участники должны об этом знать —
+        // новый владелец читает всю историю чата.
+        let others: Vec<Uuid> = sqlx::query_scalar(
+            "SELECT user_id FROM chat_members
+              WHERE chat_id = $1 AND left_at IS NULL AND user_id <> $2 AND user_id <> $3",
+        )
+        .bind(id)
+        .bind(b.user_id)
+        .bind(user.user_id)
+        .fetch_all(&mut *tx)
+        .await?;
+        for u in others {
+            notify::notify(&mut *tx, u, kind::OWNER_CHANGED, json!({"chat": id, "title": title})).await?;
+        }
+    }
+    audit::record(
+        &mut *tx,
+        &user.actor,
+        Entry::new("chat.owner.assign", Source::Portal).object("chat", id).details(json!({
+            "previous_owner": previous,
+            "new_owner": b.user_id,
+            "previous_becomes": b.previous,
+            "self_assigned": b.user_id == user.user_id,
+            "unlocked": locked,
+        })),
+    )
+    .await?;
+    let mut also = vec![b.user_id];
+    also.extend(previous);
+    changed(&mut tx, id, &also).await?;
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+fn shown(n: i64) -> Option<i64> {
+    (n >= MIN_COUNT).then_some(n)
+}
+
+/// Обезличенная статистика по всему порталу по месяцам (без разбивки по людям, отделам и чатам).
+#[utoipa::path(get, path = "/api/admin/chats/stats", tag = "chat", responses((status = 200, body = ChatStats)))]
+async fn chat_admin_stats(State(core): State<Core>, user: CurrentUser) -> ApiResult<Json<ChatStats>> {
+    user.require_superadmin()?;
+    let (direct, group): (i64, i64) = sqlx::query_as(
+        "SELECT count(*) FILTER (WHERE kind = 'direct'), count(*) FILTER (WHERE kind = 'group') FROM chats",
+    )
+    .fetch_one(&core.db)
+    .await?;
+    let rows: Vec<(String, i64, i64, i64, i64, i64)> = sqlx::query_as(
+        "SELECT to_char(date_trunc('month', x.created_at), 'YYYY-MM'),
+                count(*), count(*) FILTER (WHERE c.kind = 'direct'), count(*) FILTER (WHERE c.kind = 'group'),
+                count(*) FILTER (WHERE x.edited_at IS NOT NULL), count(DISTINCT x.author_id)
+           FROM chat_messages x JOIN chats c ON c.id = x.chat_id
+          GROUP BY 1 ORDER BY 1 DESC LIMIT 36",
+    )
+    .fetch_all(&core.db)
+    .await?;
+    let months = rows
+        .into_iter()
+        .map(|(month, all, d, g, e, s)| ChatStatsMonth {
+            month,
+            messages: shown(all),
+            direct_messages: shown(d),
+            group_messages: shown(g),
+            edited: shown(e),
+            senders: shown(s),
+        })
+        .collect();
+    Ok(Json(ChatStats { direct_chats: shown(direct), group_chats: shown(group), months }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn body_and_title_rules() {
+        assert!(clean_body("  ").is_err());
+        assert_eq!(clean_body(" привет \n").unwrap(), "привет");
+        assert!(clean_body(&"я".repeat(MAX_BODY + 1)).is_err());
+        assert!(clean_body(&"я".repeat(MAX_BODY)).is_ok());
+        assert!(clean_title("a\nb").is_err());
+        assert!(clean_title(&"x".repeat(MAX_TITLE + 1)).is_err());
+        assert_eq!(clean_title("  Отдел ИТ ").unwrap(), "Отдел ИТ");
+        assert_eq!(shown(4), None);
+        assert_eq!(shown(5), Some(5));
+    }
+}

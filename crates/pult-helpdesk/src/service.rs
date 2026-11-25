@@ -131,6 +131,13 @@ pub struct RatingInput {
     /// `up` — хорошо, `down` — плохо.
     pub value: String,
     pub comment: Option<String>,
+    /// Подробный опрос (необязательно): баллы 1–5 за скорость, качество решения и вежливость.
+    #[serde(default)]
+    pub speed: Option<i16>,
+    #[serde(default)]
+    pub quality: Option<i16>,
+    #[serde(default)]
+    pub courtesy: Option<i16>,
 }
 
 /// Заявитель оценивает решённую или закрытую заявку. «Плохо» — исполнителю и руководителю IT.
@@ -144,6 +151,9 @@ async fn rate_ticket(
     let who = Who::from_user(&user);
     if !matches!(b.value.as_str(), "up" | "down") {
         return Err(ApiError::bad_request("invalid_rating", "Оценка — хорошо или плохо."));
+    }
+    if [b.speed, b.quality, b.courtesy].into_iter().flatten().any(|v| !(1..=5).contains(&v)) {
+        return Err(ApiError::bad_request("invalid_rating", "Баллы — от 1 до 5."));
     }
     let comment =
         b.comment.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(|s| s.chars().take(2000).collect::<String>());
@@ -159,13 +169,18 @@ async fn rate_ticket(
         .fetch_optional(&mut *tx)
         .await?;
     sqlx::query(
-        "INSERT INTO ticket_ratings (ticket_id, value, comment, rated_by) VALUES ($1, $2, $3, $4)
-         ON CONFLICT (ticket_id) DO UPDATE SET value = EXCLUDED.value, comment = EXCLUDED.comment, updated_at = now()",
+        "INSERT INTO ticket_ratings (ticket_id, value, comment, rated_by, speed, quality, courtesy)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (ticket_id) DO UPDATE SET value = EXCLUDED.value, comment = EXCLUDED.comment, speed = EXCLUDED.speed,
+             quality = EXCLUDED.quality, courtesy = EXCLUDED.courtesy, updated_at = now()",
     )
     .bind(t.id)
     .bind(&b.value)
     .bind(&comment)
     .bind(who.user)
+    .bind(b.speed)
+    .bind(b.quality)
+    .bind(b.courtesy)
     .execute(&mut *tx)
     .await?;
     event(&mut tx, t.id, who.user, "rated", json!(before), json!(b.value)).await?;

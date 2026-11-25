@@ -69,13 +69,24 @@ pub async fn needed(st: &ApiState) -> Result<(bool, bool), sqlx::Error> {
 pub struct SetupStatus {
     pub needed: bool,
     pub has_domain: bool,
+    /// Вход через домен (Kerberos) включён: на странице входа — кнопка «Войти через домен».
+    pub kerberos: bool,
+    /// Вход через провайдера OpenID Connect включён: надпись кнопки (пусто — по умолчанию).
+    pub oidc: Option<String>,
 }
 
 /// Состояние мастера первого запуска (без входа).
 #[utoipa::path(get, path = "/api/setup/status", tag = "setup", responses((status = 200, body = SetupStatus)))]
 async fn status(State(st): State<ApiState>) -> ApiResult<Json<SetupStatus>> {
     let (needed, has_domain) = needed(&st).await?;
-    Ok(Json(SetupStatus { needed, has_domain }))
+    let sec: pult_core::settings::SecuritySettings = pult_core::settings::load(&st.core.db).await?;
+    let oidc: pult_core::settings::OidcSettings = pult_core::settings::load(&st.core.db).await?;
+    Ok(Json(SetupStatus {
+        needed,
+        has_domain,
+        kerberos: has_domain && sec.kerberos_login,
+        oidc: (has_domain && oidc.enabled).then(|| oidc.button_label.trim().to_string()),
+    }))
 }
 
 /// Мастер ещё нужен и код верный — иначе 404 или 403.
@@ -333,6 +344,44 @@ async fn get_backup(State(st): State<ApiState>, user: CurrentUser) -> ApiResult<
     Ok(Json(pult_core::settings::load(&st.core.db).await?))
 }
 
+/// Политика резервных копий: сколько хранить и проверять ли каждую.
+#[utoipa::path(get, path = "/api/admin/backup/policy", tag = "admin", responses((status = 200, body = crate::backup::BackupPolicy)))]
+async fn get_backup_policy(
+    State(st): State<ApiState>,
+    user: CurrentUser,
+) -> ApiResult<Json<crate::backup::BackupPolicy>> {
+    user.require(&perm::SETTINGS_MANAGE)?;
+    Ok(Json(pult_core::settings::load(&st.core.db).await?))
+}
+
+/// Изменить политику резервных копий. Лишние старые копии удаляются при следующей копии.
+#[utoipa::path(put, path = "/api/admin/backup/policy", tag = "admin", request_body = crate::backup::BackupPolicy,
+    responses((status = 200, body = crate::backup::BackupPolicy), (status = 400, body = pult_core::error::ErrorBody)))]
+async fn put_backup_policy(
+    State(st): State<ApiState>,
+    user: CurrentUser,
+    Json(b): Json<crate::backup::BackupPolicy>,
+) -> ApiResult<Json<crate::backup::BackupPolicy>> {
+    user.require(&perm::SETTINGS_MANAGE)?;
+    if !b.valid() {
+        return Err(ApiError::bad_request("invalid_settings", "Хранить можно от 1 до 365 копий."));
+    }
+    let mut tx = st.core.db.begin().await?;
+    let before: crate::backup::BackupPolicy = pult_core::settings::load(&mut *tx).await?;
+    pult_core::settings::save(&mut *tx, &b, Some(user.user_id)).await?;
+    audit::record(
+        &mut *tx,
+        &user.actor,
+        Entry::new("settings.update", Source::Portal).object("settings", "backup_policy").details(json!({
+            "keep": {"old": before.keep, "new": b.keep},
+            "verify": {"old": before.verify, "new": b.verify},
+        })),
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(Json(b))
+}
+
 /// Язык установки, выбранный в мастере.
 #[derive(Deserialize, ToSchema)]
 pub struct InstallLanguage {
@@ -385,6 +434,7 @@ pub fn routes() -> OpenApiRouter<ApiState> {
     OpenApiRouter::new()
         .routes(routes!(put_install_language))
         .routes(routes!(get_backup))
+        .routes(routes!(get_backup_policy, put_backup_policy))
         .routes(routes!(status))
         .routes(routes!(verify))
         .routes(routes!(test))

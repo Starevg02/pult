@@ -464,37 +464,82 @@ export function Links({ d }: { d: TicketDetail }) {
   );
 }
 
-/** Оценка решения заявителем: 👍 / 👎 с комментарием. */
+const SURVEY = ["speed", "quality", "courtesy"] as const;
+type SurveyKey = (typeof SURVEY)[number];
+
+/** Балл 1–5 подробного опроса; повторный щелчок снимает выбор. */
+function ScoreRow({ label, value, onChange }: { label: string; value: number | null; onChange: (v: number | null) => void }) {
+  return (
+    <div role="radiogroup" aria-label={label} className="flex flex-wrap items-center gap-1">
+      <span className="w-40 text-muted">{label}</span>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button
+          key={n}
+          type="button"
+          role="radio"
+          aria-checked={value === n}
+          onClick={() => onChange(value === n ? null : n)}
+          className={`h-8 w-8 rounded-lg border text-sm ${value !== null && n <= value ? "border-accent bg-accent text-paper" : "border-control bg-paper"}`}
+        >
+          {n}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Оценка решения заявителем: 👍 / 👎, по желанию баллы 1–5 и комментарий. */
 export function Rating({ d }: { d: TicketDetail }) {
   const { t } = useTranslation();
   const x = d.ticket;
   const [value, setValue] = useState<"up" | "down" | null>(null);
   const [comment, setComment] = useState("");
-  const rate = useTicketMutation(x.number, (v: "up" | "down") => ok(api.POST("/api/helpdesk/tickets/{number}/rating", { params: { path: { number: x.number } }, body: { value: v, comment: comment || null } })), () => setValue(null));
+  const [scores, setScores] = useState<Record<SurveyKey, number | null>>({ speed: null, quality: null, courtesy: null });
+  const rate = useTicketMutation(
+    x.number,
+    (v: "up" | "down") =>
+      ok(api.POST("/api/helpdesk/tickets/{number}/rating", { params: { path: { number: x.number } }, body: { value: v, comment: comment || null, ...scores } })),
+    () => setValue(null),
+  );
   const done = ["resolved", "closed"].includes(x.status);
   if (!done) return null;
-  if (x.rating)
+  if (x.rating) {
+    const given = SURVEY.map((k) => [k, x[`rating_${k}`]] as const).filter(([, v]) => v != null);
     return (
       <div className="rounded-xl border border-line bg-paper p-3 text-sm">
         {t("card.ratedAs")} {x.rating === "up" ? "👍" : "👎"} {x.rating_comment && <span className="text-muted">— {x.rating_comment}</span>}
+        {given.length > 0 && (
+          <div className="mt-1 text-muted">{given.map(([k, v]) => `${t(`card.survey.${k}`)}: ${v}/5`).join(" · ")}</div>
+        )}
       </div>
     );
+  }
   if (!d.is_requester) return null;
   return (
     <div className="rounded-xl border border-line bg-paper p-3 text-sm">
       <div className="mb-2 font-medium">{t("card.rateQuestion")}</div>
       <div className="flex gap-2">
-        <Button variant={value === "up" ? "primary" : "secondary"} onClick={() => rate.mutate("up")}>
+        <Button variant={value === "up" ? "primary" : "secondary"} onClick={() => setValue("up")}>
           👍 {t("card.good")}
         </Button>
         <Button variant={value === "down" ? "primary" : "secondary"} onClick={() => setValue("down")}>
           👎 {t("card.bad")}
         </Button>
       </div>
-      {value === "down" && (
+      {value && (
         <div className="mt-2 space-y-2">
-          <textarea rows={2} value={comment} onChange={(e) => setComment(e.target.value)} placeholder={t("card.badComment")} className="w-full rounded-lg border border-control bg-paper px-3 py-2 text-sm" />
-          <Button variant="primary" disabled={rate.isPending} onClick={() => rate.mutate("down")}>
+          <div className="text-muted">{t("card.survey.hint")}</div>
+          {SURVEY.map((k) => (
+            <ScoreRow key={k} label={t(`card.survey.${k}`)} value={scores[k]} onChange={(v) => setScores({ ...scores, [k]: v })} />
+          ))}
+          <textarea
+            rows={2}
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder={value === "down" ? t("card.badComment") : t("card.goodComment")}
+            className="w-full rounded-lg border border-control bg-paper px-3 py-2 text-sm"
+          />
+          <Button variant="primary" disabled={rate.isPending} onClick={() => rate.mutate(value)}>
             {t("card.sendRating")}
           </Button>
         </div>

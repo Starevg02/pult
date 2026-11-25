@@ -299,9 +299,14 @@ async fn device_by_key(core: &Core, headers: &HeaderMap) -> ApiResult<(Uuid, Str
 
 type AgentPackageRow = (Uuid, String, Vec<u8>, Option<Vec<u8>>);
 
-/// Назначенное обновление, если версия агента другая.
-async fn pending_update(core: &Core, cfg: &RemoteSettings, version: Option<&str>) -> ApiResult<Option<AgentUpdate>> {
+/// Назначенное обновление, если версия агента другая. Пакеты обновления собираются только для Windows:
+/// агентам на других ОС их не предлагаем.
+async fn pending_update(core: &Core, cfg: &RemoteSettings, c: &Clean) -> ApiResult<Option<AgentUpdate>> {
     let Some(id) = cfg.update_package_id else { return Ok(None) };
+    if !c.os.as_deref().is_some_and(|o| o.starts_with("windows")) {
+        return Ok(None);
+    }
+    let version = c.agent_version.as_deref();
     let p: Option<AgentPackageRow> = sqlx::query_as(
         "SELECT id, version, sha256, signature FROM agent_packages WHERE id = $1 AND kind = 'agent_update'",
     )
@@ -333,13 +338,18 @@ pub async fn report(
         // Ключ одного ПК не годится для отчётов под другим именем (переименование — новая регистрация).
         return Err(ApiError::Conflict { current: json!({"hostname": hostname}) });
     }
+    let hw = r.inventory.as_ref().map(crate::inventory::clean);
     let mut tx = core.db.begin().await?;
     store(&mut tx, device, &c, actor.ip).await?;
+    if let Some(hw) = &hw {
+        crate::inventory::store(&mut tx, device, hw).await?;
+    }
     tx.commit().await?;
     let cfg: RemoteSettings = settings::load(&core.db).await?;
     Ok(Json(ReportResponse {
         next_report_secs: cfg.report_interval_secs.clamp(30, 600),
-        update: pending_update(&core, &cfg, c.agent_version.as_deref()).await?,
+        update: pending_update(&core, &cfg, &c).await?,
+        want_inventory: crate::inventory::wanted(&core, device).await?,
     }))
 }
 
@@ -400,6 +410,7 @@ mod tests {
             fqdn: Some("WS-001.Corp.Local".into()),
             os_version: None,
             ip_addrs: vec!["10.0.0.5".into(), "127.0.0.1".into(), "bogus".into(), "::ffff:10.0.0.6".into()],
+            inventory: None,
         }
     }
 

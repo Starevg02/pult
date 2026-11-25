@@ -7,14 +7,22 @@ use crate::{
     config::{self, Settings, State},
     update,
 };
-use pult_api_types::AgentUpdate;
+use pult_api_types::{AgentUpdate, HardwareInventory};
 use pult_core::Secret;
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    path::PathBuf,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tokio::sync::{Notify, watch};
 
 /// Что зависит от платформы: сбор сведений и установка обновления.
 pub trait Host: Send + Sync {
     fn collect(&self) -> anyhow::Result<AgentReport>;
+    /// Оборудование и программы — дольше обычного отчёта, поэтому отдельно и по просьбе портала.
+    fn inventory(&self) -> Option<HardwareInventory> {
+        None
+    }
     /// Ставит проверенный пакет. На Windows — замена exe и выход: служба перезапустится новой версией.
     fn install_update(&self, data: &[u8]) -> anyhow::Result<()>;
 }
@@ -26,6 +34,10 @@ pub fn backoff(failures: u32) -> Duration {
 
 /// После события сессии отчёт уходит не сразу: вход порождает несколько событий подряд.
 pub const SESSION_EVENT_DELAY: Duration = Duration::from_secs(3);
+
+/// Портал просит оборудование, а прошлая отправка была недавно (сведения не собрались или не
+/// сохранились) — не чаще раза в час.
+pub const INVENTORY_RETRY: Duration = Duration::from_secs(3600);
 
 #[derive(Debug, thiserror::Error)]
 pub enum CycleError {
@@ -46,6 +58,12 @@ pub struct Agent<H: Host> {
     portal: Option<Portal>,
     /// Пакет, который не прошёл проверку: не скачиваем его снова каждую минуту.
     rejected_update: Option<String>,
+    /// Портал ждёт оборудование и программы; при запуске — да.
+    want_inventory: bool,
+    /// Когда оборудование последний раз ушло на портал.
+    inventory_sent: Option<Instant>,
+    /// Собранное, но ещё не доставленное (портал недоступен): не собираем заново каждый цикл.
+    inventory_ready: Option<(Instant, HardwareInventory)>,
 }
 
 impl<H: Host> Agent<H> {
@@ -54,7 +72,16 @@ impl<H: Host> Agent<H> {
             Some(p) => Some(Portal::new(p)?),
             None => None,
         };
-        Ok(Self { host, settings, state_path, portal, rejected_update: None })
+        Ok(Self {
+            host,
+            settings,
+            state_path,
+            portal,
+            rejected_update: None,
+            want_inventory: true,
+            inventory_sent: None,
+            inventory_ready: None,
+        })
     }
 
     fn portal(&self) -> Result<&Portal, CycleError> {
@@ -74,10 +101,26 @@ impl<H: Host> Agent<H> {
         Ok(st)
     }
 
+    /// Пора ли собрать оборудование: портал просит, и с прошлой отправки прошло не меньше часа.
+    pub fn inventory_due(&self) -> bool {
+        self.want_inventory && self.inventory_sent.is_none_or(|t| t.elapsed() >= INVENTORY_RETRY)
+    }
+
     /// Один отчёт. Возвращает паузу до следующего.
     pub async fn cycle(&mut self) -> Result<Duration, CycleError> {
-        let report = self.host.collect().map_err(|e| CycleError::Other(format!("{e:#}")))?;
-        let state = match config::load_state(&self.state_path, self.portal_url()) {
+        let mut report = self.host.collect().map_err(|e| CycleError::Other(format!("{e:#}")))?;
+        let with_inventory = self.inventory_due();
+        if with_inventory {
+            report.inventory = match &self.inventory_ready {
+                Some((at, inv)) if at.elapsed() < INVENTORY_RETRY => Some(inv.clone()),
+                _ => {
+                    let inv = self.host.inventory();
+                    self.inventory_ready = inv.clone().map(|i| (Instant::now(), i));
+                    inv
+                }
+            };
+        }
+        let mut state = match config::load_state(&self.state_path, self.portal_url()) {
             Some(s) => s,
             None => self.enroll(&report).await?,
         };
@@ -87,11 +130,16 @@ impl<H: Host> Agent<H> {
             Err(PortalError::Unauthorized | PortalError::Renamed) => {
                 tracing::warn!("портал не принял ключ агента — повторная регистрация");
                 config::clear_state(&self.state_path);
-                let st = self.enroll(&report).await?;
-                self.portal()?.report(&st.agent_key, &report).await?
+                state = self.enroll(&report).await?;
+                self.portal()?.report(&state.agent_key, &report).await?
             }
             Err(e) => return Err(e.into()),
         };
+        if with_inventory {
+            self.inventory_sent = Some(Instant::now());
+            self.inventory_ready = None;
+        }
+        self.want_inventory = resp.want_inventory;
         if let Some(u) = resp.update {
             self.update(&state.agent_key, &u).await;
         }
@@ -228,6 +276,21 @@ mod tests {
     fn plain_http_portal_is_refused() {
         let s = Settings { portal: Some("http://pult.example.local/".into()), ..Default::default() };
         assert!(matches!(Agent::new(Fake, s, PathBuf::from("x")), Err(CycleError::Portal(PortalError::NotHttps))));
+    }
+
+    #[test]
+    fn inventory_schedule() {
+        let mut a = Agent::new(Fake, Settings::default(), PathBuf::from("x")).unwrap();
+        assert!(a.inventory_due(), "при запуске — сразу");
+        a.inventory_sent = Some(Instant::now());
+        assert!(!a.inventory_due(), "только что отправлено, портал просит снова — ждём час");
+        a.want_inventory = false;
+        assert!(!a.inventory_due(), "портал не просит");
+        // Сразу после загрузки ОС на час назад от Instant не отступить — тогда проверка пропускается.
+        if let Some(t) = Instant::now().checked_sub(INVENTORY_RETRY) {
+            (a.want_inventory, a.inventory_sent) = (true, Some(t));
+            assert!(a.inventory_due(), "час прошёл");
+        }
     }
 
     #[tokio::test]

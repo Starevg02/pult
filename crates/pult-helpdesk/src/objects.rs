@@ -176,6 +176,8 @@ where
         .routes(routes!(update_asset_type))
         .routes(routes!(list_assets, create_asset))
         .routes(routes!(get_asset, update_asset))
+        .routes(routes!(handover))
+        .routes(routes!(my_assets))
         .routes(routes!(add_link))
         .routes(routes!(remove_link))
         .routes(routes!(merge_ticket))
@@ -322,6 +324,8 @@ pub struct ObjectCard {
     /// Заявки с этим объектом, новые сверху. Для сотрудника — и его обращения.
     pub tickets: Vec<ObjectTicket>,
     pub asset: Option<Asset>,
+    /// История оборудования: выдача, возврат, передача, правки. Для других объектов — пусто.
+    pub events: Vec<AssetEvent>,
 }
 
 /// Карточка объекта с историей заявок.
@@ -347,8 +351,12 @@ async fn object_card(
     .bind(id)
     .fetch_all(&core.db)
     .await?;
-    let asset = if kind == "asset" { fetch_asset(&core, id).await? } else { None };
-    Ok(Json(ObjectCard { kind, id, label, detail, tickets, asset }))
+    let (asset, events) = if kind == "asset" {
+        (fetch_asset(&core, id).await?, events_of(&core.db, id).await?)
+    } else {
+        (None, Vec::new())
+    };
+    Ok(Json(ObjectCard { kind, id, label, detail, tickets, asset, events }))
 }
 
 // ------------------------------------------------------------------ Каталог оборудования
@@ -361,6 +369,11 @@ pub struct AssetType {
     pub fields: Value,
     pub is_active: bool,
     pub count: i64,
+    /// Состояния типа и разрешённые переходы.
+    #[schema(value_type = crate::cmdb::Lifecycle)]
+    pub lifecycle: Value,
+    /// Объекты типа показываются в «Состоянии сервисов».
+    pub show_status: bool,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -371,6 +384,9 @@ pub struct AssetTypeInput {
     pub fields: Vec<tickets::FormField>,
     #[serde(default = "yes")]
     pub is_active: bool,
+    /// Показывать объекты типа в «Состоянии сервисов». Не передано — без изменений (при создании — нет).
+    #[serde(default)]
+    pub show_status: Option<bool>,
 }
 
 fn yes() -> bool {
@@ -381,7 +397,7 @@ fn yes() -> bool {
 async fn list_asset_types(State(core): State<Core>, user: CurrentUser) -> ApiResult<Json<Vec<AssetType>>> {
     user.require(&perm::WORK)?;
     let rows = sqlx::query_as(
-        "SELECT t.id, t.name, t.fields, t.is_active, (SELECT count(*) FROM assets a WHERE a.type_id = t.id) AS count
+        "SELECT t.id, t.name, t.fields, t.is_active, (SELECT count(*) FROM assets a WHERE a.type_id = t.id) AS count, t.lifecycle, t.show_status
            FROM asset_types t ORDER BY t.name",
     )
     .fetch_all(&core.db)
@@ -410,20 +426,22 @@ async fn create_asset_type(
 ) -> ApiResult<(StatusCode, Json<Value>)> {
     user.require(&perm::ADMIN)?;
     check_type(&b)?;
-    let id: Uuid =
-        sqlx::query_scalar("INSERT INTO asset_types (name, fields, is_active) VALUES ($1, $2, $3) RETURNING id")
-            .bind(b.name.trim())
-            .bind(json!(b.fields))
-            .bind(b.is_active)
-            .fetch_one(&core.db)
-            .await
-            .map_err(dup)?;
+    let id: Uuid = sqlx::query_scalar(
+        "INSERT INTO asset_types (name, fields, is_active, show_status) VALUES ($1, $2, $3, $4) RETURNING id",
+    )
+    .bind(b.name.trim())
+    .bind(json!(b.fields))
+    .bind(b.is_active)
+    .bind(b.show_status.unwrap_or(false))
+    .fetch_one(&core.db)
+    .await
+    .map_err(dup)?;
     audit::record(&core.db, &user.actor, Entry::new("asset_type.create", Source::Portal).object("asset_type", id))
         .await?;
     Ok((StatusCode::CREATED, Json(json!({"id": id}))))
 }
 
-fn dup(e: sqlx::Error) -> ApiError {
+pub(crate) fn dup(e: sqlx::Error) -> ApiError {
     match &e {
         sqlx::Error::Database(d) if d.is_unique_violation() => {
             ApiError::bad_request("duplicate", "Такое название или инвентарный номер уже есть.")
@@ -441,15 +459,19 @@ async fn update_asset_type(
 ) -> ApiResult<StatusCode> {
     user.require(&perm::ADMIN)?;
     check_type(&b)?;
-    let n = sqlx::query("UPDATE asset_types SET name = $2, fields = $3, is_active = $4 WHERE id = $1")
-        .bind(id)
-        .bind(b.name.trim())
-        .bind(json!(b.fields))
-        .bind(b.is_active)
-        .execute(&core.db)
-        .await
-        .map_err(dup)?
-        .rows_affected();
+    let n = sqlx::query(
+        "UPDATE asset_types SET name = $2, fields = $3, is_active = $4, show_status = coalesce($5, show_status)
+          WHERE id = $1",
+    )
+    .bind(id)
+    .bind(b.name.trim())
+    .bind(json!(b.fields))
+    .bind(b.is_active)
+    .bind(b.show_status)
+    .execute(&core.db)
+    .await
+    .map_err(dup)?
+    .rows_affected();
     if n == 0 {
         return Err(ApiError::NotFound);
     }
@@ -545,7 +567,8 @@ pub struct AssetInput {
     pub attributes: Value,
 }
 
-async fn check_asset(core: &Core, b: &AssetInput) -> ApiResult<Value> {
+/// `old` — прежнее состояние, если тип не меняется: переход проверяется по жизненному циклу типа.
+async fn check_asset(core: &Core, b: &AssetInput, old: Option<&str>) -> ApiResult<Value> {
     let bad = |m: String| ApiError::bad_request("invalid_asset", m);
     if b.name.trim().is_empty() {
         return Err(bad("Укажите название.".into()));
@@ -559,11 +582,77 @@ async fn check_asset(core: &Core, b: &AssetInput) -> ApiResult<Value> {
         .await?;
     let fields: Vec<tickets::FormField> =
         serde_json::from_value(fields.ok_or_else(|| bad("Тип не найден.".into()))?).unwrap_or_default();
+    if let Some(l) = crate::cmdb::lifecycle_of(&core.db, b.type_id).await? {
+        crate::cmdb::check_status(&l, old, &b.status)?;
+    }
     tickets::validate_answers(&fields, &b.attributes).map_err(bad)
 }
 
 fn clean(s: &Option<String>) -> Option<String> {
     s.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(|s| s.chars().take(200).collect())
+}
+
+// ------------------------------------------------------------------ История оборудования
+
+/// Запись истории: выдача, возврат, передача, правка карточки.
+struct NewEvent<'a> {
+    asset: Uuid,
+    kind: &'a str,
+    from: Option<Uuid>,
+    to: Option<Uuid>,
+    changes: Value,
+    comment: Option<String>,
+}
+
+/// Имена сотрудников запоминаются в строке истории — карточку человека могут удалить.
+async fn record_event(
+    tx: &mut Transaction<'_, Postgres>,
+    e: NewEvent<'_>,
+    actor: Option<Uuid>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "INSERT INTO asset_events (asset_id, kind, from_person_id, from_name, to_person_id, to_name, changes, comment, actor_id)
+         VALUES ($1, $2,
+                 $3, (SELECT nullif(trim(concat_ws(' ', last_name, first_name, middle_name)), '') FROM persons WHERE id = $3),
+                 $4, (SELECT nullif(trim(concat_ws(' ', last_name, first_name, middle_name)), '') FROM persons WHERE id = $4),
+                 $5, $6, $7)",
+    )
+    .bind(e.asset)
+    .bind(e.kind)
+    .bind(e.from)
+    .bind(e.to)
+    .bind(e.changes)
+    .bind(e.comment)
+    .bind(actor)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+/// Вид записи по смене ответственного: был → стал.
+fn custody_kind(from: Option<Uuid>, to: Option<Uuid>) -> Option<&'static str> {
+    match (from, to) {
+        (None, Some(_)) => Some("issued"),
+        (Some(_), None) => Some("returned"),
+        (Some(a), Some(b)) if a != b => Some("transferred"),
+        _ => None,
+    }
+}
+
+/// Поля карточки, которые сравниваются для истории (ответственный — отдельной записью).
+const TRACKED: &[&str] =
+    &["type_id", "name", "inventory_number", "serial_number", "site_id", "room", "status", "notes", "attributes"];
+
+/// Изменённые поля: `{"поле": [было, стало]}`.
+fn diff(old: &Value, new: &Value) -> Value {
+    let mut out = serde_json::Map::new();
+    for k in TRACKED {
+        let (a, b) = (old.get(*k).unwrap_or(&Value::Null), new.get(*k).unwrap_or(&Value::Null));
+        if a != b {
+            out.insert((*k).to_string(), json!([a, b]));
+        }
+    }
+    Value::Object(out)
 }
 
 #[utoipa::path(post, path = "/api/helpdesk/assets", tag = "helpdesk", request_body = AssetInput, responses((status = 201, body = Object)))]
@@ -573,7 +662,9 @@ async fn create_asset(
     Json(b): Json<AssetInput>,
 ) -> ApiResult<(StatusCode, Json<Value>)> {
     user.require(&MANAGE_ASSETS)?;
-    let attrs = check_asset(&core, &b).await?;
+    let attrs = check_asset(&core, &b, None).await?;
+    let who = Who::from_user(&user);
+    let mut tx = core.db.begin().await?;
     let id: Uuid = sqlx::query_scalar(
         "INSERT INTO assets (type_id, name, inventory_number, serial_number, site_id, room, responsible_person_id, status, notes, attributes)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id",
@@ -588,10 +679,20 @@ async fn create_asset(
     .bind(&b.status)
     .bind(clean(&b.notes))
     .bind(attrs)
-    .fetch_one(&core.db)
+    .fetch_one(&mut *tx)
     .await
     .map_err(dup)?;
-    audit::record(&core.db, &user.actor, Entry::new("asset.create", Source::Portal).object("asset", id)).await?;
+    let created = NewEvent {
+        asset: id,
+        kind: "created",
+        from: None,
+        to: b.responsible_person_id,
+        changes: json!({}),
+        comment: None,
+    };
+    record_event(&mut tx, created, who.user).await?;
+    audit::record(&mut *tx, &user.actor, Entry::new("asset.create", Source::Portal).object("asset", id)).await?;
+    tx.commit().await?;
     Ok((StatusCode::CREATED, Json(json!({"id": id}))))
 }
 
@@ -601,6 +702,8 @@ async fn get_asset(State(core): State<Core>, user: CurrentUser, Path(id): Path<U
     fetch_asset(&core, id).await?.map(Json).ok_or(ApiError::NotFound)
 }
 
+/// Правка карточки. Смена ответственного записывается в историю как выдача, возврат или передача,
+/// остальные изменения — одной записью «изменено» с полями «было → стало».
 #[utoipa::path(put, path = "/api/helpdesk/assets/{id}", tag = "helpdesk", params(("id" = Uuid, Path)), request_body = AssetInput, responses((status = 204)))]
 async fn update_asset(
     State(core): State<Core>,
@@ -609,8 +712,28 @@ async fn update_asset(
     Json(b): Json<AssetInput>,
 ) -> ApiResult<StatusCode> {
     user.require(&MANAGE_ASSETS)?;
-    let attrs = check_asset(&core, &b).await?;
-    let n = sqlx::query(
+    let prev: Option<(Uuid, String)> =
+        sqlx::query_as("SELECT type_id, status FROM assets WHERE id = $1").bind(id).fetch_optional(&core.db).await?;
+    let prev = prev.ok_or(ApiError::NotFound)?;
+    let attrs = check_asset(&core, &b, (prev.0 == b.type_id).then_some(prev.1.as_str())).await?;
+    let who = Who::from_user(&user);
+    let mut tx = core.db.begin().await?;
+    let old: Option<(Value, Option<Uuid>)> = sqlx::query_as(
+        "SELECT jsonb_build_object('type_id', type_id, 'name', name, 'inventory_number', inventory_number,
+                'serial_number', serial_number, 'site_id', site_id, 'room', room, 'status', status, 'notes', notes,
+                'attributes', attributes), responsible_person_id
+           FROM assets WHERE id = $1 FOR UPDATE",
+    )
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let (old, old_person) = old.ok_or(ApiError::NotFound)?;
+    let new = json!({
+        "type_id": b.type_id, "name": b.name.trim(), "inventory_number": clean(&b.inventory_number),
+        "serial_number": clean(&b.serial_number), "site_id": b.site_id, "room": clean(&b.room), "status": b.status,
+        "notes": clean(&b.notes), "attributes": attrs,
+    });
+    sqlx::query(
         "UPDATE assets SET type_id = $2, name = $3, inventory_number = $4, serial_number = $5, site_id = $6, room = $7,
                 responsible_person_id = $8, status = $9, notes = $10, attributes = $11, updated_at = now() WHERE id = $1",
     )
@@ -624,16 +747,195 @@ async fn update_asset(
     .bind(b.responsible_person_id)
     .bind(&b.status)
     .bind(clean(&b.notes))
-    .bind(attrs)
-    .execute(&core.db)
+    .bind(&new["attributes"])
+    .execute(&mut *tx)
     .await
-    .map_err(dup)?
-    .rows_affected();
-    if n == 0 {
-        return Err(ApiError::NotFound);
+    .map_err(dup)?;
+    let changes = diff(&old, &new);
+    if let Some(kind) = custody_kind(old_person, b.responsible_person_id) {
+        let e = NewEvent {
+            asset: id,
+            kind,
+            from: old_person,
+            to: b.responsible_person_id,
+            changes: json!({}),
+            comment: None,
+        };
+        record_event(&mut tx, e, who.user).await?;
     }
-    audit::record(&core.db, &user.actor, Entry::new("asset.update", Source::Portal).object("asset", id)).await?;
+    let changed = changes.as_object().is_some_and(|m| !m.is_empty());
+    if changed {
+        let e = NewEvent { asset: id, kind: "updated", from: None, to: None, changes: changes.clone(), comment: None };
+        record_event(&mut tx, e, who.user).await?;
+    }
+    let details = json!({"changes": changes, "responsible": [old_person, b.responsible_person_id]});
+    audit::record(
+        &mut *tx,
+        &user.actor,
+        Entry::new("asset.update", Source::Portal).object("asset", id).details(details),
+    )
+    .await?;
+    tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct HandoverInput {
+    /// `issue` — выдать сотруднику, `return` — вернуть, `transfer` — передать другому сотруднику.
+    pub action: String,
+    /// Кому выдать или передать.
+    pub person_id: Option<Uuid>,
+    /// Состояние после возврата: `in_stock` (по умолчанию) или `repair`.
+    pub status: Option<String>,
+    pub comment: Option<String>,
+}
+
+/// Выдать, вернуть или передать оборудование. Запись — в историю оборудования и в журнал аудита.
+#[utoipa::path(post, path = "/api/helpdesk/assets/{id}/handover", tag = "helpdesk", params(("id" = Uuid, Path)),
+    request_body = HandoverInput, responses((status = 204)))]
+async fn handover(
+    State(core): State<Core>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+    Json(b): Json<HandoverInput>,
+) -> ApiResult<StatusCode> {
+    user.require(&MANAGE_ASSETS)?;
+    let who = Who::from_user(&user);
+    let bad = |m: &str| ApiError::bad_request("invalid_asset", m.to_string());
+    let comment: Option<String> =
+        b.comment.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(|s| s.chars().take(1000).collect());
+    let mut tx = core.db.begin().await?;
+    let row: Option<(Option<Uuid>, String, Uuid)> =
+        sqlx::query_as("SELECT responsible_person_id, status, type_id FROM assets WHERE id = $1 FOR UPDATE")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    let (current, status, type_id) = row.ok_or(ApiError::NotFound)?;
+    if status == "retired" {
+        return Err(bad_state("Списанное оборудование нельзя выдать, вернуть или передать."));
+    }
+    let person = || b.person_id.ok_or_else(|| bad("Выберите сотрудника."));
+    let (kind, to, new_status) = match (b.action.as_str(), current) {
+        ("issue", None) => ("issued", Some(person()?), "in_use".to_string()),
+        ("issue", Some(_)) => return Err(bad_state("Оборудование уже выдано — передайте или верните его.")),
+        ("transfer", Some(cur)) => {
+            let p = person()?;
+            if p == cur {
+                return Err(bad("Оборудование уже у этого сотрудника."));
+            }
+            ("transferred", Some(p), "in_use".to_string())
+        }
+        ("return", Some(_)) => {
+            let st = b.status.clone().unwrap_or_else(|| "in_stock".into());
+            if !matches!(st.as_str(), "in_stock" | "repair") {
+                return Err(bad("Неверное состояние."));
+            }
+            ("returned", None, st)
+        }
+        ("transfer" | "return", None) => return Err(bad_state("Оборудование ни за кем не закреплено.")),
+        _ => return Err(bad("Действие — issue, return или transfer.")),
+    };
+    if let Some(l) = crate::cmdb::lifecycle_of(&mut *tx, type_id).await? {
+        crate::cmdb::check_status(&l, Some(&status), &new_status)?;
+    }
+    if let Some(p) = to {
+        let active: bool =
+            sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM persons WHERE id = $1 AND NOT is_archived)")
+                .bind(p)
+                .fetch_one(&mut *tx)
+                .await?;
+        if !active {
+            return Err(bad("Сотрудник не найден."));
+        }
+    }
+    sqlx::query("UPDATE assets SET responsible_person_id = $2, status = $3, updated_at = now() WHERE id = $1")
+        .bind(id)
+        .bind(to)
+        .bind(&new_status)
+        .execute(&mut *tx)
+        .await?;
+    let changes = if new_status == status { json!({}) } else { json!({"status": [status, new_status]}) };
+    let e = NewEvent { asset: id, kind, from: current, to, changes, comment };
+    record_event(&mut tx, e, who.user).await?;
+    let details = json!({"action": kind, "from": current, "to": to, "status": new_status});
+    audit::record(
+        &mut *tx,
+        &user.actor,
+        Entry::new("asset.handover", Source::Portal).object("asset", id).details(details),
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Serialize, sqlx::FromRow, ToSchema)]
+pub struct AssetEvent {
+    /// `created`, `issued`, `returned`, `transferred`, `updated`.
+    pub kind: String,
+    pub from_name: Option<String>,
+    pub to_name: Option<String>,
+    /// Изменённые поля: `{"поле": [было, стало]}`.
+    #[schema(value_type = Object)]
+    pub changes: Value,
+    pub comment: Option<String>,
+    /// Кто сделал запись.
+    pub actor_name: Option<String>,
+    #[serde(with = "time::serde::rfc3339")]
+    #[schema(value_type = String, format = DateTime)]
+    pub created_at: OffsetDateTime,
+}
+
+/// История оборудования, новые записи сверху.
+async fn events_of(db: &sqlx::PgPool, asset: Uuid) -> Result<Vec<AssetEvent>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT e.kind, e.from_name, e.to_name, e.changes, e.comment, e.created_at,
+                coalesce(nullif(trim(concat_ws(' ', p.last_name, p.first_name)), ''), a.sam_account_name) AS actor_name
+           FROM asset_events e
+           LEFT JOIN users u ON u.id = e.actor_id
+           LEFT JOIN persons p ON p.id = u.person_id
+           LEFT JOIN ad_accounts a ON a.id = u.ad_account_id
+          WHERE e.asset_id = $1
+          ORDER BY e.created_at DESC, e.id DESC LIMIT 200",
+    )
+    .bind(asset)
+    .fetch_all(db)
+    .await
+}
+
+#[derive(Serialize, sqlx::FromRow, ToSchema)]
+pub struct MyAsset {
+    pub id: Uuid,
+    pub name: String,
+    pub type_name: String,
+    pub inventory_number: Option<String>,
+    pub serial_number: Option<String>,
+    /// `in_use`, `in_stock`, `repair`.
+    pub status: String,
+    pub site_name: Option<String>,
+    pub room: Option<String>,
+    /// Когда выдано этому сотруднику.
+    #[serde(with = "time::serde::rfc3339::option")]
+    #[schema(value_type = Option<String>, format = DateTime)]
+    pub since: Option<OffsetDateTime>,
+}
+
+/// Оборудование, закреплённое за текущим сотрудником. Только просмотр: история заявок и
+/// карточка — у ИТ.
+#[utoipa::path(get, path = "/api/helpdesk/my/assets", tag = "helpdesk", responses((status = 200, body = Vec<MyAsset>)))]
+async fn my_assets(State(core): State<Core>, user: CurrentUser) -> ApiResult<Json<Vec<MyAsset>>> {
+    let Some(person) = user.person_id else { return Ok(Json(Vec::new())) };
+    let rows = sqlx::query_as(
+        "SELECT a.id, a.name, t.name AS type_name, a.inventory_number, a.serial_number, a.status, s.name AS site_name, a.room,
+                (SELECT max(e.created_at) FROM asset_events e WHERE e.asset_id = a.id AND e.to_person_id = $1) AS since
+           FROM assets a JOIN asset_types t ON t.id = a.type_id
+           LEFT JOIN sites s ON s.id = a.site_id
+          WHERE a.responsible_person_id = $1 AND a.status <> 'retired'
+          ORDER BY t.name, a.name LIMIT 200",
+    )
+    .bind(person)
+    .fetch_all(&core.db)
+    .await?;
+    Ok(Json(rows))
 }
 
 // ------------------------------------------------------------------ Связанные заявки и дубли

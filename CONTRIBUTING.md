@@ -84,7 +84,7 @@ sh deploy/deb/build.sh target/release/pult target/deb    # → target/deb/pult_<
 cargo build --release --locked -p pult-agent -p pult-helper
 dotnet tool install wix --version 5.0.2 --tool-path target/wix
 ./target/wix/wix extension add -g WixToolset.Util.wixext/5.0.2
-./target/wix/wix build -arch x64 -ext WixToolset.Util.wixext -d Version=0.1.0 `
+./target/wix/wix build -arch x64 -ext WixToolset.Util.wixext -d Version=0.2.0 `
   -d AgentExe=target/release/pult-agent.exe deploy/windows/agent.wxs -o target/release/pult-agent.msi
 ```
 
@@ -207,7 +207,7 @@ Windows agent and helper (on Windows, needs the .NET SDK for WiX 5):
 cargo build --release --locked -p pult-agent -p pult-helper
 dotnet tool install wix --version 5.0.2 --tool-path target/wix
 ./target/wix/wix extension add -g WixToolset.Util.wixext/5.0.2
-./target/wix/wix build -arch x64 -ext WixToolset.Util.wixext -d Version=0.1.0 `
+./target/wix/wix build -arch x64 -ext WixToolset.Util.wixext -d Version=0.2.0 `
   -d AgentExe=target/release/pult-agent.exe deploy/windows/agent.wxs -o target/release/pult-agent.msi
 ```
 
@@ -330,7 +330,7 @@ Windows 代理程序和辅助程序（在 Windows 上构建，WiX 5 需要 .NET 
 cargo build --release --locked -p pult-agent -p pult-helper
 dotnet tool install wix --version 5.0.2 --tool-path target/wix
 ./target/wix/wix extension add -g WixToolset.Util.wixext/5.0.2
-./target/wix/wix build -arch x64 -ext WixToolset.Util.wixext -d Version=0.1.0 `
+./target/wix/wix build -arch x64 -ext WixToolset.Util.wixext -d Version=0.2.0 `
   -d AgentExe=target/release/pult-agent.exe deploy/windows/agent.wxs -o target/release/pult-agent.msi
 ```
 

@@ -343,6 +343,12 @@ pub struct NewTicket {
     pub resource_id: Option<Uuid>,
     /// Оборудование из реестра, выбранное в форме (`objects::attach_assets`).
     pub asset_ids: Vec<Uuid>,
+    /// Проблема или изменение (`itil`): тип не из категории, форма категории не заполняется.
+    pub kind: Option<String>,
+    /// Изменение: риск (`low`, `medium`, `high`; проверен вызывающим).
+    pub risk: Option<String>,
+    /// Приоритет вместо приоритета категории (проверен вызывающим).
+    pub priority: Option<String>,
     /// Заявку создаёт сама система (повторное обращение, регламент): обязательные поля формы не
     /// проверяются, выключенные категория и площадка заменяются пустыми, запрос доступа не открывается —
     /// иначе ответ заявителя или запуск регламента терялся бы из-за правки справочников.
@@ -507,26 +513,38 @@ pub async fn create(core: &Core, who: &Who, n: NewTicket) -> ApiResult<Created> 
     if assets.len() > crate::objects::MAX_TICKET_ASSETS {
         return Err(ApiError::bad_request("invalid_ticket", "Не больше 10 единиц оборудования."));
     }
-    let (kind, priority, answers, category_code): (String, String, Value, Option<String>) = match n.category_id {
-        Some(id) => {
-            let row: Option<(String, String, Value, Option<String>)> = sqlx::query_as(
+    let (kind, priority, answers, category_code): (String, String, Value, Option<String>) =
+        match (n.category_id, &n.kind) {
+            (Some(id), Some(k)) => {
+                let p: String =
+                    sqlx::query_scalar("SELECT default_priority FROM ticket_categories WHERE id = $1 AND is_active")
+                        .bind(id)
+                        .fetch_optional(&mut *tx)
+                        .await?
+                        .ok_or_else(|| ApiError::bad_request("invalid_ticket", "Категория не найдена."))?;
+                (k.clone(), p, json!({}), None)
+            }
+            (None, Some(k)) => (k.clone(), "normal".into(), json!({}), None),
+            (Some(id), None) => {
+                let row: Option<(String, String, Value, Option<String>)> = sqlx::query_as(
                 "SELECT kind, default_priority, form_schema, code FROM ticket_categories WHERE id = $1 AND is_active",
             )
             .bind(id)
             .fetch_optional(&mut *tx)
             .await?;
-            let (k, p, schema, code) =
-                row.ok_or_else(|| ApiError::bad_request("invalid_ticket", "Категория не найдена."))?;
-            let schema: Vec<FormField> = serde_json::from_value(schema).unwrap_or_default();
-            let a = if n.system {
-                if n.form_answers.is_object() { n.form_answers.clone() } else { json!({}) }
-            } else {
-                validate_answers(&schema, &n.form_answers).map_err(|m| ApiError::bad_request("invalid_ticket", m))?
-            };
-            (k, p, a, code)
-        }
-        None => ("incident".into(), "normal".into(), json!({}), None),
-    };
+                let (k, p, schema, code) =
+                    row.ok_or_else(|| ApiError::bad_request("invalid_ticket", "Категория не найдена."))?;
+                let schema: Vec<FormField> = serde_json::from_value(schema).unwrap_or_default();
+                let a = if n.system {
+                    if n.form_answers.is_object() { n.form_answers.clone() } else { json!({}) }
+                } else {
+                    validate_answers(&schema, &n.form_answers)
+                        .map_err(|m| ApiError::bad_request("invalid_ticket", m))?
+                };
+                (k, p, a, code)
+            }
+            (None, None) => ("incident".into(), "normal".into(), json!({}), None),
+        };
     // «Запрос доступа»: одна заявка — один ресурс из каталога.
     let resource = if category_code.as_deref() == Some(crate::access::CATEGORY) {
         Some(crate::access::check_resource(&mut tx, n.resource_id).await?)
@@ -591,10 +609,10 @@ pub async fn create(core: &Core, who: &Who, n: NewTicket) -> ApiResult<Created> 
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
          RETURNING {T_COLS}" // SAFE: константа
     ))
-    .bind(kind)
+    .bind(&kind)
     .bind(&title)
     .bind(&n.description)
-    .bind(priority)
+    .bind(n.priority.as_deref().unwrap_or(&priority))
     .bind(n.category_id)
     .bind(answers)
     .bind(n.site_id)
@@ -615,7 +633,21 @@ pub async fn create(core: &Core, who: &Who, n: NewTicket) -> ApiResult<Created> 
     .await?;
     attach(&mut tx, t.id, None, &n.files, n.files_owner).await?;
     event(&mut tx, t.id, who.user, "created", Value::Null, json!({"channel": n.channel})).await?;
-    audit_rec(&mut tx, who, "ticket.create", &t, json!({"number": t.number, "channel": n.channel})).await?;
+    match kind.as_str() {
+        "problem" => {
+            sqlx::query("INSERT INTO ticket_problems (ticket_id) VALUES ($1)").bind(t.id).execute(&mut *tx).await?;
+        }
+        "change" => {
+            sqlx::query("INSERT INTO ticket_changes (ticket_id, risk) VALUES ($1, coalesce($2, 'low'))")
+                .bind(t.id)
+                .bind(&n.risk)
+                .execute(&mut *tx)
+                .await?;
+        }
+        _ => {}
+    }
+    audit_rec(&mut tx, who, "ticket.create", &t, json!({"number": t.number, "channel": n.channel, "kind": kind}))
+        .await?;
     // VIP: приоритет на ступень выше.
     let vip: bool = sqlx::query_scalar("SELECT coalesce((SELECT is_vip FROM persons WHERE id = $1), false)")
         .bind(t.requester_id)
@@ -985,6 +1017,7 @@ pub async fn resolve(core: &Core, who: &Who, number: i64, r: Resolution<'_>) -> 
         Vec::new()
     };
     crate::checklist::ensure_done(&mut tx, &t).await?;
+    crate::itil::ensure_approved(&mut tx, &t).await?;
     let id = resolve_one(&mut tx, &mut t, who, body, files, close_at, &code, &c).await?;
     crate::card::log_work(&mut tx, &t, who, r.minutes, Some(id)).await?;
     for mut ch in children {
@@ -1105,6 +1138,7 @@ pub async fn cancel(core: &Core, who: &Who, number: i64, reason: Option<String>)
         insert_comment(&mut tx, t.id, who, &NewComment { body: b.to_string(), ..Default::default() }).await?;
     }
     set_status(&mut tx, &mut t, who, "canceled").await?;
+    crate::itil::abandon(&mut tx, t.id).await?;
     sqlx::query("UPDATE tickets SET closed_at = now(), closed_by = $2 WHERE id = $1")
         .bind(t.id)
         .bind(who.user)
@@ -1332,6 +1366,9 @@ pub async fn update(core: &Core, who: &Who, number: i64, mut b: TicketUpdate) ->
     .bind(&b.urgency)
     .execute(&mut *tx)
     .await?;
+    if b.category_id.is_some_and(|c| Some(c) != t.category_id) {
+        crate::itil::reset_on_category(&mut tx, &mut t, who).await?;
+    }
     // У решённой сроки уже итоговые: пересчёт задним числом менял бы «просрочено» в отчётах.
     if sla_changed && t.status != "resolved" {
         crate::sla::apply(&mut tx, t.id).await?;

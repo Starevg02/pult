@@ -1,5 +1,6 @@
 // Уведомления в портале: список и «прочитано».
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { api, ok, type NotificationList } from "../api/client";
 import { Button, Card, Empty, ErrorBox, PageHeader, Spinner } from "../ui";
@@ -10,6 +11,10 @@ import { TicketLink } from "./helpdesk/parts";
 // Подпись вида — из словаря `notifications.kind.*`; неизвестный вид — «Уведомление».
 // Что у каждого вида сервера есть подпись, проверяет тест `crates/pult-helpdesk/tests/ui_labels.rs`.
 type TicketPayload = { number?: number; title?: string; error?: unknown };
+// Оповещение мониторинга: источник, название, узел.
+type AlertPayload = { source?: string; title?: string; host?: string | null };
+// Коммуникации: чат и его название.
+type ChatPayload = { chat?: string; title?: string | null };
 
 export function NotificationsPage() {
   const { t, i18n } = useTranslation();
@@ -43,6 +48,14 @@ export function NotificationsPage() {
                     <TicketLink number={(n.payload as unknown as Required<TicketPayload>).number} className="truncate text-xs text-accent">
                       #{(n.payload as unknown as TicketPayload).number} {(n.payload as unknown as TicketPayload).title}
                     </TicketLink>
+                  ) : typeof (n.payload as unknown as ChatPayload).chat === "string" ? (
+                    <Link to="/chats/$id" params={{ id: String((n.payload as unknown as ChatPayload).chat) }} className="block truncate text-xs text-accent">
+                      {(n.payload as unknown as ChatPayload).title ?? ""}
+                    </Link>
+                  ) : typeof (n.payload as unknown as AlertPayload).title === "string" ? (
+                    <div className="truncate text-xs text-muted">
+                      {[(n.payload as unknown as AlertPayload).source, (n.payload as unknown as AlertPayload).title, (n.payload as unknown as AlertPayload).host].filter(Boolean).join(" · ")}
+                    </div>
                   ) : (
                     <div className="truncate text-xs text-muted">{typeof (n.payload as unknown as TicketPayload).error === "string" ? String((n.payload as unknown as TicketPayload).error) : JSON.stringify(n.payload)}</div>
                   )}

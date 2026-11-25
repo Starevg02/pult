@@ -13,6 +13,8 @@ const RULES: &[&str] = &[
     "DELETE FROM ticket_tokens WHERE (used_at IS NOT NULL OR expires_at < now()) AND created_at < now() - interval '30 days'",
     // Журнал синхронизации AD — 90 дней.
     "DELETE FROM ad_sync_runs WHERE started_at < now() - interval '90 days'",
+    // Решённые оповещения мониторинга — полгода.
+    "DELETE FROM alerts WHERE status = 'resolved' AND resolved_at < now() - interval '180 days'",
 ];
 
 /// Удалить записи старше срока хранения; возвращает число удалённых.

@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { api, ok, type AccessRequestView, type ComputerRow, type Me, type NotificationList, type Person, type TicketRow } from "./api/client";
+import { api, ok, type AccessRequestView, type ChangeApprovalItem, type ComputerRow, type ExtensionLink, type Me, type MyAsset, type NotificationList, type Person, type TicketRow } from "./api/client";
 import { Logo, RequireAuth } from "./auth";
 import { can, useLogout, useMe, useModule, useOrg, type ModuleKey } from "./session";
 import { asLang, LANGUAGES, savedLanguage, setLanguage } from "./i18n";
@@ -12,6 +12,7 @@ import { initials } from "./format";
 import { useServerEvents } from "./pages/helpdesk/helpdeskUtil";
 import { CloseButton, Dialog, Input, Toaster } from "./ui";
 import {
+  IconAlert,
   IconArrowLeft,
   IconBell,
   IconBook,
@@ -19,6 +20,8 @@ import {
   IconChart,
   IconCheckCircle,
   IconChevronDown,
+  IconChat,
+  IconColumns,
   IconContacts,
   IconHome,
   IconInbox,
@@ -29,8 +32,11 @@ import {
   IconMoon,
   IconPlus,
   IconPlusSquare,
+  IconRotate,
   IconSearch,
   IconSettings,
+  IconShield,
+  IconSparkles,
   IconSun,
   IconTicket,
   IconUser,
@@ -38,8 +44,10 @@ import {
 import { adminGroups, visibleItems } from "./pages/admin/adminMenu";
 import { OrgWizard } from "./pages/OrgWizard";
 import { fullName } from "./pages/phonebookUtil";
+import { useAssist } from "./pages/helpdesk/useAssist";
+import { useChatUnread } from "./pages/chat/chatUtil";
 
-type NavItem = { to: string; key: "home" | "phonebook" | "tickets" | "newTicket" | "desk" | "kb" | "assets" | "computers" | "reports" | "settings" | "access" | "approvals" };
+type NavItem = { to: string; key: "home" | "phonebook" | "tickets" | "catalog" | "newTicket" | "desk" | "problems" | "changes" | "vault" | "assistant" | "kb" | "assets" | "computers" | "reports" | "settings" | "access" | "approvals" | "myAssets" | "chats" };
 
 function useNotifications() {
   return useQuery({
@@ -285,14 +293,21 @@ const NAV_ICONS: Record<NavItem["key"], (p: { size?: number; className?: string 
   home: IconHome,
   newTicket: IconPlusSquare,
   tickets: IconTicket,
+  catalog: IconColumns,
   access: IconKey,
   approvals: IconCheckCircle,
   desk: IconInbox,
+  problems: IconAlert,
+  changes: IconRotate,
+  vault: IconShield,
+  assistant: IconSparkles,
   kb: IconBook,
   assets: IconBox,
+  myAssets: IconBox,
   computers: IconMonitor,
   reports: IconChart,
   phonebook: IconContacts,
+  chats: IconChat,
   settings: IconSettings,
 };
 
@@ -314,6 +329,7 @@ function Shell({ me }: { me: Me }) {
 
   const modules = useOrg().data?.modules;
   const on = (m: ModuleKey) => modules?.[m] ?? true;
+  const assist = useAssist(on("helpdesk"));
   // Стартовая страница: один раз за вкладку, если открыта главная.
   useEffect(() => {
     let started: boolean;
@@ -329,6 +345,14 @@ function Shell({ me }: { me: Me }) {
     if (!started && path === "/" && to !== "/" && ok[me.prefs.start_page]) void nav({ to });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- только при входе в оболочку
   }, []);
+  const chatUnread = useChatUnread();
+  // Ссылки установленных расширений (внешние сервисы) — в новой вкладке.
+  const extLinks = useQuery({
+    queryKey: ["extension-links"],
+    queryFn: () => ok<ExtensionLink[]>(api.GET("/api/extensions/links")),
+    enabled: on("helpdesk"),
+    staleTime: 300_000,
+  });
   const hasAdmin = adminGroups.some((g) => visibleItems(g.items, me, modules).length > 0);
   // «Согласования» — тем, кому есть что согласовать (владельцам ресурсов).
   const approvals = useQuery({
@@ -337,22 +361,44 @@ function Shell({ me }: { me: Me }) {
     enabled: !!me.person_id && on("helpdesk"),
     refetchInterval: 120_000,
   });
-  const waiting = approvals.data?.filter((r) => r.status === "pending").length ?? 0;
+  // Согласования изменений — у любого пользователя, кого правило назначило согласующим.
+  const changeApprovals = useQuery({
+    queryKey: ["change-approvals"],
+    queryFn: () => ok<ChangeApprovalItem[]>(api.GET("/api/helpdesk/change-approvals")),
+    enabled: on("helpdesk"),
+    refetchInterval: 120_000,
+  });
+  const waiting = (approvals.data?.filter((r) => r.status === "pending").length ?? 0) + (changeApprovals.data?.filter((r) => r.status === "pending").length ?? 0);
+  const anyApprovals = (approvals.data?.length ?? 0) + (changeApprovals.data?.length ?? 0) > 0;
+  // «Моё оборудование» — тем, за кем что-то закреплено.
+  const myAssets = useQuery({
+    queryKey: ["my-assets"],
+    queryFn: () => ok<MyAsset[]>(api.GET("/api/helpdesk/my/assets")),
+    enabled: !!me.person_id && on("helpdesk"),
+    staleTime: 300_000,
+  });
   // Разделы группами: заявки, ИТ-инструменты, справочник; настройки — внизу.
   const helpdesk: NavItem[] = on("helpdesk")
     ? [
         { to: "/tickets", key: "tickets" },
+        { to: "/catalog", key: "catalog" },
         { to: "/access", key: "access" },
-        ...((approvals.data?.length ?? 0) > 0 ? [{ to: "/approvals", key: "approvals" } as NavItem] : []),
-        ...(can(me, "helpdesk.ticket.work") ? [{ to: "/desk", key: "desk" } as NavItem] : []),
+        ...((myAssets.data?.length ?? 0) > 0 ? [{ to: "/my-assets", key: "myAssets" } as NavItem] : []),
+        ...(anyApprovals ? [{ to: "/approvals", key: "approvals" } as NavItem] : []),
+        ...(can(me, "helpdesk.ticket.work")
+          ? [{ to: "/desk", key: "desk" } as NavItem, { to: "/problems", key: "problems" } as NavItem, { to: "/changes", key: "changes" } as NavItem]
+          : []),
         { to: "/kb", key: "kb" },
       ]
     : [];
   const tools: NavItem[] = [
     ...(on("helpdesk") && can(me, "helpdesk.ticket.work") ? [{ to: "/assets", key: "assets" } as NavItem] : []),
+    ...(on("helpdesk") && can(me, "helpdesk.vault.use") ? [{ to: "/vault", key: "vault" } as NavItem] : []),
+    ...(on("helpdesk") && assist ? [{ to: "/assistant", key: "assistant" } as NavItem] : []),
     ...(on("remote") && can(me, "remote.device.view") ? [{ to: "/computers", key: "computers" } as NavItem] : []),
     ...(on("helpdesk") && can(me, "helpdesk.reports") ? [{ to: "/reports", key: "reports" } as NavItem] : []),
     ...(on("phonebook") ? [{ to: "/phonebook", key: "phonebook" } as NavItem] : []),
+    ...(modules?.chat === true ? [{ to: "/chats", key: "chats" } as NavItem] : []),
   ];
   const groups = [[{ to: "/", key: "home" } as NavItem, ...helpdesk], tools].filter((g) => g.length > 0);
   // Активный пункт — не только фоном: полоса акцента слева и значок цветом акцента (различимо и без цвета фона).
@@ -386,6 +432,11 @@ function Shell({ me }: { me: Me }) {
         </span>
         <span className="min-w-0 flex-1 truncate">{t(`nav.${i.key}`)}</span>
         {i.key === "approvals" && waiting > 0 && <span className="rounded-full bg-accent px-1.5 text-xs font-medium text-paper tabular-nums">{waiting}</span>}
+        {i.key === "chats" && chatUnread > 0 && (
+          <span className="rounded-full bg-accent px-1.5 text-xs font-medium text-paper tabular-nums" aria-label={t("chat.unread", { count: chatUnread })}>
+            {chatUnread}
+          </span>
+        )}
       </Link>
     );
   };
@@ -430,6 +481,19 @@ function Shell({ me }: { me: Me }) {
               {g.map(item)}
             </div>
           ))}
+          {(extLinks.data?.length ?? 0) > 0 && (
+            <div className="mt-3 space-y-0.5 border-t border-line pt-3">
+              {extLinks.data?.map((l) => (
+                <a key={l.url} href={l.url} target="_blank" rel="noopener noreferrer" className={link} title={l.extension}>
+                  <span className="min-w-0 flex-1 truncate">{l.title}</span>
+                  <span className="text-xs text-muted" aria-hidden="true">
+                    ↗
+                  </span>
+                  <span className="sr-only">{t("extensions.newTab")}</span>
+                </a>
+              ))}
+            </div>
+          )}
           {hasAdmin && <div className="mt-auto space-y-0.5 border-t border-line pt-3">{item({ to: "/admin", key: "settings" })}</div>}
         </nav>
       </aside>

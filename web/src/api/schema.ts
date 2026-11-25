@@ -683,6 +683,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/monitoring/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_sources"];
+        put?: never;
+        /** Новый источник: токен показывается один раз. */
+        post: operations["create_source"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/monitoring/sources/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["update_source"];
+        post?: never;
+        /** Удалить источник вместе с его оповещениями (заявки остаются). */
+        delete: operations["delete_source"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/org": {
         parameters: {
             query?: never;
@@ -1317,6 +1351,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/kerberos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Вход через домен: билет Kerberos принят — сеанс и cookie, как после входа паролем. */
+        get: operations["kerberos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/login": {
         parameters: {
             query?: never;
@@ -1588,6 +1639,97 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/helpdesk/assets/discovered": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** ПК с агентом, которых нет в реестре: по умолчанию — ожидающие проверки, с `rejected=true` — отклонённые. */
+        get: operations["list_discovered"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/helpdesk/assets/discovered/{id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Принять ПК в реестр: создаётся карточка выбранного типа; ОС, IP и модель — в доп. поля, если они у типа
+         *     есть, серийный номер — из сведений агента.
+         */
+        post: operations["accept_discovered"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/helpdesk/assets/discovered/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Не вносить ПК в реестр: он больше не предлагается. */
+        post: operations["reject_discovered"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/helpdesk/assets/discovered/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Вернуть отклонённый ПК в список ожидающих проверки. */
+        post: operations["restore_discovered"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/helpdesk/assets/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Импорт оборудования из CSV. Обязательные колонки — название и тип; ответственный — по e-mail или
+         *     логину AD; остальные колонки, совпавшие с полями типа (ключ или подпись), — в доп. поля.
+         */
+        post: operations["import_csv"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/helpdesk/assets/{id}": {
         parameters: {
             query?: never;
@@ -1596,8 +1738,29 @@ export interface paths {
             cookie?: never;
         };
         get: operations["get_asset"];
+        /**
+         * Правка карточки. Смена ответственного записывается в историю как выдача, возврат или передача,
+         *     остальные изменения — одной записью «изменено» с полями «было → стало».
+         */
         put: operations["update_asset"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/helpdesk/assets/{id}/handover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Выдать, вернуть или передать оборудование. Запись — в историю оборудования и в журнал аудита. */
+        post: operations["handover"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1616,6 +1779,72 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/helpdesk/change-approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Мои согласования изменений: ожидающие и решённые за 30 дней. Согласующему не нужен доступ к заявкам. */
+        get: operations["my_change_approvals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/helpdesk/change-approvals/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Решение согласующего. */
+        post: operations["decide_change"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/helpdesk/change-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_change_rules"];
+        put?: never;
+        post: operations["create_change_rule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/helpdesk/change-rules/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["delete_change_rule"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1735,6 +1964,145 @@ export interface paths {
         };
         /** Группы — инженерам для назначения, администратору для настройки. */
         get: operations["list_groups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/helpdesk/itil": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Завести проблему или изменение. Исполнитель — автор. */
+        post: operations["create_record"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/helpdesk/itil/{number}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Сведения проблемы или изменения. */
+        get: operations["get_record"];
+        put: operations["update_record"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/helpdesk/itil/{number}/incidents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Связать инцидент с проблемой (прежняя связь инцидента заменяется). */
+        post: operations["link_incident"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/helpdesk/itil/{number}/incidents/{incident}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["unlink_incident"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/helpdesk/itil/{number}/resolve-incidents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Решить все открытые инциденты проблемы одним ответом — каждый как обычное решение. */
+        post: operations["resolve_incidents"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/helpdesk/itil/{number}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Отправить изменение на согласование. */
+        post: operations["submit_change"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/helpdesk/monitoring/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Оповещения мониторинга: открытые сверху, затем недавние решённые. */
+        get: operations["list_alerts"];
+        put?: never;
+        /** Принять оповещения источника. Токен — `Authorization: Bearer pult_mon_…` из настроек интеграций. */
+        post: operations["receive"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/helpdesk/my/assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Оборудование, закреплённое за текущим сотрудником. Только просмотр: история заявок и
+         *     карточка — у ИТ.
+         */
+        get: operations["my_assets"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3220,6 +3588,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/remote/software": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** На каких ПК стоит программа: поиск по части названия среди включённых ПК (до 500 строк). */
+        get: operations["search_software"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/remote/v1/exchange": {
         parameters: {
             query?: never;
@@ -3384,6 +3769,17 @@ export interface components {
             /** Format: uuid */
             user_id: string;
         };
+        AcceptInput: {
+            inventory_number?: string | null;
+            /** @description Название карточки; пусто — имя ПК. */
+            name?: string | null;
+            /** Format: uuid */
+            responsible_person_id?: string | null;
+            /** Format: uuid */
+            site_id?: string | null;
+            /** Format: uuid */
+            type_id: string;
+        };
         Accepted: {
             accepted: boolean;
         };
@@ -3523,6 +3919,7 @@ export interface components {
             /** @description Полное DNS-имя ПК. */
             fqdn?: string | null;
             hostname: string;
+            inventory?: null | components["schemas"]["HardwareInventory"];
             /** @description IP-адреса ПК, как их видит агент. */
             ip_addrs?: string[];
             os: string;
@@ -3538,6 +3935,51 @@ export interface components {
             /** @description Подпись, base64. */
             signature: string;
             version: string;
+        };
+        Alert: {
+            description?: string | null;
+            host?: string | null;
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            resolved_at?: string | null;
+            /** @description `info`, `warning`, `critical`. */
+            severity: string;
+            source_name: string;
+            /** Format: date-time */
+            started_at: string;
+            /** @description `firing` или `resolved`. */
+            status: string;
+            /** Format: int64 */
+            ticket_number?: number | null;
+            title: string;
+        };
+        AlertSource: {
+            /** Format: uuid */
+            category_id?: string | null;
+            create_tickets: boolean;
+            /** Format: uuid */
+            id: string;
+            is_active: boolean;
+            /** Format: date-time */
+            last_alert_at?: string | null;
+            min_severity: string;
+            name: string;
+            /** Format: int64 */
+            open_alerts: number;
+            /** Format: uuid */
+            site_id?: string | null;
+        };
+        AlertSourceInput: {
+            /** Format: uuid */
+            category_id?: string | null;
+            create_tickets?: boolean;
+            is_active?: boolean;
+            /** @description Заявка — на оповещения не ниже этой важности: `info`, `warning`, `critical`. */
+            min_severity: string;
+            name: string;
+            /** Format: uuid */
+            site_id?: string | null;
         };
         AnnouncementView: {
             body: string;
@@ -3561,6 +4003,68 @@ export interface components {
             permissions: string[];
             /** Format: date-time */
             revoked_at?: string | null;
+        };
+        ApprovalItem: {
+            /** @description Кто ведёт изменение. */
+            assignee_name?: string | null;
+            category_name?: string | null;
+            comment?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            decided_at?: string | null;
+            description: string;
+            /** Format: uuid */
+            id: string;
+            /** Format: int64 */
+            number: number;
+            plan: string;
+            /** Format: date-time */
+            planned_end?: string | null;
+            /** Format: date-time */
+            planned_start?: string | null;
+            risk: string;
+            rollback: string;
+            /** @description `pending`, `approved`, `rejected`, `skipped`. */
+            status: string;
+            title: string;
+        };
+        ApprovalRule: {
+            /** Format: uuid */
+            approver_id: string;
+            approver_name?: string | null;
+            /** Format: uuid */
+            category_id?: string | null;
+            category_name?: string | null;
+            /** Format: uuid */
+            id: string;
+            min_risk: string;
+        };
+        ApprovalRuleInput: {
+            /**
+             * Format: uuid
+             * @description Пусто — любая категория.
+             */
+            category_id?: string | null;
+            /** @description Правило действует начиная с этого риска. */
+            min_risk: string;
+            /**
+             * Format: uuid
+             * @description Согласующий — сотрудник из справочника с учёткой портала (руководитель, владелец сервиса).
+             */
+            person_id: string;
+        };
+        ApprovalView: {
+            approver_name?: string | null;
+            comment?: string | null;
+            /** Format: date-time */
+            decided_at?: string | null;
+            /** Format: uuid */
+            id: string;
+            /** Format: int32 */
+            round: number;
+            /** @description `pending`, `approved`, `rejected`, `skipped`. */
+            status: string;
         };
         Article: {
             audience: string;
@@ -3633,6 +4137,38 @@ export interface components {
             /** Format: uuid */
             type_id: string;
             type_name: string;
+        };
+        AssetEvent: {
+            /** @description Кто сделал запись. */
+            actor_name?: string | null;
+            /** @description Изменённые поля: `{"поле": [было, стало]}`. */
+            changes: Record<string, never>;
+            comment?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            from_name?: string | null;
+            /** @description `created`, `issued`, `returned`, `transferred`, `updated`. */
+            kind: string;
+            to_name?: string | null;
+        };
+        AssetImportInput: {
+            /** @description Содержимое файла CSV (UTF-8). */
+            csv: string;
+            /** @description Только проверить: ничего не записывать. */
+            dry_run?: boolean;
+        };
+        AssetImportResult: {
+            /** @description Создано (при проверке — будет создано) карточек. */
+            created: number;
+            dry_run: boolean;
+            errors: components["schemas"]["AssetImportRowError"][];
+            /** @description Пропущено: инвентарный номер уже есть в реестре или повторяется в файле. */
+            skipped: number;
+        };
+        AssetImportRowError: {
+            message: string;
+            /** @description Номер записи в файле, считая заголовок первой. */
+            row: number;
         };
         AssetInput: {
             attributes?: Record<string, never>;
@@ -3817,6 +4353,30 @@ export interface components {
             /** Format: int32 */
             version?: number;
         };
+        ChangeDecision: {
+            approve: boolean;
+            /** @description Обязателен при отказе. */
+            comment?: string | null;
+        };
+        ChangeSubmitted: {
+            /** @description `pending` — ждёт согласующих; `approved` — правил нет, согласовано сразу. */
+            approval: string;
+            approvers: number;
+        };
+        ChangeView: {
+            /** @description `draft`, `pending`, `approved`, `rejected`. */
+            approval: string;
+            approvals: components["schemas"]["ApprovalView"][];
+            plan: string;
+            /** Format: date-time */
+            planned_end?: string | null;
+            /** Format: date-time */
+            planned_start?: string | null;
+            risk: string;
+            rollback: string;
+            /** Format: int32 */
+            round: number;
+        };
         /** @enum {string} */
         Check: "up" | "down" | "not_configured";
         ChecklistInput: {
@@ -3986,6 +4546,16 @@ export interface components {
             /** @description Сам токен — показывается один раз. */
             token: string;
         };
+        CreatedRecord: {
+            /** Format: int64 */
+            number: number;
+        };
+        CreatedSource: {
+            /** Format: uuid */
+            id: string;
+            /** @description Показывается один раз: в базе хранится только хеш. */
+            token: string;
+        };
         CreatedToken: {
             /** Format: uuid */
             id: string;
@@ -4030,12 +4600,42 @@ export interface components {
             domain_name?: string | null;
             /** Format: date-time */
             enrolled_at: string;
+            inventory?: null | components["schemas"]["DeviceInventory"];
             os?: string | null;
             /** @description Правила политики: `deny`, `consent_required`. */
             rules: string[];
             sessions: components["schemas"]["SessionRow"][];
             /** @description Последние заявки с этого ПК (видны тем, кто работает с заявками). */
             tickets: components["schemas"]["DeviceTicket"][];
+        };
+        /** @description Локальный диск. */
+        DeviceDisk: {
+            /** Format: int64 */
+            free_gb: number;
+            /** @description Буква диска, например `C:`. */
+            name: string;
+            /** Format: int64 */
+            size_gb: number;
+        };
+        /** @description Оборудование и программы ПК (карточка ПК). */
+        DeviceInventory: {
+            bios_version?: string | null;
+            /**
+             * Format: date-time
+             * @description Когда агент собрал сведения.
+             */
+            collected_at: string;
+            cpu?: string | null;
+            disks: components["schemas"]["DeviceDisk"][];
+            manufacturer?: string | null;
+            /**
+             * Format: int64
+             * @description Оперативная память, МБ.
+             */
+            memory_mb?: number | null;
+            model?: string | null;
+            serial_number?: string | null;
+            software: components["schemas"]["InstalledSoftware"][];
         };
         DeviceRow: {
             agent_version?: string | null;
@@ -4116,6 +4716,20 @@ export interface components {
             writer_bind_dn?: string | null;
             /** @description Не передан — пароль не меняется. */
             writer_password?: string | null;
+        };
+        DiscoveredDevice: {
+            /** Format: uuid */
+            device_id: string;
+            fqdn?: string | null;
+            hostname: string;
+            ip_addrs: string[];
+            /** Format: date-time */
+            last_seen_at?: string | null;
+            /** @description Производитель и модель из сведений агента — при приёме идут в карточку. */
+            model?: string | null;
+            os?: string | null;
+            os_version?: string | null;
+            serial_number?: string | null;
         };
         /** @description Изменение домена в админке. Пароль и сертификат: не переданы — прежние. */
         DomainInput: {
@@ -4307,6 +4921,35 @@ export interface components {
             members?: string[];
             name: string;
         };
+        HandoverInput: {
+            /** @description `issue` — выдать сотруднику, `return` — вернуть, `transfer` — передать другому сотруднику. */
+            action: string;
+            comment?: string | null;
+            /**
+             * Format: uuid
+             * @description Кому выдать или передать.
+             */
+            person_id?: string | null;
+            /** @description Состояние после возврата: `in_stock` (по умолчанию) или `repair`. */
+            status?: string | null;
+        };
+        /** @description Оборудование и установленные программы ПК. */
+        HardwareInventory: {
+            bios_version?: string | null;
+            cpu?: string | null;
+            disks?: components["schemas"]["DeviceDisk"][];
+            manufacturer?: string | null;
+            /**
+             * Format: int64
+             * @description Оперативная память, МБ.
+             */
+            memory_mb?: number | null;
+            model?: string | null;
+            /** @description Серийный номер из SMBIOS. */
+            serial_number?: string | null;
+            /** @description Программы из «Программы и компоненты» (без системных компонентов и обновлений). */
+            software?: components["schemas"]["InstalledSoftware"][];
+        };
         Health: {
             database: components["schemas"]["Check"];
             status: string;
@@ -4480,6 +5123,10 @@ export interface components {
             /** Format: date-time */
             started_at: string;
         };
+        IncidentRef: {
+            /** Format: int64 */
+            number: number;
+        };
         /** @description Язык установки, выбранный в мастере. */
         InstallLanguage: {
             /** @description `ru`, `en` или `zh`. */
@@ -4493,6 +5140,12 @@ export interface components {
              * @description Сколько стартовых записей (категории, шаблоны, типы оборудования) переведено.
              */
             renamed: number;
+        };
+        /** @description Установленная программа. */
+        InstalledSoftware: {
+            name: string;
+            publisher?: string | null;
+            version?: string | null;
         };
         IssuedConnection: {
             action: components["schemas"]["RemoteAction"];
@@ -4521,6 +5174,11 @@ export interface components {
             done?: boolean | null;
             is_required?: boolean | null;
             title?: string | null;
+        };
+        ItilRecord: {
+            change?: null | components["schemas"]["ChangeView"];
+            kind: string;
+            problem?: null | components["schemas"]["ProblemView"];
         };
         /** @enum {string} */
         Kind: "full" | "incremental";
@@ -4556,6 +5214,12 @@ export interface components {
              * @default true
              */
             auto_create_persons: boolean;
+        };
+        LinkedIncident: {
+            /** Format: int64 */
+            number: number;
+            status: string;
+            title: string;
         };
         LinkedObject: {
             /** @description Подробности: тип оборудования, инвентарный номер, ОС… */
@@ -4700,6 +5364,23 @@ export interface components {
              */
             telephony: boolean;
         };
+        MyAsset: {
+            /** Format: uuid */
+            id: string;
+            inventory_number?: string | null;
+            name: string;
+            room?: string | null;
+            serial_number?: string | null;
+            /**
+             * Format: date-time
+             * @description Когда выдано этому сотруднику.
+             */
+            since?: string | null;
+            site_name?: string | null;
+            /** @description `in_use`, `in_stock`, `repair`. */
+            status: string;
+            type_name: string;
+        };
         MySession: {
             /** Format: date-time */
             created_at: string;
@@ -4764,6 +5445,26 @@ export interface components {
         NewPerson: {
             person: components["schemas"]["PersonInput"];
         };
+        NewRecord: {
+            asset_ids?: string[];
+            /** Format: uuid */
+            category_id?: string | null;
+            description?: string;
+            /**
+             * Format: int64
+             * @description Проблема, заведённая из инцидента: его номер.
+             */
+            incident?: number | null;
+            /** @description `problem` или `change`. */
+            kind: string;
+            /** @description `low`, `normal`, `high`, `critical`; пусто — по категории. */
+            priority?: string | null;
+            /** @description Изменение: `low`, `medium`, `high`. */
+            risk?: string | null;
+            /** Format: uuid */
+            site_id?: string | null;
+            title: string;
+        };
         NewRemotePolicy: {
             /** @description Имя ПК, FQDN или шаблон со `*`. */
             device_pattern: string;
@@ -4789,6 +5490,8 @@ export interface components {
         ObjectCard: {
             asset?: null | components["schemas"]["Asset"];
             detail?: string | null;
+            /** @description История оборудования: выдача, возврат, передача, правки. Для других объектов — пусто. */
+            events: components["schemas"]["AssetEvent"][];
             /** Format: uuid */
             id: string;
             kind: string;
@@ -5001,6 +5704,12 @@ export interface components {
             /** Format: int32 */
             sort?: number;
         };
+        ProblemView: {
+            cause: string;
+            incidents: components["schemas"]["LinkedIncident"][];
+            known_error: boolean;
+            workaround: string;
+        };
         Profile: {
             /** Format: date-time */
             created_at: string;
@@ -5041,6 +5750,46 @@ export interface components {
             comment?: string | null;
             /** @description `up` — хорошо, `down` — плохо. */
             value: string;
+        };
+        Received: {
+            /** @description Отброшено новых: у источника слишком много открытых оповещений. */
+            dropped: number;
+            /** @description Новых оповещений. */
+            opened: number;
+            /** @description Повторов уже открытых. */
+            repeated: number;
+            /** @description Решённых. */
+            resolved: number;
+            /** @description Создано заявок. */
+            tickets: number;
+        };
+        /**
+         * @description Полная замена своих полей: у проблемы — причина, обходное решение, «известная ошибка»;
+         *     у изменения — риск, план, откат и окно работ.
+         */
+        RecordUpdate: {
+            /** @default  */
+            cause: string;
+            /** @default false */
+            known_error: boolean;
+            /** @default  */
+            plan: string;
+            /**
+             * Format: date-time
+             * @default null
+             */
+            planned_end: string | null;
+            /**
+             * Format: date-time
+             * @default null
+             */
+            planned_start: string | null;
+            /** @default  */
+            risk: string;
+            /** @default  */
+            rollback: string;
+            /** @default  */
+            workaround: string;
         };
         Recurring: {
             /** Format: uuid */
@@ -5159,6 +5908,8 @@ export interface components {
              */
             next_report_secs: number;
             update?: null | components["schemas"]["AgentUpdate"];
+            /** @description Прислать оборудование и программы в следующем отчёте: у портала их нет или они старше суток. */
+            want_inventory?: boolean;
         };
         ReportSummary: {
             /** Format: double */
@@ -5222,6 +5973,11 @@ export interface components {
         RequiredComment: {
             comment: string;
         };
+        ResolveAll: {
+            /** @description Ответ заявителям инцидентов. */
+            body: string;
+            closure_code?: string;
+        };
         ResolveInput: {
             /** @description Код закрытия из списка `/api/helpdesk/close-codes`. */
             closure_code?: string;
@@ -5229,6 +5985,11 @@ export interface components {
             files?: string[];
             /** Format: int32 */
             minutes?: number | null;
+        };
+        ResolvedAll: {
+            /** @description Номера, которые решить не удалось (например, не закрыт чек-лист). */
+            failed: number[];
+            resolved: number;
         };
         ResourceInput: {
             description?: string;
@@ -5347,6 +6108,12 @@ export interface components {
              */
             internal_networks: string[];
             /**
+             * @description Вход через домен без пароля (Kerberos) — только из сетей организации. Нужны keytab
+             *     (`KRB5_KTNAME`) и SPN `HTTP/<имя портала>` у служебной учётки.
+             * @default false
+             */
+            kerberos_login: boolean;
+            /**
              * Format: int32
              * @description Неудачных попыток с одного IP за окно.
              * @default 20
@@ -5450,6 +6217,8 @@ export interface components {
         /** @description Нужен ли мастер и пропустить ли шаг домена. */
         SetupStatus: {
             has_domain: boolean;
+            /** @description Вход через домен (Kerberos) включён: на странице входа — кнопка «Войти через домен». */
+            kerberos: boolean;
             needed: boolean;
         };
         /**
@@ -5506,6 +6275,16 @@ export interface components {
         };
         /** @enum {string} */
         SmtpSecurity: "starttls" | "tls" | "none";
+        SoftwareHit: {
+            /** Format: uuid */
+            device_id: string;
+            hostname: string;
+            /** Format: date-time */
+            last_seen_at?: string | null;
+            name: string;
+            publisher?: string | null;
+            version?: string | null;
+        };
         /** @description Особый день: праздник (без часов) или перенос / сокращённый день. */
         SpecialDay: {
             /** @description `2026-12-31`. */
@@ -5690,6 +6469,11 @@ export interface components {
             /** Format: int64 */
             parent_number?: number | null;
             priority: string;
+            /**
+             * Format: int64
+             * @description Инцидент — следствие этой проблемы.
+             */
+            problem_number?: number | null;
             rating?: string | null;
             rating_comment?: string | null;
             /** Format: int32 */
@@ -5752,6 +6536,8 @@ export interface components {
             /** Format: uuid */
             id: string;
             is_major: boolean;
+            /** @description `incident`, `request`, `problem`, `change`. */
+            kind: string;
             line: string;
             linked: boolean;
             /** Format: int64 */
@@ -5980,8 +6766,12 @@ export interface components {
             person_id: string;
         };
         Webhook: {
+            /** @description Чат Telegram: числовой id или `@канал`. */
+            chat_id?: string | null;
             /** @description Виды событий истории заявки (`created`, `status`, `assigned`…); пусто — все. */
             events: string[];
+            /** @description `pult` — JSON с подписью; `chat` — Mattermost, Rocket.Chat, Slack; `telegram` — бот Telegram. */
+            format: string;
             /** Format: uuid */
             id: string;
             is_active: boolean;
@@ -5994,10 +6784,14 @@ export interface components {
             url: string;
         };
         WebhookInput: {
+            /** @description Для `telegram`: числовой id чата или `@канал`. */
+            chat_id?: string | null;
             events?: string[];
+            /** @description `pult` (по умолчанию), `chat` или `telegram`. */
+            format?: string;
             is_active?: boolean;
             name: string;
-            /** @description Секрет для подписи; пусто при правке — оставить прежний. */
+            /** @description Секрет подписи (`pult`) или токен бота (`telegram`); пусто при правке — оставить прежний. */
             secret?: string | null;
             url: string;
         };
@@ -7358,6 +8152,90 @@ export interface operations {
             };
         };
     };
+    list_sources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertSource"][];
+                };
+            };
+        };
+    };
+    create_source: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertSourceInput"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedSource"];
+                };
+            };
+        };
+    };
+    update_source: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertSourceInput"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    delete_source: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     put_org: {
         parameters: {
             query?: never;
@@ -8572,6 +9450,76 @@ export interface operations {
             };
         };
     };
+    kerberos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Вошёл: cookie сеанса и CSRF */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Вход не из сети организации; учётка отключена */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Нужен билет Kerberos или он отклонён */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NegotiateError"];
+                };
+            };
+            /** @description Учётки с таким логином в домене нет; запрос со стороннего сайта */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Вход через домен выключен */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Слишком много проверок сразу */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NegotiateError"];
+                };
+            };
+            /** @description Сборка без GSSAPI (Windows) */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NegotiateError"];
+                };
+            };
+        };
+    };
     login_handler: {
         parameters: {
             query?: never;
@@ -9013,6 +9961,114 @@ export interface operations {
             };
         };
     };
+    list_discovered: {
+        parameters: {
+            query?: {
+                /** @description `true` — отклонённые ПК (их можно вернуть в список). */
+                rejected?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscoveredDevice"][];
+                };
+            };
+        };
+    };
+    accept_discovered: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcceptInput"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    reject_discovered: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    restore_discovered: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    import_csv: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetImportInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetImportResult"];
+                };
+            };
+        };
+    };
     get_asset: {
         parameters: {
             query?: never;
@@ -9057,6 +10113,29 @@ export interface operations {
             };
         };
     };
+    handover: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HandoverInput"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     list_categories: {
         parameters: {
             query?: {
@@ -9076,6 +10155,125 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Category"][];
                 };
+            };
+        };
+    };
+    my_change_approvals: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalItem"][];
+                };
+            };
+        };
+    };
+    decide_change: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeDecision"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_change_rules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalRule"][];
+                };
+            };
+        };
+    };
+    create_change_rule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApprovalRuleInput"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_change_rule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -9238,6 +10436,266 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Group"][];
+                };
+            };
+        };
+    };
+    create_record: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewRecord"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedRecord"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_record: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItilRecord"];
+                };
+            };
+        };
+    };
+    update_record: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecordUpdate"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    link_incident: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IncidentRef"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    unlink_incident: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: number;
+                incident: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    resolve_incidents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveAll"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResolvedAll"];
+                };
+            };
+        };
+    };
+    submit_change: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangeSubmitted"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    list_alerts: {
+        parameters: {
+            query?: {
+                /** @description Только открытые. */
+                open?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Alert"][];
+                };
+            };
+        };
+    };
+    receive: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Received"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    my_assets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyAsset"][];
                 };
             };
         };
@@ -9481,6 +10939,8 @@ export interface operations {
                 created_from?: string | null;
                 created_to?: string | null;
                 q?: string | null;
+                /** @description `problem` или `change` — только они; без параметра — обращения (инциденты и запросы). */
+                kind?: string | null;
                 /** @description `updated`, `created`, `number`, `priority`, `status`, `due`. */
                 sort?: string | null;
                 asc?: boolean;
@@ -11796,6 +13256,35 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["SessionRow"][];
                 };
+            };
+        };
+    };
+    search_software: {
+        parameters: {
+            query: {
+                /** @description Часть названия программы, от 3 символов. */
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SoftwareHit"][];
+                };
+            };
+            /** @description Слишком короткий запрос */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

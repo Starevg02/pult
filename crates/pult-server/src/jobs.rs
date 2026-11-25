@@ -68,6 +68,19 @@ pub fn registry(api: &ApiState) -> Result<Registry, RegistryError> {
     })?
     .schedule(AUDIT_VERIFY, "40 2 * * *")?;
 
+    // Коммуникации: отключённые в AD выбывают из групповых чатов (при выключенном модуле — ждёт включения).
+    let st = api.clone();
+    r.handle(pult_chat::SWEEP_JOB, move |_| {
+        let st = st.clone();
+        async move {
+            if pult_core::org::module_enabled(&st.core, pult_core::org::Gated::Chat).await {
+                pult_chat::sweep_blocked(&st.core.db).await?;
+            }
+            Ok(())
+        }
+    })?
+    .schedule(pult_chat::SWEEP_JOB, "*/5 * * * *")?;
+
     for (name, kind) in [(people_jobs::SYNC_INCREMENTAL, Kind::Incremental), (people_jobs::SYNC_FULL, Kind::Full)] {
         let st = api.clone();
         r.handle(name, move |_| {
@@ -79,6 +92,11 @@ pub fn registry(api: &ApiState) -> Result<Registry, RegistryError> {
     r.handle(people_jobs::HEALTH, move |_| {
         let st = st.clone();
         async move { quiet(pult_people::health::check(&st.core, &st.people.ad).await.map(|_| ())) }
+    })?;
+    let st = api.clone();
+    r.handle(people_jobs::PUSH, move |_| {
+        let st = st.clone();
+        async move { quiet(pult_people::push::deliver(&st.core).await.map(|_| ())) }
     })?;
     let st = api.clone();
     r.handle(people_jobs::COMPUTERS, move |_| {
@@ -176,6 +194,18 @@ pub fn registry(api: &ApiState) -> Result<Registry, RegistryError> {
             // Выключенный helpdesk отчётов не шлёт.
             if helpdesk_on(&st.core).await {
                 pult_helpdesk::reports::weekly(&st.core).await?;
+            }
+            Ok(())
+        }
+    })?;
+    let st = api.clone();
+    r.handle(helpdesk_jobs::NETBOX, move |_| {
+        let st = st.clone();
+        async move {
+            let on: pult_helpdesk::inventory::NetboxSettings = pult_core::settings::load(&st.core.db).await?;
+            if on.enabled && helpdesk_on(&st.core).await {
+                let s = pult_helpdesk::inventory::sync(&st.core).await?;
+                tracing::info!(fetched = s.fetched, added = s.added, missing = s.missing, "синхронизация NetBox");
             }
             Ok(())
         }
@@ -311,9 +341,11 @@ mod tests {
                 "ad.sync.full",
                 "ad.sync.incremental",
                 "audit.verify",
+                "chat.blocked_sweep",
                 "directory.operation",
                 "helpdesk.auto_close",
                 "helpdesk.files_gc",
+                "helpdesk.netbox_sync",
                 "helpdesk.orphans",
                 "helpdesk.recurring",
                 "helpdesk.sla",
@@ -322,6 +354,7 @@ mod tests {
                 "helpdesk.weekly_report",
                 "jobs.prune",
                 "mail.send",
+                "notify.push",
                 "sessions.prune",
                 "system.backup"
             ]
@@ -330,6 +363,6 @@ mod tests {
         assert!(s.contains(&(PRUNE.to_string(), PRUNE_SCHEDULE.to_string())));
         assert!(s.contains(&("ad.sync.incremental".to_string(), "*/5 * * * *".to_string())));
         // Вебхук — по событию, без расписания.
-        assert_eq!(s.len(), 16, "у каждой периодической задачи — расписание");
+        assert_eq!(s.len(), 19, "у каждой периодической задачи — расписание");
     }
 }

@@ -25,6 +25,7 @@ pult-people.workspace = true
 pult-helpdesk.workspace = true
 pult-directory.workspace = true
 pult-remote.workspace = true
+pult-chat.workspace = true
 pult-jobs.workspace = true
 utoipa-axum.workspace = true
 anyhow.workspace = true

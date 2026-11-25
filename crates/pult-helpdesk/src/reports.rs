@@ -84,6 +84,11 @@ pub struct ReportSummary {
     pub rating_down: i64,
     /// Доля «хорошо», %.
     pub rating_share: Option<f64>,
+    /// Средние баллы подробного опроса (1–5) и число ответивших.
+    pub survey_count: i64,
+    pub avg_speed: Option<f64>,
+    pub avg_quality: Option<f64>,
+    pub avg_courtesy: Option<f64>,
     pub work_minutes: i64,
     pub open_now: i64,
     pub unassigned_now: i64,
@@ -188,6 +193,15 @@ pub async fn build(core: &Core, q: &ReportQuery) -> ApiResult<Report> {
                 (SELECT count(*) FROM ticket_ratings g JOIN tickets t ON t.id = g.ticket_id
                   WHERE g.value = 'down' AND g.updated_at >= $1 AND g.updated_at < $2 AND ($3::uuid IS NULL OR t.site_id = $3)) AS rating_down,
                 NULL::float8 AS rating_share,
+                (SELECT count(*) FROM ticket_ratings g JOIN tickets t ON t.id = g.ticket_id
+                  WHERE num_nonnulls(g.speed, g.quality, g.courtesy) > 0
+                    AND g.updated_at >= $1 AND g.updated_at < $2 AND ($3::uuid IS NULL OR t.site_id = $3)) AS survey_count,
+                (SELECT round(avg(g.speed), 2)::float8 FROM ticket_ratings g JOIN tickets t ON t.id = g.ticket_id
+                  WHERE g.updated_at >= $1 AND g.updated_at < $2 AND ($3::uuid IS NULL OR t.site_id = $3)) AS avg_speed,
+                (SELECT round(avg(g.quality), 2)::float8 FROM ticket_ratings g JOIN tickets t ON t.id = g.ticket_id
+                  WHERE g.updated_at >= $1 AND g.updated_at < $2 AND ($3::uuid IS NULL OR t.site_id = $3)) AS avg_quality,
+                (SELECT round(avg(g.courtesy), 2)::float8 FROM ticket_ratings g JOIN tickets t ON t.id = g.ticket_id
+                  WHERE g.updated_at >= $1 AND g.updated_at < $2 AND ($3::uuid IS NULL OR t.site_id = $3)) AS avg_courtesy,
                 (SELECT coalesce(sum(w.minutes), 0) FROM ticket_worklogs w JOIN tickets t ON t.id = w.ticket_id
                   WHERE w.created_at >= $1 AND w.created_at < $2 AND ($3::uuid IS NULL OR t.site_id = $3))::int8 AS work_minutes,
                 (SELECT count(*) FROM o) AS open_now,
@@ -288,6 +302,10 @@ pub fn sheets(r: &Report) -> Vec<(String, Vec<Vec<Cell>>)> {
         vec![t("Оценок «хорошо»"), i(s.rating_up)],
         vec![t("Оценок «плохо»"), i(s.rating_down)],
         vec![t("Доля «хорошо», %"), opt(s.rating_share)],
+        vec![t("Ответили на подробный опрос"), i(s.survey_count)],
+        vec![t("Скорость, средний балл (1–5)"), opt(s.avg_speed)],
+        vec![t("Качество решения, средний балл (1–5)"), opt(s.avg_quality)],
+        vec![t("Вежливость, средний балл (1–5)"), opt(s.avg_courtesy)],
         vec![t("Трудозатраты, мин"), i(s.work_minutes)],
         vec![t("Открыто сейчас"), i(s.open_now)],
         vec![t("Без исполнителя сейчас"), i(s.unassigned_now)],
@@ -604,6 +622,7 @@ fn channel_label(code: &str) -> &str {
         "walk_in" => "Лично",
         "login_help" => "«Не могу войти»",
         "api" => "API",
+        "monitoring" => "Мониторинг",
         other => other,
     }
 }

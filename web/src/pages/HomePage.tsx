@@ -11,6 +11,7 @@ import { Announcements, StatusBadge, TicketLink } from "./helpdesk/parts";
 import { can, useMe, useModule } from "../session";
 import { Card, Empty, Input, Skeleton, Spinner } from "../ui";
 import { fullName } from "./phonebookUtil";
+import { ServiceStatusCard } from "./assets/ServiceStatus";
 
 function QuickTile({ to, icon, title, hint, primary }: { to: "/tickets/new" | "/phonebook" | "/kb" | "/access"; icon: ReactNode; title: string; hint: string; primary?: boolean }) {
   return (
@@ -191,6 +192,7 @@ export function HomePage() {
             </Card>
           )}
           {engineer && <WorkCard />}
+          {engineer && <ServiceStatusCard />}
         </div>
       </div>
     </div>

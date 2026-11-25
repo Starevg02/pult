@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, ok, type DeviceCard, type DeviceRow, type SessionRow } from "../../api/client";
+import { api, ok, type DeviceCard, type DeviceInventory, type DeviceRow, type SessionRow, type SoftwareHit } from "../../api/client";
 import { formatDate } from "../../format";
 import { can, useMe } from "../../session";
 import { Badge, Button, Card, Empty, ErrorBox, Input, PageHeader, Spinner } from "../../ui";
@@ -58,6 +58,124 @@ export function SessionList({ sessions, showPc = true }: { sessions: SessionRow[
   );
 }
 
+/** «Где установлена программа»: поиск по спискам программ, которые присылают агенты. */
+function SoftwareSearch() {
+  const { t, i18n } = useTranslation();
+  const [q, setQ] = useState("");
+  const needle = useDebounced(q);
+  const hits = useQuery({
+    queryKey: ["remote-software", needle],
+    queryFn: () => ok<SoftwareHit[]>(api.GET("/api/remote/software", { params: { query: { q: needle } } })),
+    enabled: needle.length > 2,
+  });
+  return (
+    <Card className="p-4">
+      <h2 className="mb-2 text-sm font-semibold">{t("remote.sw.searchTitle")}</h2>
+      <Input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("remote.sw.searchPlaceholder")} />
+      {hits.error && <ErrorBox error={hits.error} />}
+      {hits.data &&
+        (hits.data.length === 0 ? (
+          <Empty>{t("remote.sw.searchEmpty")}</Empty>
+        ) : (
+          <div className="mt-2 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-muted">
+                <tr className="border-b border-line">
+                  <th className="px-2 py-1.5">{t("remote.sw.col.name")}</th>
+                  <th className="px-2 py-1.5">{t("remote.sw.col.version")}</th>
+                  <th className="px-2 py-1.5">{t("remote.col.pc")}</th>
+                  <th className="px-2 py-1.5">{t("remote.col.seen")}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {hits.data.map((h) => (
+                  <tr key={`${h.device_id}-${h.name}-${h.version ?? ""}`}>
+                    <td className="px-2 py-1.5">{h.name}</td>
+                    <td className="px-2 py-1.5 font-mono text-xs">{h.version ?? "—"}</td>
+                    <td className="px-2 py-1.5">
+                      <DeviceLink id={h.device_id}>{h.hostname}</DeviceLink>
+                    </td>
+                    <td className="px-2 py-1.5 text-xs text-muted">{formatDate(h.last_seen_at, i18n.language)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {hits.data.length >= 500 && <p className="mt-1 text-xs text-muted">{t("remote.sw.tooMany")}</p>}
+          </div>
+        ))}
+    </Card>
+  );
+}
+
+const SW_PREVIEW = 30;
+
+/** Оборудование и установленные программы из отчёта агента. */
+function Inventory({ inv }: { inv: DeviceInventory }) {
+  const { t, i18n } = useTranslation();
+  const [filter, setFilter] = useState("");
+  const [all, setAll] = useState(false);
+  const f = filter.trim().toLowerCase();
+  const list = f ? inv.software.filter((s) => `${s.name} ${s.publisher ?? ""}`.toLowerCase().includes(f)) : inv.software;
+  const shown = all || f ? list : list.slice(0, SW_PREVIEW);
+  const row = (label: string, value: React.ReactNode) =>
+    value ? (
+      <div className="flex gap-3 py-1 text-sm">
+        <dt className="w-36 shrink-0 text-muted">{label}</dt>
+        <dd className="min-w-0 break-words">{value}</dd>
+      </div>
+    ) : null;
+  const gb = (mb: number) => (mb / 1024).toLocaleString(i18n.language, { maximumFractionDigits: 1 });
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      <Card className="p-4">
+        <h2 className="mb-2 text-sm font-semibold">{t("remote.hw.title")}</h2>
+        <dl>
+          {row(t("remote.hw.model"), [inv.manufacturer, inv.model].filter(Boolean).join(" "))}
+          {row(t("remote.hw.serial"), inv.serial_number && <span className="font-mono">{inv.serial_number}</span>)}
+          {row(t("remote.hw.cpu"), inv.cpu)}
+          {row(t("remote.hw.memory"), inv.memory_mb != null && t("remote.hw.gb", { n: gb(inv.memory_mb) }))}
+          {row(
+            t("remote.hw.disks"),
+            inv.disks.length > 0 && (
+              <ul>
+                {inv.disks.map((d) => (
+                  <li key={d.name}>{t("remote.hw.disk", { name: d.name, free: d.free_gb, size: d.size_gb })}</li>
+                ))}
+              </ul>
+            ),
+          )}
+          {row(t("remote.hw.bios"), inv.bios_version)}
+          {row(t("remote.hw.collected"), formatDate(inv.collected_at, i18n.language))}
+        </dl>
+      </Card>
+      <Card className="p-4">
+        <h2 className="mb-2 text-sm font-semibold">{t("remote.sw.title", { n: inv.software.length })}</h2>
+        {inv.software.length === 0 ? (
+          <Empty>{t("remote.sw.empty")}</Empty>
+        ) : (
+          <>
+            <Input type="search" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={t("remote.sw.filter")} />
+            <ul className="mt-2 max-h-96 divide-y divide-line overflow-y-auto text-sm">
+              {shown.map((s) => (
+                <li key={`${s.name}-${s.version ?? ""}`} className="flex flex-wrap items-baseline gap-x-2 py-1">
+                  <span className="min-w-0 flex-1 break-words">{s.name}</span>
+                  {s.version && <span className="font-mono text-xs text-muted">{s.version}</span>}
+                  {s.publisher && <span className="w-full text-xs text-muted">{s.publisher}</span>}
+                </li>
+              ))}
+            </ul>
+            {!all && !f && list.length > SW_PREVIEW && (
+              <Button className="mt-2" onClick={() => setAll(true)}>
+                {t("remote.sw.showAll", { n: list.length })}
+              </Button>
+            )}
+          </>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 export function ComputersPage() {
   const { t, i18n } = useTranslation();
   const [q, setQ] = useState("");
@@ -83,6 +201,7 @@ export function ComputersPage() {
         {where.error && <ErrorBox error={where.error} />}
         {where.data && (where.data.length === 0 ? <Empty>{t("remote.whereEmpty")}</Empty> : <SessionList sessions={where.data} />)}
       </Card>
+      <SoftwareSearch />
       <div className="flex flex-wrap items-center gap-3">
         <Input className="max-w-sm" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("remote.search")} />
         <label className="flex items-center gap-2 text-sm">
@@ -207,6 +326,14 @@ export function DevicePage() {
           )}
         </Card>
       </div>
+      {c.inventory ? (
+        <Inventory inv={c.inventory} />
+      ) : (
+        <Card className="p-4">
+          <h2 className="mb-1 text-sm font-semibold">{t("remote.hw.title")}</h2>
+          <p className="text-sm text-muted">{t("remote.hw.none")}</p>
+        </Card>
+      )}
       {c.tickets.length > 0 && (
         <Card className="p-4">
           <h2 className="mb-2 text-sm font-semibold">{t("remote.tickets")}</h2>

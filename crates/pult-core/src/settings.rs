@@ -72,6 +72,11 @@ pub struct SecuritySettings {
     pub internal_networks: Vec<String>,
     /// Коды ролей, которым вход из интернета — только с кодом из приложения. Пусто — код по желанию.
     pub totp_required_roles: Vec<String>,
+    /// Вход через домен без пароля (Kerberos) — только из сетей организации. Нужны keytab
+    /// (`KRB5_KTNAME`) и SPN `HTTP/<имя портала>` у служебной учётки.
+    pub kerberos_login: bool,
+    /// Смена своего пароля AD в профиле. Домен проверяет старый пароль и свою политику паролей; нужен LDAPS.
+    pub ad_password_change: bool,
 }
 
 /// Частные сети. Сам сервер (127.0.0.1) — не «внутри»: так ходит прокси на этом же сервере, и без его
@@ -90,6 +95,8 @@ impl Default for SecuritySettings {
             ad_outage_grace_minutes: 30,
             internal_networks: DEFAULT_INTERNAL_NETWORKS.iter().map(|s| (*s).to_string()).collect(),
             totp_required_roles: Vec::new(),
+            kerberos_login: false,
+            ad_password_change: false,
         }
     }
 }
@@ -133,6 +140,120 @@ impl SecuritySettings {
         let ip = ip.to_canonical();
         self.internal_networks.iter().filter_map(|n| n.trim().parse::<IpNetwork>().ok()).any(|n| n.contains(ip))
     }
+}
+
+/// Какое поле ID-токена OIDC — логин сотрудника.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum OidcClaim {
+    /// `preferred_username`: логин AD (`ivanov`) или UPN (`ivanov@corp.example`).
+    #[default]
+    PreferredUsername,
+    /// `upn` (ADFS, Entra ID).
+    Upn,
+    /// `email` — только подтверждённый (`email_verified` не `false`).
+    Email,
+}
+
+/// Вход через OpenID Connect (админка → «Безопасность»). Секрет клиента — отдельно и зашифрованным.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(default)]
+pub struct OidcSettings {
+    pub enabled: bool,
+    /// Издатель, например `https://sso.example.local/realms/corp`: настройки берутся из
+    /// `<издатель>/.well-known/openid-configuration`.
+    pub issuer: String,
+    pub client_id: String,
+    /// Адрес возврата, зарегистрированный у провайдера: `https://<портал>/api/auth/oidc/callback`.
+    pub redirect_uri: String,
+    pub username_claim: OidcClaim,
+    /// Надпись на кнопке входа; пусто — «Войти через SSO».
+    pub button_label: String,
+    /// Вход через провайдера и из интернета. Тем, кому снаружи нужен код из приложения, он всё равно
+    /// закрыт: они входят паролем и кодом.
+    pub allow_external: bool,
+}
+
+impl Default for OidcSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            issuer: String::new(),
+            client_id: String::new(),
+            redirect_uri: String::new(),
+            username_claim: OidcClaim::PreferredUsername,
+            button_label: String::new(),
+            allow_external: false,
+        }
+    }
+}
+
+impl SettingsGroup for OidcSettings {
+    const KEY: &'static str = "oidc";
+}
+
+impl OidcSettings {
+    /// Изменилось, кому уходит секрет клиента: тогда сохранённый секрет не используется.
+    pub fn endpoint_changed(&self, new: &Self) -> bool {
+        let iss = |s: &str| s.trim().trim_end_matches('/').to_lowercase();
+        iss(&self.issuer) != iss(&new.issuer) || self.client_id.trim() != new.client_id.trim()
+    }
+}
+
+/// Секрет клиента OIDC: base64(шифротекст). Нет — публичный клиент (только PKCE).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OidcSecret {
+    pub sealed: Option<String>,
+}
+
+impl SettingsGroup for OidcSecret {
+    const KEY: &'static str = "oidc_secret";
+}
+
+/// Помощник (админка → «Помощник»): своя модель на отдельном сервере за OpenAI-совместимым API
+/// (vLLM, Ollama, LM Studio и другие). Ключ API — отдельно и зашифрованным.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(default)]
+pub struct AssistSettings {
+    pub enabled: bool,
+    /// Адрес API без `/chat/completions`, например `http://llm.example.local:8000/v1`.
+    pub base_url: String,
+    /// Имя модели на сервере, например `qwen2.5-14b-instruct`.
+    pub model: String,
+    /// Сколько ждать ответа модели, секунд.
+    pub timeout_secs: u32,
+    /// Предел длины ответа, токенов.
+    pub max_tokens: u32,
+}
+
+impl Default for AssistSettings {
+    fn default() -> Self {
+        Self { enabled: false, base_url: String::new(), model: String::new(), timeout_secs: 60, max_tokens: 1024 }
+    }
+}
+
+impl SettingsGroup for AssistSettings {
+    const KEY: &'static str = "assist";
+}
+
+impl AssistSettings {
+    /// Изменилось, куда уходит ключ API: тогда сохранённый ключ не используется.
+    pub fn endpoint_changed(&self, new: &Self) -> bool {
+        let url = |s: &str| s.trim().trim_end_matches('/').to_lowercase();
+        url(&self.base_url) != url(&new.base_url)
+    }
+}
+
+/// Ключ API помощника: base64(шифротекст). Нет — сервер модели без ключа.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AssistSecret {
+    pub sealed: Option<String>,
+}
+
+impl SettingsGroup for AssistSecret {
+    const KEY: &'static str = "assist_secret";
 }
 
 /// Язык установки (админка → «Система»): для новых пользователей и писем на адреса без учётки.

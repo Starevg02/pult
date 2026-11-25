@@ -39,6 +39,8 @@ pub struct Category {
     pub parent_id: Option<Uuid>,
     pub code: Option<String>,
     pub name: String,
+    /// Описание для каталога услуг: что относится к категории.
+    pub description: String,
     pub kind: String,
     pub default_priority: String,
     #[schema(value_type = Vec<FormField>)]
@@ -48,7 +50,8 @@ pub struct Category {
     pub version: i32,
 }
 
-const CATEGORY_COLS: &str = "id, parent_id, code, name, kind, default_priority, form_schema, is_active, sort, version";
+const CATEGORY_COLS: &str =
+    "id, parent_id, code, name, description, kind, default_priority, form_schema, is_active, sort, version";
 
 #[derive(Deserialize, IntoParams)]
 pub struct CategoryQuery {
@@ -83,6 +86,8 @@ async fn list_categories(
 pub struct CategoryInput {
     pub parent_id: Option<Uuid>,
     pub name: String,
+    #[serde(default)]
+    pub description: String,
     pub kind: String,
     pub default_priority: String,
     #[serde(default)]
@@ -97,6 +102,9 @@ fn validate_category(b: &CategoryInput) -> ApiResult<()> {
     let bad = |m: String| ApiError::bad_request("invalid_category", m);
     if b.name.trim().is_empty() {
         return Err(bad("Укажите название.".into()));
+    }
+    if b.description.chars().count() > 500 {
+        return Err(bad("Описание — не длиннее 500 символов.".into()));
     }
     if !matches!(b.kind.as_str(), "incident" | "request")
         || !matches!(b.default_priority.as_str(), "low" | "normal" | "high" | "critical")
@@ -149,8 +157,8 @@ async fn create_category(
     check_parent(&core, None, b.parent_id).await?;
     let c: Category = sqlx::query_as(&format!(
         // SAFE: константа
-        "INSERT INTO ticket_categories (parent_id, name, kind, default_priority, form_schema, is_active, sort)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING {CATEGORY_COLS}"
+        "INSERT INTO ticket_categories (parent_id, name, kind, default_priority, form_schema, is_active, sort, description)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING {CATEGORY_COLS}"
     ))
     .bind(b.parent_id)
     .bind(b.name.trim())
@@ -159,6 +167,7 @@ async fn create_category(
     .bind(json!(b.form_schema))
     .bind(b.is_active)
     .bind(b.sort)
+    .bind(b.description.trim())
     .fetch_one(&core.db)
     .await?;
     audit::record(
@@ -184,7 +193,7 @@ async fn update_category(
     validate_category(&b)?;
     check_parent(&core, Some(id), b.parent_id).await?;
     let c: Option<Category> = sqlx::query_as(&format!( // SAFE: константа
-        "UPDATE ticket_categories SET parent_id = $3, name = $4, kind = $5, default_priority = $6, form_schema = $7, is_active = $8, sort = $9, version = version + 1
+        "UPDATE ticket_categories SET parent_id = $3, name = $4, kind = $5, default_priority = $6, form_schema = $7, is_active = $8, sort = $9, description = $10, version = version + 1
           WHERE id = $1 AND version = $2 RETURNING {CATEGORY_COLS}"
     ))
     .bind(id)
@@ -196,6 +205,7 @@ async fn update_category(
     .bind(json!(b.form_schema))
     .bind(b.is_active)
     .bind(b.sort)
+    .bind(b.description.trim())
     .fetch_optional(&core.db)
     .await?;
     let c = c.ok_or(ApiError::Conflict { current: json!({}) })?;

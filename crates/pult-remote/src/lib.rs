@@ -11,6 +11,7 @@ pub mod admin;
 pub mod agent;
 pub mod connect;
 pub mod devices;
+pub mod inventory;
 pub mod policy;
 pub mod tokens;
 
@@ -98,6 +99,7 @@ where
             .routes(routes!(connect::result))
             .routes(routes!(devices::list_devices))
             .routes(routes!(devices::get_device))
+            .routes(routes!(inventory::search_software))
             .routes(routes!(devices::where_is))
             .routes(routes!(devices::person_sessions))
             .routes(routes!(devices::put_favorite, devices::delete_favorite))

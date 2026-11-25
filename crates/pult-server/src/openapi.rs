@@ -12,7 +12,7 @@ use utoipa::{
     paths(crate::http::health, crate::negotiate::negotiate),
     components(schemas(crate::http::Health, crate::http::Check, pult_api_types::AgentReport, pult_api_types::Session, pult_api_types::SessionState, crate::negotiate::NegotiateResult, crate::negotiate::NegotiateError, crate::negotiate::DenyReason)),
     modifiers(&AgentKey),
-    tags((name = "system", description = "Состояние сервера"), (name = "auth", description = "Вход и сеанс"), (name = "phonebook", description = "Справочник"), (name = "sites", description = "Площадки"), (name = "notifications", description = "Уведомления"), (name = "admin", description = "Администрирование"), (name = "agent", description = "Агент рабочей станции"), (name = "remote", description = "Удалённая поддержка"), (name = "remote-helper", description = "Helper на ПК инженера"), (name = "remote-admin", description = "Удалённая поддержка: администрирование"), (name = "auth-prototype", description = "Прототип П4: вход через домен (Kerberos)"))
+    tags((name = "system", description = "Состояние сервера"), (name = "auth", description = "Вход и сеанс"), (name = "phonebook", description = "Справочник"), (name = "sites", description = "Площадки"), (name = "notifications", description = "Уведомления"), (name = "chat", description = "Коммуникации"), (name = "admin", description = "Администрирование"), (name = "agent", description = "Агент рабочей станции"), (name = "remote", description = "Удалённая поддержка"), (name = "remote-helper", description = "Helper на ПК инженера"), (name = "remote-admin", description = "Удалённая поддержка: администрирование"), (name = "auth-prototype", description = "Прототип П4: вход через домен (Kerberos)"))
 )]
 struct ApiDoc;
 

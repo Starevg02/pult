@@ -7,6 +7,7 @@ import "./app.css";
 import { Crash } from "./crash";
 import "./i18n";
 import { applySaved } from "./prefs";
+import { registerServiceWorker } from "./push";
 import { router } from "./router";
 import { toast } from "./toast";
 
@@ -33,6 +34,8 @@ const queryClient: QueryClient = new QueryClient({
     },
   }),
 });
+
+registerServiceWorker();
 
 const root = document.getElementById("root");
 if (!root) throw new Error("#root не найден в index.html");

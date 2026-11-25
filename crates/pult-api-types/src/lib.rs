@@ -84,6 +84,46 @@ pub struct AgentReport {
     /// IP-адреса ПК, как их видит агент.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ip_addrs: Vec<String>,
+    /// Оборудование и программы: при запуске агента и когда портал попросит (`want_inventory`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inventory: Option<HardwareInventory>,
+}
+
+/// Оборудование и установленные программы ПК.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct HardwareInventory {
+    pub manufacturer: Option<String>,
+    pub model: Option<String>,
+    /// Серийный номер из SMBIOS.
+    pub serial_number: Option<String>,
+    pub bios_version: Option<String>,
+    pub cpu: Option<String>,
+    /// Оперативная память, МБ.
+    pub memory_mb: Option<u64>,
+    #[serde(default)]
+    pub disks: Vec<DeviceDisk>,
+    /// Программы из «Программы и компоненты» (без системных компонентов и обновлений).
+    #[serde(default)]
+    pub software: Vec<InstalledSoftware>,
+}
+
+/// Локальный диск.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct DeviceDisk {
+    /// Буква диска, например `C:`.
+    pub name: String,
+    pub size_gb: u64,
+    pub free_gb: u64,
+}
+
+/// Установленная программа.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct InstalledSoftware {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub publisher: Option<String>,
 }
 
 /// Регистрация агента: токен регистрации из MSI/GPO и сведения о ПК.
@@ -127,6 +167,9 @@ pub struct ReportResponse {
     pub next_report_secs: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub update: Option<AgentUpdate>,
+    /// Прислать оборудование и программы в следующем отчёте: у портала их нет или они старше суток.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub want_inventory: bool,
 }
 
 /// Действие helper на ПК инженера.
@@ -244,10 +287,24 @@ mod tests {
             fqdn: None,
             os_version: None,
             ip_addrs: vec![],
+            inventory: None,
         };
         let j = serde_json::to_value(&r).unwrap();
         assert_eq!(j["sessions"][0]["state"], "active");
+        assert!(j.get("inventory").is_none(), "без оборудования поле не пишется");
+        let mut r = r;
+        r.inventory = Some(HardwareInventory {
+            model: Some("OptiPlex 7090".into()),
+            memory_mb: Some(16384),
+            disks: vec![DeviceDisk { name: "C:".into(), size_gb: 476, free_gb: 120 }],
+            software: vec![InstalledSoftware { name: "7-Zip".into(), version: Some("24.08".into()), publisher: None }],
+            ..Default::default()
+        });
+        let j = serde_json::to_value(&r).unwrap();
+        assert_eq!(j["inventory"]["software"][0]["name"], "7-Zip");
         assert_eq!(serde_json::from_value::<AgentReport>(j).unwrap(), r);
+        let resp: ReportResponse = serde_json::from_value(serde_json::json!({"next_report_secs": 60})).unwrap();
+        assert!(!resp.want_inventory, "старый портал не просит оборудование");
     }
 
     #[test]

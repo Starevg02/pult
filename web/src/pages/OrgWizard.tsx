@@ -13,7 +13,7 @@ import { MailPage } from "./admin/MailPage";
 import { SitesPage } from "./admin/SitesPage";
 
 const LOGO_MAX = 256 * 1024;
-const MODULES: readonly (keyof Modules)[] = ["helpdesk", "phonebook", "directory", "remote", "telephony"];
+const MODULES: readonly (keyof Modules)[] = ["helpdesk", "phonebook", "directory", "remote", "telephony", "chat"];
 
 /** Сохранить организацию (название, модули, признак «мастер пройден»). */
 function useSaveOrg(onSaved?: () => void) {

@@ -752,10 +752,23 @@ async fn stage2_acceptance() {
         .post(
             "/api/admin/helpdesk/categories",
             json!({"name": "С полями", "kind": "incident", "default_priority": "high", "is_active": true, "sort": 1,
+        "description": "  Модель и серийный номер  ",
         "form_schema": [{"key": "model", "label": "Модель", "type": "text", "required": true}]}),
         )
         .await;
     let fc = c_["id"].as_str().unwrap().to_string();
+    // Каталог услуг: описание категории видят сотрудники; длинное — отказ.
+    let (_, cats) = emp.get("/api/helpdesk/categories").await;
+    let mine = cats.as_array().unwrap().iter().find(|c| c["id"] == fc.as_str()).unwrap();
+    assert_eq!(mine["description"], "Модель и серийный номер", "{mine}");
+    let (code, r) = admin
+        .post(
+            "/api/admin/helpdesk/categories",
+            json!({"name": "Длинная", "kind": "incident", "default_priority": "normal", "is_active": true, "sort": 1,
+                   "description": "я".repeat(501)}),
+        )
+        .await;
+    assert_eq!(code, StatusCode::BAD_REQUEST, "{r}");
     let (code, r) = emp.post("/api/helpdesk/tickets", new_ticket("Форма", &a, &fc)).await;
     assert_eq!((code, r["error"].as_str()), (StatusCode::BAD_REQUEST, Some("invalid_ticket")), "{r}");
     let mut body = new_ticket("Форма", &a, &fc);

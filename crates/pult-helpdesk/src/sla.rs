@@ -107,12 +107,15 @@ pub async fn apply(tx: &mut Transaction<'_, Postgres>, ticket: Uuid) -> Result<(
         "SELECT id, response_minutes, resolve_minutes FROM sla_policies
           WHERE is_active AND (site_id IS NULL OR site_id = $1) AND (category_id IS NULL OR category_id = $2)
             AND (priority IS NULL OR priority = $3)
+            -- Проблемы и изменения живут по своему плану, а не по SLA обращений.
+            AND EXISTS (SELECT 1 FROM tickets WHERE id = $4 AND kind IN ('incident', 'request'))
           ORDER BY (site_id IS NOT NULL)::int + (category_id IS NOT NULL)::int + (priority IS NOT NULL)::int DESC, sort, name
           LIMIT 1",
     )
     .bind(c.site_id)
     .bind(c.category_id)
     .bind(&c.priority)
+    .bind(ticket)
     .fetch_optional(&mut **tx)
     .await?;
     let Some(p) = policy else {

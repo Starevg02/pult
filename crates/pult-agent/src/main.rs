@@ -14,13 +14,13 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Точка входа службы Windows (запускает SCM).
+    /// Точка входа службы: Windows (запускает SCM) или Linux (запускает systemd).
     Service,
     /// Работать в консоли (проверка; нужны права администратора). Настройки — из реестра.
     Run,
     /// Показать сведения и сессии этого ПК (JSON) — то, что уйдёт на портал.
     Sessions {
-        /// Все сессии, включая служебные и слушатели.
+        /// Windows: все сессии, включая служебные; Linux: ещё и оборудование с пакетами.
         #[arg(long)]
         all: bool,
     },
@@ -121,17 +121,56 @@ fn sessions(all: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[cfg(not(windows))]
+/// Linux: служба systemd запускает `pult-agent service`, журнал — в journald (stderr).
+#[cfg(target_os = "linux")]
 fn service() -> anyhow::Result<()> {
-    anyhow::bail!("агент работает только в Windows")
+    tracing_subscriber::fmt().with_ansi(false).with_writer(std::io::stderr).init();
+    tracing::info!(version = env!("CARGO_PKG_VERSION"), "агент запускается");
+    let agent = pult_agent::linux::linux_agent()?;
+    let (stop_tx, stop_rx) = tokio::sync::watch::channel(false);
+    tokio::runtime::Runtime::new()?.block_on(async move {
+        // systemd останавливает службу сигналом SIGTERM.
+        let mut term = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+        tokio::spawn(async move {
+            tokio::select! {
+                _ = tokio::signal::ctrl_c() => {}
+                _ = term.recv() => {}
+            }
+            let _ = stop_tx.send(true);
+        });
+        pult_agent::run::run(agent, Default::default(), stop_rx).await;
+        anyhow::Ok(())
+    })
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "linux")]
 fn console() -> anyhow::Result<()> {
     service()
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "linux")]
+fn sessions(all: bool) -> anyhow::Result<()> {
+    use pult_agent::run::Host;
+    let host = pult_agent::linux::LinuxHost::new(&pult_agent::linux::settings());
+    let mut r = host.collect()?;
+    if all {
+        r.inventory = host.inventory();
+    }
+    say(&serde_json::to_string_pretty(&r)?);
+    Ok(())
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
+fn service() -> anyhow::Result<()> {
+    anyhow::bail!("агент работает в Windows и Linux")
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
+fn console() -> anyhow::Result<()> {
+    service()
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
 fn sessions(_: bool) -> anyhow::Result<()> {
     service()
 }

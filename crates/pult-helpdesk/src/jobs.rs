@@ -12,6 +12,7 @@ pub const WAITING: &str = "helpdesk.waiting";
 pub const RECURRING: &str = "helpdesk.recurring";
 pub const WEEKLY_REPORT: &str = "helpdesk.weekly_report";
 pub use crate::integrations::WEBHOOK_JOB as WEBHOOK;
+pub use crate::inventory::SYNC_JOB as NETBOX;
 
 pub fn definitions() -> Vec<JobDefinition> {
     vec![
@@ -23,6 +24,7 @@ pub fn definitions() -> Vec<JobDefinition> {
         JobDefinition { name: RECURRING, schedule: Some("* * * * *") },
         JobDefinition { name: WEEKLY_REPORT, schedule: Some("0 8 * * 1") },
         JobDefinition { name: WEBHOOK, schedule: None },
+        JobDefinition { name: NETBOX, schedule: Some("41 3 * * *") },
     ]
 }
 

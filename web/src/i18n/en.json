@@ -27,7 +27,14 @@
     "account": "Account",
     "skip": "Skip to content",
     "notificationsUnread_one": "Notifications: {{count}} unread",
-    "notificationsUnread_other": "Notifications: {{count}} unread"
+    "notificationsUnread_other": "Notifications: {{count}} unread",
+    "myAssets": "My equipment",
+    "problems": "Problems",
+    "changes": "Changes",
+    "vault": "Secrets",
+    "assistant": "Assistant",
+    "chats": "Messages",
+    "catalog": "Service catalog"
   },
   "login": {
     "title": "Sign in to the IT portal",
@@ -55,7 +62,36 @@
     },
     "cantLogin": "Can't sign in",
     "otp": "App code",
-    "otpHint": "6 digits from your authenticator app. You are signing in from outside the organization's network."
+    "otpHint": "6 digits from your authenticator app. You are signing in from outside the organization's network.",
+    "kerberos": {
+      "button": "Sign in with domain account",
+      "errors": {
+        "negotiate_required": "The browser did not send a Kerberos ticket. Open the portal by name (not by IP) and add it to the Local intranet zone.",
+        "ntlm_not_supported": "The browser offered NTLM instead of Kerberos: the portal is opened by IP or is not in the Local intranet zone.",
+        "rejected": "The Kerberos ticket was not accepted. Sign in with your password and contact IT.",
+        "kerberos_external": "Domain sign-in works only from the organization network. Sign in with your password.",
+        "forbidden": "Your account is not in the portal. Sign in with your password.",
+        "account_disabled": "The account is disabled.",
+        "busy": "The server is busy checking sign-ins. Try again in a few seconds.",
+        "not_available": "Domain sign-in is not available on this server."
+      }
+    },
+    "oidc": {
+      "button": "Sign in with SSO",
+      "errors": {
+        "state": "Sign-in was not completed or has expired. Please start again.",
+        "denied": "The sign-in provider refused.",
+        "external": "SSO sign-in works only from the organization network. Sign in with your password.",
+        "unavailable": "The sign-in provider is unavailable. Try later or sign in with your password.",
+        "token": "The sign-in provider sent an invalid response. Contact IT support.",
+        "no_account": "The account was not found in the domain.",
+        "ambiguous": "Several accounts match this name. Sign in with your password or contact IT support.",
+        "account_disabled": "The account is disabled.",
+        "identity_mismatch": "This account is already linked to another provider user. Contact IT support.",
+        "otp_required": "From the internet, sign in with your password and an authenticator code.",
+        "error": "Sign-in failed. Please try again."
+      }
+    }
   },
   "outage": {
     "title": "The domain is unreachable",
@@ -249,10 +285,23 @@
         "sla_warning": "SLA due soon",
         "task_assigned": "A checklist task was assigned to you",
         "rule": "A request rule fired",
-        "watching": "You were added as a watcher"
+        "watching": "You were added as a watcher",
+        "change_approval": "A change needs your approval",
+        "change_decided": "Change approval finished"
       },
       "system": {
         "backup_failed": "Backup failed"
+      },
+      "monitoring": {
+        "alert": "Monitoring alert"
+      },
+      "chat": {
+        "added": "You were added to a group chat",
+        "removed": "You were removed from a group chat",
+        "owner": "You became the owner of a group chat",
+        "owner_changed": "A group chat has a new owner",
+        "locked": "A group chat has no owner and is locked",
+        "unlocked": "A group chat is available again"
       }
     }
   },
@@ -277,7 +326,10 @@
       "integrations": "API and webhooks",
       "accessResources": "Access resources",
       "directory": "AD directory: writes",
-      "remote": "Remote support"
+      "remote": "Remote support",
+      "changeRules": "Change approval",
+      "chats": "Communications",
+      "extensions": "Extensions"
     },
     "ad": {
       "title": "AD directory",
@@ -421,7 +473,11 @@
       "internal_networks": "Organization networks",
       "internalHint": "One network per line (CIDR). From other addresses an app code is asked from those who set it up and from the roles below. If the portal is behind a proxy, set PULT_TRUSTED_PROXIES.",
       "totp_required_roles": "App code required for roles",
-      "totpRolesHint": "These roles can sign in from the internet only with a code set up (Profile → Sign-in from the internet). For everyone else the code is optional."
+      "totpRolesHint": "These roles can sign in from the internet only with a code set up (Profile → Sign-in from the internet). For everyone else the code is optional.",
+      "kerberos_login": "Passwordless domain sign-in (Kerberos)",
+      "kerberosHint": "An employee on a domain PC signs in with “Sign in with domain account” — no password. Organization networks only. Requires a keytab (KRB5_KTNAME) and the SPN HTTP/<portal name> on the service account; the portal must be in the browser’s Local intranet zone. Check it on the Status page.",
+      "ad_password_change": "Domain password change in the profile",
+      "adPasswordHint": "Employees change their own AD password on the My profile page: the portal signs in as them with the old password and changes it; the domain checks its password policy. Requires an LDAPS connection to the domain. A wrong old password counts as a failed sign-in; after the change, sessions on other devices are closed."
     },
     "audit": {
       "title": "Audit log",
@@ -480,7 +536,18 @@
       "backup": "Backup",
       "backupNone": "No backups yet. A daily backup runs at 02:30.",
       "backupOk": "Created",
-      "backupFailed": "Failed"
+      "backupFailed": "Failed",
+      "backupKeep": "Copies to keep",
+      "backupKeepHint": "1 to 365. Extra old copies are removed after the next backup. Keeping copies off the portal server is the job of external storage.",
+      "backupVerify": "Verify every copy (pg_restore --list)",
+      "backupVerified": "Verified: {{n}} objects",
+      "backupNotVerified": "Not verified",
+      "push": "Device notifications",
+      "pushHint": "Employees turn them on in their profile. The server needs Internet access to the browsers' push services (Google, Mozilla, Apple, Microsoft). The content is encrypted with the browser's key: the push service cannot read it.",
+      "pushEnabled": "Enable device notifications",
+      "pushShowText": "Show the ticket or message subject (visible on the lock screen)",
+      "pushContact": "Administrator contact for push services",
+      "pushContactHint": "mailto:address or https://… — the push service uses it to reach you about delivery problems."
     },
     "helpdesk": {
       "categories": "Request categories",
@@ -529,7 +596,9 @@
       "absences": "Engineer absences",
       "from": "From",
       "to": "To",
-      "reason": "Reason"
+      "reason": "Reason",
+      "description": "Description for the service catalog",
+      "descriptionHint": "What belongs to this category, briefly, for employees."
     },
     "groups": {
       "work": "Requests",
@@ -552,7 +621,10 @@
       "system": "Health, portal certificate, backups.",
       "accessResources": "Groups, folders and applications for access requests, and their owners",
       "directory": "Writer account, allowed OUs and groups, whether a request is required",
-      "remote": "PC agents, enrollment tokens, connection policies, MSI and helper packages."
+      "remote": "PC agents, enrollment tokens, connection policies, MSI and helper packages.",
+      "changeRules": "Who approves changes: by category and risk level",
+      "chats": "Group chats without an owner, assigning owners, anonymous statistics.",
+      "extensions": "External services by manifest: API rights, webhook, menu links."
     },
     "directory": {
       "title": "AD directory: writes",
@@ -579,6 +651,53 @@
       "groupOptional": "Optional.",
       "ownerHint": "An employee from the directory",
       "active": "Show in the request form"
+    },
+    "oidc": {
+      "title": "OpenID Connect sign-in (SSO)",
+      "hint": "Keycloak, ADFS, Entra ID and other providers. The provider confirms identity; the account, roles and disabling come from AD, as with password sign-in.",
+      "enabled": "Enable provider sign-in",
+      "issuer": "Issuer",
+      "issuerHint": "Settings and keys are read from <issuer>/.well-known/openid-configuration. https:// only.",
+      "clientId": "Client ID",
+      "secret": "Client secret",
+      "publicClient": "No secret: public client (PKCE only).",
+      "dropSecret": "Delete the stored secret",
+      "redirect": "Redirect URI",
+      "redirectHint": "Register this address with the provider: {{url}}",
+      "useThis": "Fill in",
+      "claim": "Employee login",
+      "claimHint": "The account is looked up in the AD mirror by this ID token field.",
+      "claims": {
+        "preferred_username": "preferred_username (login or UPN)",
+        "upn": "upn",
+        "email": "email (verified only)"
+      },
+      "buttonLabel": "Sign-in button label",
+      "allowExternal": "Allow provider sign-in from the internet",
+      "allowExternalHint": "Users who need an authenticator code from outside cannot use it: they sign in with password and code.",
+      "test": "Check provider",
+      "testOk": "The provider responds, signing keys: {{count}}",
+      "noKeys": "The provider has not published signing keys.",
+      "identities": "Linked users: {{count}}",
+      "identitiesHint": "On first sign-in the provider’s permanent user ID (sub) is linked to the portal account. Renaming a user at the provider does not give access to someone else’s account. If users were moved to another provider or recreated, reset the links.",
+      "reset": "Reset links",
+      "resetConfirm": "Reset all links? Each user will be linked again on next sign-in."
+    },
+    "assist": {
+      "title": "Assistant",
+      "hint": "Your own model on a separate server with an OpenAI-compatible API (vLLM, Ollama, LM Studio and others). The assistant answers questions from the knowledge base, suggests a category for new tickets, and writes reply drafts and ticket summaries for engineers. It only advises and does nothing by itself.",
+      "enabled": "Turn on the assistant",
+      "url": "API address",
+      "urlHint": "Without /chat/completions at the end, for example http://llm.example.local:8000/v1.",
+      "model": "Model",
+      "key": "API key",
+      "noKey": "Not set: the model server needs no key.",
+      "dropKey": "Delete the key",
+      "timeout": "Wait for an answer, seconds",
+      "maxTokens": "Answer length, tokens",
+      "privacy": "The model receives the texts of articles and tickets that the user can see. Use a server inside the organization network; with an http:// address the API key is sent in clear text.",
+      "test": "Check the server",
+      "testOk": "The model answered in {{ms}} ms"
     }
   },
   "status": {
@@ -667,7 +786,8 @@
       "phone": "Phone",
       "walk_in": "In person",
       "login_help": "Can't sign in",
-      "api": "API"
+      "api": "API",
+      "monitoring": "Monitoring"
     },
     "issues": {
       "forgot": "Forgot password",
@@ -723,7 +843,13 @@
       },
       "directory": {
         "operation": "AD directory operation"
-      }
+      },
+      "alert_resolved": "monitoring: problem resolved",
+      "change_reset": "change edited — approval restarts",
+      "change_submitted": "approval: {{state}}",
+      "change_decision": "approver decision",
+      "problem_linked": "linked to problem #{{number}}",
+      "problem_unlinked": "unlinked from problem #{{number}}"
     },
     "loginHelp": {
       "title": "Can't sign in",
@@ -931,7 +1057,14 @@
     "mergeInto": "Main ticket number",
     "toKb": "Knowledge base article",
     "template": "Template",
-    "templateHint": "Fills in the subject, description, category and checklist."
+    "templateHint": "Fills in the subject, description, category and checklist.",
+    "goodComment": "What went well? (optional)",
+    "survey": {
+      "hint": "More detail if you like: from 1 (poor) to 5 (excellent).",
+      "speed": "Speed",
+      "quality": "Solution quality",
+      "courtesy": "Courtesy"
+    }
   },
   "bulk": {
     "selected": "Selected: {{n}}",
@@ -994,6 +1127,68 @@
       "in_stock": "In stock",
       "repair": "In repair",
       "retired": "Retired"
+    },
+    "handover": {
+      "issue": "Issue",
+      "return": "Return",
+      "transfer": "Transfer",
+      "current": "Currently with",
+      "to": "Issue to",
+      "newResponsible": "Transfer to",
+      "after": "State after return",
+      "comment": "Comment"
+    },
+    "events": {
+      "title": "Equipment history",
+      "created": "Added",
+      "issued": "Issued",
+      "returned": "Returned",
+      "transferred": "Transferred",
+      "updated": "Changed",
+      "changed": "changed"
+    },
+    "fields": {
+      "type_id": "Type",
+      "name": "Name",
+      "inventory_number": "Inventory no.",
+      "serial_number": "Serial number",
+      "site_id": "Site",
+      "room": "Room",
+      "status": "State",
+      "notes": "Notes",
+      "attributes": "Extra fields"
+    },
+    "mine": {
+      "title": "My equipment",
+      "hint": "Equipment assigned to you. If something is wrong or does not work, create a ticket.",
+      "empty": "No equipment is assigned to you.",
+      "since": "Issued",
+      "report": "Report a problem with equipment"
+    },
+    "import": {
+      "title": "Import from CSV",
+      "hint": "The first row holds headers: name and type are required; inventory_number, serial_number, site, room, responsible (e-mail or AD login), status, notes and the type's fields are optional. Column captions in Russian, English or Chinese work too. Separator: “;” or “,”, encoding UTF-8. Rows with an inventory number already in the registry are skipped.",
+      "sample": "name;type;inventory_number;site;responsible;Model\nAccounting MFP;Printer / MFP;INV-0042;Head office;i.petrova;HP M428",
+      "file": "CSV file",
+      "tooBig": "The file is larger than 2 MB — split it into parts.",
+      "checked": "Check: {{created}} to create, {{skipped}} skipped, {{errors}} errors.",
+      "done": "Done: {{created}} created, {{skipped}} skipped, {{errors}} errors.",
+      "row": "Row {{row}}",
+      "check": "Check",
+      "run": "Import"
+    },
+    "found": {
+      "summary_one": "The agent found {{count}} PC that is not in the registry",
+      "summary_other": "The agent found {{count}} PCs that are not in the registry",
+      "review": "Review",
+      "hide": "Hide",
+      "empty": "The list is empty.",
+      "host": "Computer",
+      "os": "OS",
+      "seen": "Last seen",
+      "accept": "Add to registry",
+      "reject": "Don't add",
+      "showRejected": "Show rejected"
     }
   },
   "reports": {
@@ -1022,7 +1217,10 @@
     "byDepartment": "By department",
     "byChannel": "By channel",
     "topRequesters": "Top requesters",
-    "load": "Current load"
+    "load": "Current load",
+    "survey": "Speed / quality / courtesy",
+    "surveyHint_one": "average score, {{count}} response",
+    "surveyHint_other": "average score, {{count}} responses"
   },
   "svc": {
     "name": "Name",
@@ -1195,7 +1393,43 @@
     "secretKeep": "Empty — keep the current one.",
     "webhookUsage": "Delivery is retried on errors. Verify X-Pult-Signature on your side.",
     "vip": "VIP employees",
-    "vipHint": "Executives and key staff: their tickets get one priority step higher (setting above) and a VIP mark in the card. Search for a person to add."
+    "vipHint": "Executives and key staff: their tickets get one priority step higher (setting above) and a VIP mark in the card. Search for a person to add.",
+    "monitoring": {
+      "title": "Monitoring",
+      "new": "New source",
+      "empty": "No sources.",
+      "usage": "Zabbix, Prometheus Alertmanager and other systems send alerts to /api/helpdesk/monitoring/alerts with the source token. A new alert notifies superadmins and, if enabled, opens a ticket; “resolved” is noted in the ticket feed.",
+      "tokenOnce": "The token is shown only once — save it in your monitoring system settings.",
+      "alertmanager": "Prometheus Alertmanager:",
+      "generic": "Zabbix (“Webhook” media type) and other systems — JSON:",
+      "createTickets": "Create tickets",
+      "minSeverity": "Ticket from severity",
+      "deleteConfirm": "Delete the source together with its alerts? Tickets will remain.",
+      "open_one": "{{count}} open",
+      "open_other": "{{count}} open",
+      "tickets": "tickets",
+      "severity": {
+        "info": "information",
+        "warning": "warning",
+        "critical": "critical"
+      }
+    },
+    "format": "Destination",
+    "formats": {
+      "pult": "Signed JSON (your service)",
+      "chat": "Chat: Mattermost, Rocket.Chat, Slack",
+      "telegram": "Telegram"
+    },
+    "formatHint": {
+      "pult": "POST with the ticket JSON and an X-Pult-Signature header — for your own services and automation.",
+      "chat": "A short channel message: event, number, subject, status and link. Comment texts are not sent.",
+      "telegram": "A bot message to a group or channel: event, number, subject, status and link. Add the bot to the chat first."
+    },
+    "chatUrlHint": "Incoming webhook URL from the channel settings (Mattermost: Integrations → Incoming Webhooks).",
+    "chatId": "Telegram chat",
+    "chatIdHint": "Numeric group id (e.g. -1001234567890) or a public @channel name.",
+    "botToken": "Bot token",
+    "botTokenHint": "Issued by @BotFather: looks like 123456789:AA…"
   },
   "access": {
     "panel": "Access request",
@@ -1370,6 +1604,33 @@
       "noHelper": "Nothing opened? Pult Helper is needed on your PC.",
       "getHelper": "Download the helper",
       "silentConfirm": "Connect to the session without asking the user for consent? The user will not see a prompt."
+    },
+    "hw": {
+      "title": "Hardware",
+      "model": "Model",
+      "serial": "Serial number",
+      "cpu": "Processor",
+      "memory": "Memory",
+      "gb": "{{n}} GB",
+      "disks": "Disks",
+      "disk": "{{name}} {{free}} of {{size}} GB free",
+      "bios": "BIOS",
+      "collected": "Collected",
+      "none": "No hardware details yet: agent 0.2 or later sends them at startup and once a day."
+    },
+    "sw": {
+      "title": "Software ({{n}})",
+      "filter": "Filter by name or publisher",
+      "showAll": "Show all ({{n}})",
+      "empty": "The agent found no installed programs.",
+      "searchTitle": "Where is a program installed",
+      "searchPlaceholder": "Program name, e.g. “Chrome”",
+      "searchEmpty": "Not found on any PC.",
+      "tooMany": "Showing the first 500 — refine the name.",
+      "col": {
+        "name": "Program",
+        "version": "Version"
+      }
     }
   },
   "remoteAdmin": {
@@ -1463,14 +1724,16 @@
       "phonebook": "Directory",
       "directory": "AD changes",
       "remote": "Remote support",
-      "telephony": "Telephony"
+      "telephony": "Telephony",
+      "chat": "Communications"
     },
     "moduleAbout": {
       "helpdesk": "Employee requests, engineer workspace, knowledge base, equipment, reports.",
       "phonebook": "Employee directory from AD with phones, departments and sites.",
       "directory": "Enable accounts, manage groups and reset passwords from the portal, with approval and audit.",
       "remote": "Agent on PCs: computer list and connecting to the user's session.",
-      "telephony": "Call log and click-to-call from the directory through the PBX."
+      "telephony": "Call log and click-to-call from the directory through the PBX.",
+      "chat": "Direct messages and group chats for employees. Only participants can read conversations."
     },
     "telephonyNeedsPhonebook": "Works only together with the directory.",
     "sitesText": "Sites are offices and branches: address, time zone, emergency phone, responsible engineers. You can add them later.",
@@ -1555,7 +1818,16 @@
     "totpRequired": "Your role requires a code to sign in from the internet: until you set it up, sign-in from outside is not possible.",
     "totpSetup": "Set up",
     "totpOn": "Code for sign-in from the internet is on",
-    "totpOff": "Code for sign-in from the internet is off"
+    "totpOff": "Code for sign-in from the internet is off",
+    "password": "Domain password",
+    "passwordHint": "The same password you use for your computer and mail. Password rules are set by the domain.",
+    "passwordOld": "Current password",
+    "passwordNew": "New password",
+    "passwordAgain": "New password again",
+    "passwordMismatch": "The passwords do not match.",
+    "passwordChange": "Change password",
+    "passwordDone_one": "Password changed. {{count}} session on other devices was closed.",
+    "passwordDone_other": "Password changed. {{count}} sessions on other devices were closed."
   },
   "search": {
     "nothing": "Nothing found."
@@ -1569,5 +1841,395 @@
     "emptyFiltered": "No requests match these filters",
     "emptyFilteredHint": "Change the filters or open the “All” tab.",
     "emptyHint": "New requests show up here automatically — the list refreshes every minute."
+  },
+  "itil": {
+    "kind": {
+      "problem": "Problem",
+      "change": "Change"
+    },
+    "new": {
+      "problem": "New problem",
+      "change": "New change"
+    },
+    "list": {
+      "problem": "Problems",
+      "change": "Changes"
+    },
+    "about": {
+      "problem": "Causes of recurring incidents: linked incidents, the cause and a workaround.",
+      "change": "Planned infrastructure work: plan, rollback, window and approval."
+    },
+    "title": "Subject",
+    "description": "Description",
+    "byCategory": "By category",
+    "create": "Create",
+    "risk": "Risk",
+    "risks": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High"
+    },
+    "problemTitle": "Problem",
+    "knownError": "Known error",
+    "cause": "Cause",
+    "workaround": "Workaround",
+    "workaroundHint": "What to do until the cause is fixed: engineers see it in linked incidents.",
+    "markKnown": "Known error: the cause is found and a workaround exists",
+    "incidents": "Linked incidents: {{count}}",
+    "noIncidents": "No incidents yet.",
+    "unlink": "Unlink #{{n}}",
+    "unlinkShort": "Unlink",
+    "incidentNumber": "Incident number",
+    "link": "Link",
+    "resolveAll": "Resolve open incidents ({{count}})",
+    "resolveAllHint": "Each incident is resolved with this reply; requesters get it by email and confirm the resolution.",
+    "resolveAllRun": "Resolve",
+    "resolveFailed": "Could not resolve: {{list}}. Open them and resolve manually.",
+    "fromIncident": "Open a problem from this ticket",
+    "changeTitle": "Change",
+    "approval": {
+      "draft": "Draft",
+      "pending": "Awaiting approval",
+      "approved": "Approved",
+      "rejected": "Not approved"
+    },
+    "decision": {
+      "pending": "Awaiting decision",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "skipped": "Not needed"
+    },
+    "editResets": "Editing the plan, rollback, window or risk restarts the approval.",
+    "start": "Work starts",
+    "end": "Work ends",
+    "plan": "Work plan",
+    "planHint": "What is done, step by step, and how to check the result.",
+    "rollback": "Rollback plan",
+    "rollbackHint": "How to restore the previous state if something goes wrong. Required for medium and high risk.",
+    "saveFirst": "Save your edits first",
+    "submit": "Submit for approval",
+    "submitted": "Submitted for approval",
+    "approvals": "Approval",
+    "round": "Round {{n}}",
+    "changeApprovals": "Changes",
+    "leads": "led by {{name}}",
+    "decisionComment": "Comment (required to reject)",
+    "rejectNeedsComment": "Write the reason for rejecting",
+    "reject": "Reject",
+    "approve": "Approve",
+    "rulesHint": "Who approves changes: by category and from a risk level. All matching rules apply; if none matches, the change is approved at once. Authors cannot approve their own changes.",
+    "anyCategory": "Any category",
+    "fromRisk": "From risk",
+    "fromRiskValue": "risk from “{{risk}}”",
+    "approver": "Approver",
+    "addRule": "Add rule",
+    "noRules": "No rules",
+    "noRulesHint": "Without rules, every change is approved as soon as it is submitted."
+  },
+  "vault": {
+    "title": "Secrets vault",
+    "subtitle": "Service account passwords and keys. Each secret is open only to those it was shared with.",
+    "create": "New secret",
+    "search": "Search by name, login, address",
+    "empty": "No secrets yet",
+    "emptyHint": "Create a secret: you become its manager and decide who it is shared with.",
+    "notFound": "Nothing found",
+    "name": "Name",
+    "login": "Login",
+    "url": "Address",
+    "description": "Description",
+    "descriptionHint": "Do not put passwords here: the description is visible to everyone who can see the card.",
+    "value": "Value",
+    "valueHint": "Stored in the database only in encrypted form.",
+    "newValue": "New value",
+    "newValueHint": "Leave empty to keep the current one.",
+    "copyLogin": "Copy login",
+    "copyValue": "Copy value",
+    "valueChanged": "Value changed",
+    "createdBy": "Created by",
+    "reason": "Reason",
+    "reasonHint": "Recorded in the audit log together with the view.",
+    "reveal": "Show value",
+    "hide": "Hide ({{n}})",
+    "hideValue": "Hide value",
+    "noReveal": "You can see only the secret card, not its value.",
+    "edit": "Edit",
+    "deleteConfirm": "Delete secret “{{name}}”? The value will be lost.",
+    "access": "Access",
+    "accessHint": "Access is granted to an employee or a portal role. “Card”: name and login are visible; “Value”: the secret itself too; “Manage”: editing, deletion and access.",
+    "role": "Role",
+    "level": "Access level",
+    "levelFor": "Access level: {{name}}",
+    "removeAccess": "Remove access: {{name}}",
+    "addPerson": "Add employee",
+    "addRole": "Add role",
+    "levels": {
+      "view": "Card",
+      "reveal": "Value",
+      "manage": "Manage"
+    }
+  },
+  "assist": {
+    "title": "Assistant",
+    "subtitle": "Answers from the knowledge base. The conversation is not saved: it is gone when you close the page.",
+    "empty": "Ask how to solve a task, for example \"how to connect to VPN from home\". The assistant answers from knowledge base articles and links to them.",
+    "question": "Your question",
+    "send": "Ask",
+    "newChat": "New conversation",
+    "you": "You",
+    "thinking": "The assistant is thinking…",
+    "sources": "Sources",
+    "disclaimer": "The assistant can be wrong and does nothing by itself. Do not send it passwords.",
+    "off": "The assistant is turned off. An administrator turns it on in Settings → System.",
+    "unavailable": "The assistant is unavailable",
+    "draft": "Draft reply",
+    "summary": "Ticket summary",
+    "again": "Again",
+    "category": "Suggest a category",
+    "noCategory": "No suitable category found: choose one yourself."
+  },
+  "cmdb": {
+    "addRelation": "Add relation",
+    "relation": "Relation",
+    "suggested": "Suggestions",
+    "suggestedHint": "Items with the same responsible person or in the same room. A relation appears only after you add it.",
+    "reasons": {
+      "same_person": "same responsible person",
+      "same_room": "same room"
+    },
+    "findAsset": "Find an item",
+    "relations": "Relations",
+    "removeRelation": "Remove the relation to “{{name}}”",
+    "noRelations": "No relations.",
+    "analysis": "Relation analysis",
+    "impact": "What a failure affects",
+    "map": "Dependency map",
+    "noImpact": "Nothing depends on this item.",
+    "impactSummary": "Affected items: {{n}}, responsible employees: {{people}}.",
+    "via": "Via",
+    "level": "level {{n}}",
+    "mapLabel": "Dependency map of “{{name}}”: {{n}} related items",
+    "mapLegend": "Solid arrow: a relation with impact; dashed: without impact. Items within two steps are shown.",
+    "mapTruncated": "Not all items are shown.",
+    "lifecycle": "Lifecycle",
+    "lifecycleLater": "The lifecycle can be set up after the type is created.",
+    "transitionsHint": "Check the allowed transitions. Nothing checked means any transition is allowed. “In stock → in use” and “in use → in stock” are needed for issue and return.",
+    "transitions": "Allowed transitions",
+    "fromTo": "From ↓ to →",
+    "transition": "Transition from “{{from}}” to “{{to}}”",
+    "licenses": "Licenses",
+    "licensesHint": "Installations are counted from the programs reported by the PC agents.",
+    "noLicenses": "No licenses yet.",
+    "newLicense": "Add license",
+    "licenseName": "Name",
+    "vendor": "Vendor",
+    "pattern": "Program name fragment",
+    "patternHint": "As in “Programs and Features”; case does not matter.",
+    "seats": "Seats purchased",
+    "seatsHint": "Empty means unlimited.",
+    "expiresOn": "Valid until",
+    "deleteLicense": "Delete the license? Programs on PCs are not affected.",
+    "notInstalled": "The agents have not found this program on any PC.",
+    "usage": "{{used}} of {{seats}}",
+    "usageUnlimited": "installations: {{used}}",
+    "until": "until {{date}}",
+    "overSeats": "over by {{n}}",
+    "expired": "expired",
+    "expiresSoon": "expiring",
+    "relationTypes": "Relation types",
+    "noRelationTypes": "No relation types.",
+    "newRelationType": "New relation type",
+    "relationName": "Name from the item",
+    "relationNameHint": "For example, “Depends on”.",
+    "reverseName": "Name at the other item",
+    "reverseNameHint": "For example, “Required by”.",
+    "impactFlag": "Impact",
+    "impactFlagHint": "A failure of the other item affects the first one: the relation is used in impact analysis.",
+    "impactShort": "impact",
+    "services": "Service status",
+    "servicesOk": "all good",
+    "servicesBad": "with alerts: {{n}}",
+    "states": {
+      "ok": "up",
+      "info": "notices",
+      "warning": "warning",
+      "critical": "down"
+    },
+    "alerts": "Open monitoring alerts: {{n}}",
+    "showStatus": "Show in “Service status”",
+    "showStatusHint": "Items of this type appear on the engineer home page with a state based on alerts: their own and those of what they depend on."
+  },
+  "netbox": {
+    "summary": "Found in NetBox and not in the catalog: {{n}}",
+    "role": "Role and platform",
+    "kinds": {
+      "device": "device",
+      "vm": "virtual machine"
+    },
+    "title": "NetBox",
+    "hint": "Network equipment, servers and virtual machines from NetBox. The portal only reads NetBox; found items enter the catalog after an engineer reviews them in “Equipment”, and accepted cards are not changed automatically afterwards.",
+    "enabled": "Synchronize once a day",
+    "url": "NetBox address",
+    "token": "API token",
+    "tokenHint": "A read-only token. It is stored encrypted and never shown.",
+    "dropToken": "Delete the saved token",
+    "vms": "Include virtual machines",
+    "never": "No synchronization yet.",
+    "result": "fetched {{fetched}}, new {{added}}, gone {{missing}}",
+    "sync": "Synchronize now",
+    "syncing": "Synchronizing…"
+  },
+  "chat": {
+    "title_list": "Conversations",
+    "new": "New",
+    "newDirect": "Direct message",
+    "newGroup": "Group chat",
+    "searchPeople": "Find an employee: name or login",
+    "nobody": "Nobody found.",
+    "title": "Title",
+    "members": "Members",
+    "membersN": "Members: {{n}}",
+    "groupHint": "You will be the owner. Added people see the chat and its whole history right away and get a notification.",
+    "create": "Create",
+    "pinned": "Pinned",
+    "locked": "The chat is temporarily unavailable",
+    "lockedHint": "A new owner is being assigned. You will be notified when the chat opens again.",
+    "group": "Group chat",
+    "direct": "Direct message",
+    "readOnly": "Read only",
+    "readOnlyHint": "You left the chat: the history up to that point is read-only.",
+    "unread_one": "{{count}} unread",
+    "unread_other": "{{count}} unread",
+    "hiddenTitle": "Hidden",
+    "showHidden": "Hidden chats",
+    "showMain": "← All conversations",
+    "empty": "No conversations yet.",
+    "emptyHint": "Start a direct message or create a group chat with “New”.",
+    "noHidden": "No hidden chats.",
+    "pick": "Pick a conversation on the left.",
+    "back": "Back to conversations",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "hide": "Hide",
+    "unhide": "Show in the list",
+    "info": "Members",
+    "older": "Show earlier",
+    "noMessages": "No messages yet.",
+    "message": "Message",
+    "placeholder": "Message… (Enter to send, Shift+Enter for a new line)",
+    "send": "Send",
+    "editing": "Editing a message (possible for 15 minutes after sending)",
+    "edited": "edited",
+    "versions": "Message versions",
+    "version": "Version {{n}}",
+    "current": "Current",
+    "roles": {
+      "owner": "owner",
+      "admin": "administrator",
+      "member": "member"
+    },
+    "makeAdmin": "Make administrator",
+    "unmakeAdmin": "Remove administrator rights",
+    "remove": "Remove from the chat",
+    "addMembers": "Add a member",
+    "addHint": "Added immediately, without an invitation; they get a notification.",
+    "memberHistory": "Membership history",
+    "actions": {
+      "created": "created the chat",
+      "added": "added",
+      "removed": "removed",
+      "left": "left",
+      "blocked": "left: the AD account is disabled",
+      "admin": "made administrator",
+      "member": "now a member",
+      "owner": "became the owner",
+      "locked": "chat locked: no owner",
+      "unlocked": "chat available again"
+    },
+    "leave": "Leave the chat",
+    "ownerHint": "The owner cannot leave: a superadministrator transfers ownership."
+  },
+  "chatAdmin": {
+    "hint": "Group chats without messages: an administrator cannot read conversations, and direct messages are not listed here. Assigning an owner (including yourself) is recorded in the audit log.",
+    "empty": "No group chats.",
+    "owner": "Owner",
+    "locked": "Locked: no owner",
+    "assign": "Assign owner",
+    "newOwner": "New owner",
+    "previous": "The previous owner ({{name}}) becomes",
+    "prev": {
+      "admin": "a chat administrator",
+      "member": "an ordinary member",
+      "remove": "removed from the chat"
+    },
+    "assignHint": "Ownership transfers immediately, without consent. A locked chat opens and its members are notified.",
+    "self": "Assign myself",
+    "stats": "Statistics",
+    "statsHint": "Only portal-wide totals, without people, departments or chats. Values below 5 are not shown.",
+    "directChats": "Direct conversations",
+    "groupChats": "Group chats",
+    "month": "Month",
+    "messages": "Messages",
+    "directMessages": "Direct",
+    "groupMessages": "In groups",
+    "edited": "Edited",
+    "senders": "Senders"
+  },
+  "extensions": {
+    "hint": "An extension is an external service with a pult-extension.json manifest. The portal gives it a read-only API token with the rights from the manifest, a signed webhook for ticket events and menu links. Extension code never runs inside the portal.",
+    "install": "Install an extension",
+    "fromFile": "Manifest file",
+    "fromUrl": "Or the manifest address",
+    "check": "Check",
+    "badFile": "The file is not valid JSON.",
+    "catalog": "Catalog",
+    "catalogUrl": "Catalog address",
+    "catalogHint": "A JSON array of manifests over https. Empty means no catalog.",
+    "installedVersion": "installed: {{v}}",
+    "empty": "No extensions installed.",
+    "willRead": "Will be able to read through the API",
+    "noApi": "Does not ask for API access.",
+    "willReceive": "Will receive ticket events",
+    "allEvents": "all events",
+    "menuLinks": "Menu links",
+    "responsibility": "By installing an extension, the organization trusts its publisher with the data it gets access to.",
+    "alreadyInstalled": "Already installed. To update, remove it and install again.",
+    "secretsTitle": "Settings for the extension",
+    "secretsHint": "Copy them into the extension settings now: they are not shown again.",
+    "token": "API token",
+    "webhookSecret": "Webhook signing secret",
+    "nothingToShow": "The extension needs neither a token nor a webhook.",
+    "saved": "I have saved them",
+    "lastUsed": "token used {{at}}",
+    "on": "on",
+    "off": "off",
+    "enable": "Enable",
+    "disable": "Disable",
+    "confirmDelete": "Remove the extension “{{name}}”? Its token is revoked and the webhook deleted.",
+    "newTab": "(opens in a new tab)"
+  },
+  "push": {
+    "title": "Notifications on this device",
+    "hint": "Portal notifications arrive even when the tab is closed. On a phone, first install the portal to the home screen (browser menu → Install app or Add to Home Screen).",
+    "unsupported": "This browser does not support notifications, or the portal is not opened over HTTPS.",
+    "unavailable": "Device notifications are turned off by the administrator.",
+    "denied": "The browser did not allow notifications. Allow them in the site settings and try again.",
+    "on": "on",
+    "off": "off",
+    "enable": "Turn on",
+    "disable": "Turn off",
+    "test": "Test",
+    "devices_one": "{{count}} device subscribed",
+    "devices_other": "{{count}} devices subscribed",
+    "testResult": "Sent: {{sent}}, not delivered: {{failed}}."
+  },
+  "catalog": {
+    "title": "Service catalog",
+    "hint": "Choose what you need help with: a request with the right fields opens. Not listed? Create a request and describe it in your own words.",
+    "search": "Find a service",
+    "empty": "Nothing found.",
+    "request": "request",
+    "incident": "issue",
+    "withForm": "with a form"
   }
 }

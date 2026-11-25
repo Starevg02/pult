@@ -68,7 +68,9 @@ pub fn router(state: AppState, api: Option<crate::api::ApiState>) -> Router {
         .layer(middleware::from_fn(request_deadline))
         .layer(middleware::from_fn(no_store_api))
         .layer(middleware::from_fn_with_state(trusted, real_client_ip))
-        .layer(TraceLayer::new_for_http())
+        .layer(TraceLayer::new_for_http().make_span_with(|req: &axum::http::Request<_>| {
+            tracing::debug_span!("request", method = %req.method(), path = %req.uri().path())
+        }))
         .layer(SetResponseHeaderLayer::overriding(header::X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff")))
         .layer(SetResponseHeaderLayer::overriding(header::REFERRER_POLICY, HeaderValue::from_static("no-referrer")))
         .layer(SetResponseHeaderLayer::overriding(

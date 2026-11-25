@@ -63,7 +63,27 @@ pub struct NewSession {
     pub max_age_secs: i64,
 }
 
-pub async fn create(core: &Core, user_id: Uuid, actor: &Actor) -> Result<NewSession, ApiError> {
+/// Способ входа сеанса: пароль AD, пароль и код из приложения, билет Kerberos, провайдер OpenID Connect.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuthMethod {
+    Ldap,
+    LdapTotp,
+    Kerberos,
+    Oidc,
+}
+
+impl AuthMethod {
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::Ldap => "ldap",
+            Self::LdapTotp => "ldap+totp",
+            Self::Kerberos => "kerberos",
+            Self::Oidc => "oidc",
+        }
+    }
+}
+
+pub async fn create(core: &Core, user_id: Uuid, actor: &Actor, method: AuthMethod) -> Result<NewSession, ApiError> {
     let s: SecuritySettings = load(&core.db).await?;
     let token = random_token(32).map_err(ApiError::internal)?;
     let csrf = random_token(32).map_err(ApiError::internal)?;
@@ -72,7 +92,7 @@ pub async fn create(core: &Core, user_id: Uuid, actor: &Actor) -> Result<NewSess
     let absolute = now + Duration::days(i64::from(s.session_absolute_days));
     sqlx::query(
         "INSERT INTO sessions (id, user_id, auth_method, csrf_token, ip, user_agent, idle_expires_at, absolute_expires_at)
-         VALUES ($1, $2, 'ldap', $3, $4, $5, $6, $7)",
+         VALUES ($1, $2, $8, $3, $4, $5, $6, $7)",
     )
     .bind(sha256(token.as_bytes()))
     .bind(user_id)
@@ -81,6 +101,7 @@ pub async fn create(core: &Core, user_id: Uuid, actor: &Actor) -> Result<NewSess
     .bind(actor.user_agent.as_deref().map(|s| s.chars().take(500).collect::<String>()))
     .bind(idle)
     .bind(absolute)
+    .bind(method.code())
     .execute(&core.db)
     .await?;
     Ok(NewSession { token, csrf, max_age_secs: (absolute - now).whole_seconds() })

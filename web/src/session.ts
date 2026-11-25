@@ -1,6 +1,7 @@
 // Текущий пользователь и выход (данные; компоненты входа — в auth.tsx).
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, ok, type Me, type Modules, type OrgSettings } from "./api/client";
+import { currentEndpoint, unsubscribeBrowser } from "./push";
 
 export function useMe() {
   return useQuery({
@@ -18,7 +19,19 @@ export function can(me: Me | undefined, permission: string): boolean {
 
 export function useLogout() {
   return useMutation({
-    mutationFn: () => ok(api.POST("/api/auth/logout")),
+    mutationFn: async () => {
+      // После выхода устройство не должно получать уведомления этого пользователя (компьютер общий).
+      try {
+        const endpoint = await currentEndpoint();
+        if (endpoint) {
+          await api.DELETE("/api/me/push", { body: { endpoint } });
+          await unsubscribeBrowser();
+        }
+      } catch {
+        // подписки нет или браузер не дал её снять — выход важнее
+      }
+      return ok(api.POST("/api/auth/logout"));
+    },
     // Полная перезагрузка: в памяти вкладки не остаётся данных прошлого пользователя и потока событий.
     // При ошибке (например, CSRF) сеанс жив — перезагрузка сделала бы вид, что выход удался.
     onSuccess: () => {

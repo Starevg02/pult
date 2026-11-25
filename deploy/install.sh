@@ -2,7 +2,7 @@
 # Pult: проверка сервера и установка (или обновление) пакета .deb.
 #
 #   sudo sh install.sh                          # пакет pult_*_amd64.deb рядом со скриптом или в текущем каталоге
-#   sudo sh install.sh ./pult_0.1.0_amd64.deb   # конкретный файл
+#   sudo sh install.sh ./pult_0.2.0_amd64.deb   # конкретный файл
 #   sudo sh install.sh --check                  # только проверки, ничего не ставить
 #   sudo sh install.sh --dc dc1.corp.example.test --dc dc2.corp.example.test   # ещё проверить LDAPS контроллеров
 #

@@ -39,11 +39,14 @@ pub struct Modules {
     pub remote: bool,
     /// Телефония: журнал звонков и звонок из справочника (нужен справочник).
     pub telephony: bool,
+    /// Коммуникации: личные диалоги и групповые чаты сотрудников. Выключен, пока его не включит
+    /// суперадминистратор: во многих организациях уже есть свой мессенджер.
+    pub chat: bool,
 }
 
 impl Default for Modules {
     fn default() -> Self {
-        Self { helpdesk: true, phonebook: true, directory: true, remote: true, telephony: true }
+        Self { helpdesk: true, phonebook: true, directory: true, remote: true, telephony: true, chat: false }
     }
 }
 
@@ -55,6 +58,7 @@ pub enum Gated {
     Directory,
     Remote,
     Telephony,
+    Chat,
 }
 
 /// Префиксы путей по модулям; более длинные — раньше (звонки — часть справочника по пути).
@@ -71,6 +75,8 @@ const PREFIXES: &[(&str, Gated)] = &[
     ("/api/admin/helpdesk", Gated::Helpdesk),
     ("/api/admin/webhooks", Gated::Helpdesk),
     ("/api/admin/api-tokens", Gated::Helpdesk),
+    ("/api/admin/extensions", Gated::Helpdesk),
+    ("/api/extensions", Gated::Helpdesk),
     ("/api/kb", Gated::Helpdesk),
     ("/api/public/login-help", Gated::Helpdesk),
     ("/api/public/ticket-response", Gated::Helpdesk),
@@ -79,6 +85,8 @@ const PREFIXES: &[(&str, Gated)] = &[
     ("/api/remote", Gated::Remote),
     ("/api/admin/remote", Gated::Remote),
     ("/api/agent", Gated::Remote),
+    ("/api/chat", Gated::Chat),
+    ("/api/admin/chats", Gated::Chat),
 ];
 
 /// Модуль пути: префикс совпадает целым сегментом (`/api/kbx` — не база знаний).
@@ -97,6 +105,7 @@ impl Modules {
             Gated::Directory => self.directory,
             Gated::Remote => self.remote,
             Gated::Telephony => self.telephony,
+            Gated::Chat => self.chat,
         }
     }
 

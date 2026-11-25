@@ -19,6 +19,7 @@ export const adminGroups = [
       { to: "/admin/automation", key: "automation", perm: "helpdesk.admin", module: "helpdesk" },
       { to: "/admin/templates", key: "templates", perm: "helpdesk.admin", module: "helpdesk" },
       { to: "/admin/asset-types", key: "assetTypes", perm: "helpdesk.admin", module: "helpdesk" },
+      { to: "/admin/change-rules", key: "changeRules", perm: "helpdesk.admin", module: "helpdesk" },
       { to: "/admin/mail", key: "mail", perm: "core.mail.manage" },
       { to: "/admin/access-resources", key: "accessResources", perm: "helpdesk.access.resources", module: "helpdesk" },
     ],
@@ -40,6 +41,9 @@ export const adminGroups = [
       { to: "/admin/telephony", key: "telephony", perm: "phonebook.admin", module: "telephony" },
       { to: "/admin/integrations", key: "integrations", perm: "helpdesk.admin", module: "helpdesk" },
       { to: "/admin/remote", key: "remote", perm: "remote.manage", module: "remote" },
+      // Такого разрешения нет ни у одной роли: раздел виден только суперадминистратору (как и его API).
+      { to: "/admin/chats", key: "chats", perm: "core.superadmin", module: "chat" },
+      { to: "/admin/extensions", key: "extensions", perm: "core.superadmin", module: "helpdesk" },
     ],
   },
   {

@@ -3,7 +3,7 @@
 [Русский](README.md) | [English](README.en.md) | **中文**
 
 面向 Active Directory 组织、部署在自有服务器上的内部 IT 支持门户。工单、员工通讯录、访问权限与 AD 操作、
-电脑远程支持，集中在一个界面中。员工使用自己的 Windows 密码登录。开源，MIT 许可证。版本 0.1.0。
+电脑远程支持，集中在一个界面中。员工使用自己的 Windows 密码登录。开源，MIT 许可证。版本 0.2.0。
 
 ![门户首页](docs/screenshots/home-zh.jpg)
 

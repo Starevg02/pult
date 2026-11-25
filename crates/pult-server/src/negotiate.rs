@@ -6,13 +6,17 @@
 //! контекст: Kerberos укладывается в один обмен, состояние между запросами не нужно.
 //!
 //! Только Kerberos: NTLM (его шлёт браузер без билета — сайт не в зоне «Местная интрасеть» или
-//! открыт по IP) не принимается и не просится повторно. Сессию по результату создаёт вход; этот
-//! маршрут отвечает, кого распознал.
+//! открыт по IP) не принимается и не просится повторно.
+//!
+//! `/api/auth/negotiate` — проверка настройки: отвечает, кого распознал (страница «Состояние»).
+//! `/api/auth/kerberos` — сам вход: билет принят → сеанс, как после входа паролем. Работает, только
+//! если вход через домен включён в настройках безопасности, и только из сетей организации.
 //!
 //! GSSAPI есть только в сборке для Linux; на Windows маршрут отвечает 501.
 
 use axum::{
     Json,
+    extract::{Request, State},
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
@@ -117,14 +121,69 @@ pub async fn negotiate(headers: HeaderMap) -> Response {
         }
         Incoming::Bad => deny(StatusCode::BAD_REQUEST, DenyReason::BadToken, false),
         Incoming::Token(tok) => match CHECKS.try_acquire() {
-            Ok(_slot) => accept(tok).await,
+            Ok(_slot) => match verify(tok).await {
+                Ok((principal, out)) => mutual(Json(NegotiateResult { principal }).into_response(), out),
+                Err(resp) => resp,
+            },
             Err(_) => deny(StatusCode::TOO_MANY_REQUESTS, DenyReason::Busy, false),
         },
     }
 }
 
+/// Вход через домен: билет Kerberos принят — сеанс и cookie, как после входа паролем.
+#[utoipa::path(get, path = "/api/auth/kerberos", tag = "auth",
+    responses(
+        (status = 204, description = "Вошёл: cookie сеанса и CSRF"),
+        (status = 400, description = "Вход не из сети организации; учётка отключена", body = pult_core::error::ErrorBody),
+        (status = 401, description = "Нужен билет Kerberos или он отклонён", body = NegotiateError),
+        (status = 403, description = "Учётки с таким логином в домене нет; запрос со стороннего сайта", body = pult_core::error::ErrorBody),
+        (status = 404, description = "Вход через домен выключен"),
+        (status = 429, description = "Слишком много проверок сразу", body = NegotiateError),
+        (status = 501, description = "Сборка без GSSAPI (Windows)", body = NegotiateError)))]
+pub async fn kerberos(State(st): State<crate::api::ApiState>, req: Request) -> Response {
+    let (parts, _) = req.into_parts();
+    // Вход создаёт сеанс, а метод GET (так браузер отвечает на Negotiate): чужой сайт не должен
+    // «входить» за сотрудника. Браузер сам ставит Sec-Fetch-Site; запросы без него (curl) — как раньше.
+    if parts
+        .headers
+        .get("sec-fetch-site")
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| !matches!(v, "same-origin" | "none"))
+    {
+        return pult_people::auth::login_error(pult_core::ApiError::Forbidden);
+    }
+    if let Err(e) = pult_people::auth::kerberos_allowed(&st.core, &parts).await {
+        return pult_people::auth::login_error(e);
+    }
+    let tok = match parse_authorization(parts.headers.get(header::AUTHORIZATION)) {
+        Incoming::Token(tok) => tok,
+        Incoming::None => return deny(StatusCode::UNAUTHORIZED, DenyReason::NegotiateRequired, true),
+        Incoming::Ntlm => return deny(StatusCode::UNAUTHORIZED, DenyReason::NtlmNotSupported, false),
+        Incoming::Bad => return deny(StatusCode::BAD_REQUEST, DenyReason::BadToken, false),
+    };
+    let Ok(_slot) = CHECKS.try_acquire() else {
+        return deny(StatusCode::TOO_MANY_REQUESTS, DenyReason::Busy, false);
+    };
+    match verify(tok).await {
+        Ok((principal, out)) => match pult_people::auth::kerberos_login(&st.core, &parts, &principal).await {
+            Ok(resp) => mutual(resp, out),
+            Err(e) => pult_people::auth::login_error(e),
+        },
+        Err(resp) => resp,
+    }
+}
+
+/// Взаимная аутентификация: браузер проверяет, что ответил настоящий сервер.
+fn mutual(mut resp: Response, out: Option<String>) -> Response {
+    if let Some(v) = out.and_then(|t| HeaderValue::from_str(&format!("Negotiate {t}")).ok()) {
+        resp.headers_mut().insert(header::WWW_AUTHENTICATE, v);
+    }
+    resp
+}
+
+/// Билет проверен: принципал и ответный токен для взаимной аутентификации; иначе — готовый отказ.
 #[cfg(unix)]
-async fn accept(tok: Vec<u8>) -> Response {
+async fn verify(tok: Vec<u8>) -> Result<(String, Option<String>), Response> {
     use libgssapi::context::{SecurityContext, ServerCtx};
     // GSSAPI блокирует (чтение keytab, кеш повторов) — не на рабочем потоке tokio.
     let res = tokio::task::spawn_blocking(move || {
@@ -137,31 +196,26 @@ async fn accept(tok: Vec<u8>) -> Response {
     match res {
         Ok(Ok((out, Some(principal)))) => {
             tracing::info!(%principal, "вход через домен: билет Kerberos принят");
-            let mut resp = Json(NegotiateResult { principal }).into_response();
-            // Взаимная аутентификация: браузер проверяет, что ответил настоящий сервер.
-            if let Some(v) = out.and_then(|t| HeaderValue::from_str(&format!("Negotiate {t}")).ok()) {
-                resp.headers_mut().insert(header::WWW_AUTHENTICATE, v);
-            }
-            resp
+            Ok((principal, out))
         }
         Ok(Ok((_, None))) => {
             tracing::warn!("вход через домен: обмен Kerberos не завершился за один шаг");
-            deny(StatusCode::UNAUTHORIZED, DenyReason::Rejected, false)
+            Err(deny(StatusCode::UNAUTHORIZED, DenyReason::Rejected, false))
         }
         Ok(Err(e)) => {
             tracing::warn!(error = %e, "вход через домен: билет отклонён");
-            deny(StatusCode::UNAUTHORIZED, DenyReason::Rejected, false)
+            Err(deny(StatusCode::UNAUTHORIZED, DenyReason::Rejected, false))
         }
         Err(e) => {
             tracing::error!(error = %e, "вход через домен: сбой проверки");
-            deny(StatusCode::INTERNAL_SERVER_ERROR, DenyReason::Rejected, false)
+            Err(deny(StatusCode::INTERNAL_SERVER_ERROR, DenyReason::Rejected, false))
         }
     }
 }
 
 #[cfg(not(unix))]
-async fn accept(_tok: Vec<u8>) -> Response {
-    deny(StatusCode::NOT_IMPLEMENTED, DenyReason::NotAvailable, false)
+async fn verify(_tok: Vec<u8>) -> Result<(String, Option<String>), Response> {
+    Err(deny(StatusCode::NOT_IMPLEMENTED, DenyReason::NotAvailable, false))
 }
 
 #[cfg(test)]

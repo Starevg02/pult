@@ -217,6 +217,8 @@ pub struct DeviceCard {
     pub connections: Vec<RemoteConnectionRow>,
     /// Последние заявки с этого ПК (видны тем, кто работает с заявками).
     pub tickets: Vec<DeviceTicket>,
+    /// Оборудование и программы из отчёта агента; агент старой версии их не присылает.
+    pub inventory: Option<crate::inventory::DeviceInventory>,
 }
 
 /// Карточка ПК.
@@ -286,7 +288,9 @@ pub async fn get_device(
     } else {
         Vec::new()
     };
+    let inventory = crate::inventory::load(&core, id).await?;
     Ok(Json(DeviceCard {
+        inventory,
         device,
         domain_name,
         os,

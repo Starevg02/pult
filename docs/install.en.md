@@ -213,7 +213,7 @@ everyone at once, and sign-ins from the internet cannot be told apart from sign-
 
 | What | Why | Where |
 |---|---|---|
-| Kerberos (ticket check) | Groundwork for sign-in without a password: the "Status" page shows whether the portal recognizes the PC account. Ticket-based sign-in itself is not implemented in 0.1.0 | [ad-setup.md](ad-setup.md), sections 3–4 |
+| Domain sign-in (Kerberos) | Passwordless sign-in from a domain PC on the organization network: set up the keytab, check it on the "Status" page, then turn it on in "Security" | [ad-setup.md](ad-setup.md), sections 3–4 |
 | Internet access | Sign-in from phones without VPN, with an optional second factor | [go-live.md](go-live.md) (Russian) |
 | Remote support agent | List of sessions on PCs, engineer connection from the card | [admin-guide.md](admin-guide.md) |
 | Changes to AD from the portal | Unlock, password reset, groups, access requests | [directory.md](directory.md) |
@@ -225,7 +225,8 @@ For the Kerberos check, set the service keytab in `/etc/pult/pult.env`:
 ## 8. Backups and restore
 
 Backups are made every night at 02:30 and before each update, in `/var/lib/pult/backups/pult-<date>/`. The last 14
-are kept. A backup contains `db.dump` (the database), `files/` (attachments), and `tls/` (the portal certificate
+are kept (change the number under System → Backup, 1 to 365). Every backup is verified: the dump is read with
+`pg_restore --list`, and a damaged one is not kept among the finished backups. A backup contains `db.dump` (the database), `files/` (attachments), and `tls/` (the portal certificate
 **including its private key**, so treat backups as secret). The result of the last backup is shown in the admin panel.
 Super administrators are notified if a backup fails.
 
@@ -376,7 +377,7 @@ over the file; an unknown key in the file stops the service from starting. The e
 | `PULT_INITIAL_SUPERADMIN` | — | Login that becomes super administrator at first sign-in |
 | `PULT_METRICS_TOKEN` | — | Token for scraping `/metrics` (Prometheus) from another host; without it `/metrics` answers only on localhost |
 | `PULT_LOG_FORMAT` | `json` (package) | Log format: `json` or `text` |
-| `KRB5_KTNAME` | — | Keytab for the Kerberos check |
+| `KRB5_KTNAME` | — | Keytab for domain sign-in (Kerberos) |
 
 A template with all the variables is `.env.example` in the root of the repository.
 

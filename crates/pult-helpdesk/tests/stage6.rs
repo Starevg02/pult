@@ -206,6 +206,7 @@ async fn stage6_acceptance() {
     for m in ["helpdesk", "phonebook", "directory", "remote", "telephony"] {
         assert_eq!(org["modules"][m], true, "{m}");
     }
+    assert_eq!(org["modules"]["chat"], false, "коммуникации включает суперадминистратор");
 
     let mut admin = Browser::login(&app, "admin").await;
     let mut emp = Browser::login(&app, "emp").await;

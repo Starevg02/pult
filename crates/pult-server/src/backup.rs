@@ -10,8 +10,36 @@ use std::{
 };
 use time::OffsetDateTime;
 
-/// Сколько копий хранить.
-pub const KEEP: usize = 14;
+/// Сколько копий хранить, если политика не задана.
+pub const KEEP: u32 = 14;
+/// Предел хранения: больше копий — повод для внешнего хранилища, а не для каталога на сервере портала.
+pub const MAX_KEEP: u32 = 365;
+
+/// Политика копий: сколько хранить и проверять ли каждую.
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(default)]
+pub struct BackupPolicy {
+    /// Сколько последних копий хранить (1–365).
+    pub keep: u32,
+    /// Проверять каждую копию: `pg_restore --list` читает дамп целиком.
+    pub verify: bool,
+}
+
+impl Default for BackupPolicy {
+    fn default() -> Self {
+        Self { keep: KEEP, verify: true }
+    }
+}
+
+impl SettingsGroup for BackupPolicy {
+    const KEY: &'static str = "backup_policy";
+}
+
+impl BackupPolicy {
+    pub fn valid(&self) -> bool {
+        (1..=MAX_KEEP).contains(&self.keep)
+    }
+}
 
 #[derive(Clone)]
 pub struct BackupConfig {
@@ -31,6 +59,21 @@ pub struct BackupStatus {
     pub path: Option<String>,
     pub size_bytes: u64,
     pub error: Option<String>,
+    /// Дамп прочитан `pg_restore --list` без ошибок.
+    pub verified: bool,
+    /// Сколько объектов базы в дампе (по оглавлению `pg_restore --list`).
+    pub objects: Option<u64>,
+    /// Сколько копий хранится по политике.
+    pub keep: Option<u32>,
+}
+
+/// Готовая копия.
+#[derive(Debug)]
+pub struct Made {
+    pub path: PathBuf,
+    pub size: u64,
+    /// Объектов в оглавлении дампа, если копия проверялась.
+    pub objects: Option<u64>,
 }
 
 impl SettingsGroup for BackupStatus {
@@ -59,7 +102,8 @@ fn pg_env(url: &str) -> Result<Vec<(&'static str, String)>, String> {
     let u = url::Url::parse(url).map_err(|e| format!("адрес базы: {e}"))?;
     let decode = |s: &str| url_decode(s);
     let mut env = vec![
-        ("PGHOST", u.host_str().unwrap_or("localhost").to_string()),
+        // Каталог сокета (`%2Fvar%2Frun%2Fpostgresql`) приходит закодированным.
+        ("PGHOST", decode(u.host_str().unwrap_or("localhost"))),
         ("PGPORT", u.port().unwrap_or(5432).to_string()),
         ("PGUSER", decode(u.username())),
         ("PGDATABASE", u.path().trim_start_matches('/').to_string()),
@@ -114,8 +158,8 @@ fn private_dir(p: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Делает копию; незавершённая копия не остаётся среди готовых.
-pub async fn run(c: &BackupConfig) -> Result<(PathBuf, u64), String> {
+/// Делает копию; незавершённая или не прошедшая проверку копия не остаётся среди готовых.
+pub async fn run(c: &BackupConfig, policy: &BackupPolicy) -> Result<Made, String> {
     let now = OffsetDateTime::now_utc();
     let name = format!(
         "pult-{}{:02}{:02}-{:02}{:02}{:02}",
@@ -130,9 +174,13 @@ pub async fn run(c: &BackupConfig) -> Result<(PathBuf, u64), String> {
     let tmp = c.dir.join(format!(".{name}.partial"));
     let _ = std::fs::remove_dir_all(&tmp);
     private_dir(&tmp).map_err(|e| e.to_string())?;
-    let result = make(c, &tmp).await;
-    let size = match result {
-        Ok(s) => s,
+    let result = match make(c, &tmp).await {
+        Ok(size) if policy.verify => verify(&tmp.join("db.dump")).await.map(|n| (size, Some(n))),
+        Ok(size) => Ok((size, None)),
+        Err(e) => Err(e),
+    };
+    let (size, objects) = match result {
+        Ok(r) => r,
         Err(e) => {
             let _ = std::fs::remove_dir_all(&tmp);
             return Err(e);
@@ -140,8 +188,37 @@ pub async fn run(c: &BackupConfig) -> Result<(PathBuf, u64), String> {
     };
     let done = c.dir.join(&name);
     std::fs::rename(&tmp, &done).map_err(|e| e.to_string())?;
-    prune(&c.dir, KEEP).map_err(|e| e.to_string())?;
-    Ok((done, size))
+    let keep = usize::try_from(policy.keep.clamp(1, MAX_KEEP)).unwrap_or(KEEP as usize);
+    prune(&c.dir, keep).map_err(|e| e.to_string())?;
+    Ok(Made { path: done, size, objects })
+}
+
+/// Проверка копии: `pg_restore --list` читает весь дамп и строит оглавление. Обрезанный или испорченный
+/// файл даёт ошибку. Возвращает число объектов в оглавлении.
+async fn verify(dump: &Path) -> Result<u64, String> {
+    let mut cmd = tokio::process::Command::new("pg_restore");
+    // Подключение к базе не нужно: оглавление строится из самого файла.
+    cmd.arg("--list").arg(dump).kill_on_drop(true);
+    let out = tokio::time::timeout(Duration::from_secs(1800), cmd.output())
+        .await
+        .map_err(|_| "проверка копии не уложилась в 30 минут".to_string())?
+        .map_err(|e| format!("pg_restore не запустился ({e}): нужен клиент PostgreSQL"))?;
+    if !out.status.success() {
+        return Err(format!(
+            "копия не прошла проверку: {}",
+            String::from_utf8_lossy(&out.stderr).chars().take(300).collect::<String>()
+        ));
+    }
+    let objects = toc_entries(&String::from_utf8_lossy(&out.stdout));
+    if objects == 0 {
+        return Err("копия не прошла проверку: в дампе нет объектов".into());
+    }
+    Ok(objects)
+}
+
+/// Строки оглавления `pg_restore --list`: комментарии начинаются с `;`.
+fn toc_entries(list: &str) -> u64 {
+    list.lines().filter(|l| !l.trim().is_empty() && !l.starts_with(';')).count() as u64
 }
 
 async fn make(c: &BackupConfig, tmp: &Path) -> Result<u64, String> {
@@ -182,21 +259,36 @@ fn copy_files(files_dir: &Path, data_dir: Option<&Path>, to: &Path) -> std::io::
     Ok(n)
 }
 
-/// Делает копию и записывает результат. Сбой — уведомление суперадминистраторам.
-pub async fn run_and_record(c: &BackupConfig, db: &sqlx::PgPool) -> Result<(), sqlx::Error> {
+/// Делает копию по политике из настроек и записывает результат. Сбой — уведомление суперадминистраторам.
+pub async fn run_and_record(c: &BackupConfig, db: &sqlx::PgPool) -> Result<BackupStatus, sqlx::Error> {
+    let policy: BackupPolicy = pult_core::settings::load(db).await?;
     let now = OffsetDateTime::now_utc().format(&time::format_description::well_known::Rfc3339).ok();
-    let status = match run(c).await {
-        Ok((path, size_bytes)) => {
-            tracing::info!(path = %path.display(), size_bytes, "резервная копия создана");
-            BackupStatus { last_at: now, ok: true, path: Some(path.display().to_string()), size_bytes, error: None }
+    let status = match run(c, &policy).await {
+        Ok(m) => {
+            {
+                tracing::info!(path = %m.path.display(), size_bytes = m.size, objects = ?m.objects, "резервная копия создана");
+            }
+            BackupStatus {
+                last_at: now,
+                ok: true,
+                path: Some(m.path.display().to_string()),
+                size_bytes: m.size,
+                error: None,
+                verified: m.objects.is_some(),
+                objects: m.objects,
+                keep: Some(policy.keep),
+            }
         }
         Err(e) => {
-            tracing::error!(error = %e, "резервная копия не создана");
+            {
+                tracing::error!(error = %e, "резервная копия не создана");
+            }
             pult_core::notify::notify_superadmins(db, "system.backup_failed", serde_json::json!({"error": e})).await?;
-            BackupStatus { last_at: now, ok: false, error: Some(e), ..Default::default() }
+            BackupStatus { last_at: now, ok: false, error: Some(e), keep: Some(policy.keep), ..Default::default() }
         }
     };
-    pult_core::settings::save(db, &status, None).await
+    pult_core::settings::save(db, &status, None).await?;
+    Ok(status)
 }
 
 #[cfg(test)]
@@ -213,6 +305,24 @@ mod tests {
         assert_eq!(get("PGPASSWORD"), Some("p@ss/x"), "пароль раскодирован");
         assert_eq!(get("PGDATABASE"), Some("pult"));
         assert_eq!(get("PGSSLMODE"), Some("require"));
+        let env = pg_env("postgres://pult@%2Fvar%2Frun%2Fpostgresql/pult").unwrap();
+        assert_eq!(env.iter().find(|(n, _)| *n == "PGHOST").map(|(_, v)| v.as_str()), Some("/var/run/postgresql"));
+    }
+
+    #[test]
+    fn toc_counts_entries_not_comments() {
+        let list = ";\n; Archive created at 2026-11-20\n;     dbname: pult\n;\n215; 1259 16390 TABLE public users pult\n3401; 0 16390 TABLE DATA public users pult\n\n";
+        assert_eq!(toc_entries(list), 2);
+        assert_eq!(toc_entries(";\n; empty\n"), 0);
+    }
+
+    #[test]
+    fn policy_bounds() {
+        assert!(BackupPolicy::default().valid() && BackupPolicy::default().verify);
+        assert!(!BackupPolicy { keep: 0, verify: true }.valid());
+        assert!(!BackupPolicy { keep: MAX_KEEP + 1, verify: true }.valid());
+        let p: BackupPolicy = serde_json::from_value(serde_json::json!({"keep": 30})).unwrap();
+        assert_eq!((p.keep, p.verify), (30, true), "недостающие поля — по умолчанию");
     }
 
     #[test]

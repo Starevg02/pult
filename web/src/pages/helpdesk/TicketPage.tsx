@@ -27,6 +27,7 @@ import {
 } from "../../icons";
 import { dyn, PRIORITIES, type Uploaded } from "./helpdeskUtil";
 import { PersonPicker } from "./NewTicketPage";
+import { AssistDraftButton, AssistSummary } from "./assist";
 import { AttachmentList, Editor, PriorityBadge, RichText, StatusBadge, TicketLink } from "./parts";
 import {
   AssigneeControl,
@@ -45,6 +46,7 @@ import {
 } from "./card";
 import { closeCodeLabel, minutesOf, useCloseCodes } from "./cardUtil";
 import { TicketRemote } from "../remote/RemotePages";
+import { ItilPanel, NewItilDialog } from "./ItilPages";
 
 const OPEN = ["new", "assigned", "in_progress", "waiting", "waiting_approval", "on_hold"];
 
@@ -68,7 +70,14 @@ function FeedEntry({ item, lang }: { item: FeedItem; lang: string }) {
   const { t } = useTranslation();
   if (item.type === "event") {
     const to = typeof item.to === "string" ? item.to : "";
-    const base = item.kind === "status" ? t("helpdesk.feed.status", { status: dyn(t, `helpdesk.status.${to}`) }) : t(`helpdesk.feed.${item.kind}`, { defaultValue: item.kind ?? "" });
+    const base =
+      item.kind === "status"
+        ? t("helpdesk.feed.status", { status: dyn(t, `helpdesk.status.${to}`) })
+        : item.kind === "change_submitted"
+          ? t("helpdesk.feed.change_submitted", { state: dyn(t, `itil.approval.${to}`) })
+          : item.kind === "problem_linked" || item.kind === "problem_unlinked"
+            ? t(`helpdesk.feed.${item.kind}`, { number: String(item.to ?? item.from ?? "") })
+            : t(`helpdesk.feed.${item.kind}`, { defaultValue: item.kind ?? "" });
     // У события правила в from — его название.
     const text = item.kind === "rule" && typeof item.from === "string" ? `${base} «${item.from}»` : base;
     return (
@@ -152,6 +161,7 @@ function Reply({ d, focus, tab, setTab }: { d: TicketDetail; focus: number; tab:
         </Button>
         {d.can_work && <MinutesInput value={minutes} onChange={setMinutes} />}
         {d.can_work && <ResponsePicker number={n} onInsert={(text) => setBody((b) => (b.trim() ? `${b}\n\n${text}` : text))} />}
+        {d.can_work && tab === "public" && <AssistDraftButton number={n} onInsert={(text) => setBody((b) => (b.trim() ? `${b}\n\n${text}` : text))} />}
         {d.ticket.is_major && tab === "public" && d.can_work && (
           <label className="inline-flex items-center gap-2 text-sm">
             <input type="checkbox" checked={broadcast} onChange={(e) => setBroadcast(e.target.checked)} />
@@ -430,6 +440,7 @@ function Properties({ d, lang }: { d: TicketDetail; lang: string }) {
     onSettled: () => void qc.invalidateQueries({ queryKey: ["ticket", x.number] }),
   });
   const codes = useCloseCodes();
+  const [newProblem, setNewProblem] = useState(false);
   const contact = x.unverified_contact as { name?: string; issue?: string } | null;
   const answers = Object.entries((x.form_answers ?? {}) as Record<string, unknown>);
   return (
@@ -493,7 +504,16 @@ function Properties({ d, lang }: { d: TicketDetail; lang: string }) {
         {x.reopened_count > 0 && <Prop label={t("helpdesk.reopenedCount")}>{x.reopened_count}</Prop>}
         {x.parent_number && <Prop label={t("helpdesk.parent")}><TicketLink number={x.parent_number} className="text-accent">#{x.parent_number}</TicketLink></Prop>}
         {x.follow_up_number && <Prop label={t("helpdesk.followUpOf")}><TicketLink number={x.follow_up_number} className="text-accent">#{x.follow_up_number}</TicketLink></Prop>}
+        {x.problem_number && <Prop label={t("itil.kind.problem")}><TicketLink number={x.problem_number} className="text-accent">#{x.problem_number}</TicketLink></Prop>}
       </dl>
+      {d.can_work && !x.problem_number && (x.kind === "incident" || x.kind === "request") && (
+        <>
+          <Button variant="ghost" className="mt-1 min-h-7 px-2 text-xs" onClick={() => setNewProblem(true)}>
+            {t("itil.fromIncident")}
+          </Button>
+          {newProblem && <NewItilDialog kind="problem" open incident={x.number} title={x.title} onClose={() => setNewProblem(false)} />}
+        </>
+      )}
       {update.error && <ErrorBox error={update.error} />}
       {d.can_work && remote && <TicketRemote ticket={x.number} personId={x.requester_person_id} computer={x.computer_name} />}
       <SlaPanel d={d} lang={lang} />
@@ -561,6 +581,7 @@ export function TicketPage() {
         <PriorityBadge priority={x.priority} />
         {d.can_work && <SlaBadge state={x.sla_state} />}
         {x.is_major && <Badge tone="bad">{t("helpdesk.major")}</Badge>}
+        {(x.kind === "problem" || x.kind === "change") && <Badge tone="accent">{dyn(t, `itil.kind.${x.kind}`)}</Badge>}
       </div>
       <div className="mb-4">
         <Actions d={d} dialog={dialog} setDialog={setDialog} />
@@ -571,11 +592,13 @@ export function TicketPage() {
             <RichText text={x.description || t("helpdesk.noDescription")} />
             <AttachmentList items={d.attachments} text={x.description} />
           </Card>
+          {d.can_work && (x.kind === "problem" || x.kind === "change") && <ItilPanel number={x.number} kind={x.kind} closed={x.status === "closed" || x.status === "canceled"} />}
+          {d.can_work && d.feed.length > 0 && <AssistSummary key={x.number} number={x.number} />}
           <ul className="space-y-2">
             {d.feed.map((f) => <FeedEntry key={f.id} item={f} lang={i18n.language} />)}
           </ul>
           <Rating d={d} />
-          <Reply d={d} focus={focus} tab={tab} setTab={setTab} />
+          <Reply key={d.ticket.number} d={d} focus={focus} tab={tab} setTab={setTab} />
         </div>
         <Properties d={d} lang={i18n.language} />
       </div>

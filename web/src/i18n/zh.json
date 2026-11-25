@@ -26,7 +26,14 @@
     "profile": "我的资料",
     "account": "账户",
     "skip": "跳到主要内容",
-    "notificationsUnread_other": "通知：{{count}} 条未读"
+    "notificationsUnread_other": "通知：{{count}} 条未读",
+    "myAssets": "我的设备",
+    "problems": "问题",
+    "changes": "变更",
+    "vault": "密钥",
+    "assistant": "助手",
+    "chats": "消息",
+    "catalog": "服务目录"
   },
   "login": {
     "title": "登录 IT 门户",
@@ -54,7 +61,36 @@
     },
     "cantLogin": "无法登录",
     "otp": "应用验证码",
-    "otpHint": "身份验证器应用中的 6 位数字。您正在从组织内网以外登录。"
+    "otpHint": "身份验证器应用中的 6 位数字。您正在从组织内网以外登录。",
+    "kerberos": {
+      "button": "使用域账户登录",
+      "errors": {
+        "negotiate_required": "浏览器未发送 Kerberos 票据。请通过名称（而非 IP）打开门户，并将其加入“本地 Intranet”区域。",
+        "ntlm_not_supported": "浏览器提供的是 NTLM 而不是 Kerberos：门户是通过 IP 打开的，或不在“本地 Intranet”区域。",
+        "rejected": "Kerberos 票据未被接受。请使用密码登录并联系 IT 部门。",
+        "kerberos_external": "域登录仅限组织网络内使用。请使用密码登录。",
+        "forbidden": "门户中没有您的账户。请使用密码登录。",
+        "account_disabled": "账户已停用。",
+        "busy": "服务器正忙于验证登录。请几秒后重试。",
+        "not_available": "此服务器不支持域登录。"
+      }
+    },
+    "oidc": {
+      "button": "通过 SSO 登录",
+      "errors": {
+        "state": "登录未完成或已过期，请重新开始。",
+        "denied": "登录提供方拒绝了请求。",
+        "external": "SSO 登录仅限组织网络内使用。请使用密码登录。",
+        "unavailable": "登录提供方不可用。请稍后再试或使用密码登录。",
+        "token": "登录提供方返回了无效的响应。请联系 IT 支持。",
+        "no_account": "域中未找到该账户。",
+        "ambiguous": "该名称对应多个账户。请使用密码登录或联系 IT 支持。",
+        "account_disabled": "账户已停用。",
+        "identity_mismatch": "此账户已关联到提供方的另一个用户。请联系 IT 支持。",
+        "otp_required": "从互联网登录时，请使用密码和身份验证器代码。",
+        "error": "登录失败，请重试。"
+      }
+    }
   },
   "outage": {
     "title": "无法连接到域",
@@ -247,10 +283,23 @@
         "sla_warning": "SLA 即将到期",
         "task_assigned": "有检查清单任务分配给您",
         "rule": "工单规则已触发",
-        "watching": "您已被添加为关注人"
+        "watching": "您已被添加为关注人",
+        "change_approval": "有变更需要您审批",
+        "change_decided": "变更审批已结束"
       },
       "system": {
         "backup_failed": "备份失败"
+      },
+      "monitoring": {
+        "alert": "监控告警"
+      },
+      "chat": {
+        "added": "您已被添加到群聊",
+        "removed": "您已被移出群聊",
+        "owner": "您已成为群聊的所有者",
+        "owner_changed": "群聊已指定新的所有者",
+        "locked": "群聊没有所有者，已被锁定",
+        "unlocked": "群聊已重新开放"
       }
     }
   },
@@ -275,7 +324,10 @@
       "integrations": "API 和 Webhook",
       "accessResources": "访问资源",
       "directory": "AD 目录：写入",
-      "remote": "远程支持"
+      "remote": "远程支持",
+      "changeRules": "变更审批",
+      "chats": "沟通",
+      "extensions": "扩展"
     },
     "ad": {
       "title": "AD 目录",
@@ -419,7 +471,11 @@
       "internal_networks": "组织网络",
       "internalHint": "每行一个网络（CIDR）。从其他地址登录时，已开启验证码的用户和下列角色需要输入应用验证码。如果门户位于代理之后，请设置 PULT_TRUSTED_PROXIES。",
       "totp_required_roles": "以下角色必须使用应用验证码",
-      "totpRolesHint": "这些角色只有开启验证码后才能从互联网登录（个人资料 → 互联网登录）。其他用户可自愿开启。"
+      "totpRolesHint": "这些角色只有开启验证码后才能从互联网登录（个人资料 → 互联网登录）。其他用户可自愿开启。",
+      "kerberos_login": "无密码域登录（Kerberos）",
+      "kerberosHint": "域内电脑上的员工点击“使用域账户登录”即可登录，无需密码。仅限组织网络。需要 keytab（KRB5_KTNAME）以及服务账户上的 SPN HTTP/<门户名称>；门户需位于浏览器的“本地 Intranet”区域。可在“状态”页面检查。",
+      "ad_password_change": "在个人资料中更改域密码",
+      "adPasswordHint": "员工在“我的资料”页面更改自己的 AD 密码：门户以其身份用旧密码登录并更改密码，密码策略由域检查。需要通过 LDAPS 连接域。旧密码错误计为一次登录失败；更改后会关闭其他设备上的会话。"
     },
     "audit": {
       "title": "审计日志",
@@ -478,7 +534,18 @@
       "backup": "备份",
       "backupNone": "暂无备份。每天 02:30 自动备份。",
       "backupOk": "已创建",
-      "backupFailed": "失败"
+      "backupFailed": "失败",
+      "backupKeep": "保留的备份数",
+      "backupKeepHint": "1 到 365。多余的旧备份会在下一次备份后删除。将备份存放到门户服务器之外属于外部存储的职责。",
+      "backupVerify": "校验每个备份（pg_restore --list）",
+      "backupVerified": "已校验：{{n}} 个对象",
+      "backupNotVerified": "未校验",
+      "push": "设备通知",
+      "pushHint": "员工在个人资料中开启。服务器需要访问浏览器推送服务（Google、Mozilla、Apple、Microsoft）的 Internet。内容使用浏览器密钥加密：推送服务无法读取。",
+      "pushEnabled": "启用设备通知",
+      "pushShowText": "显示工单或消息主题（在锁屏上可见）",
+      "pushContact": "推送服务的管理员联系方式",
+      "pushContactHint": "mailto:地址 或 https://…——推送服务在投递出现问题时通过它联系您。"
     },
     "helpdesk": {
       "categories": "工单类别",
@@ -527,7 +594,9 @@
       "absences": "工程师缺勤",
       "from": "从",
       "to": "至",
-      "reason": "原因"
+      "reason": "原因",
+      "description": "服务目录中的描述",
+      "descriptionHint": "该类别包含的内容，简要说明，供员工查看。"
     },
     "groups": {
       "work": "工单",
@@ -550,7 +619,10 @@
       "system": "运行状况、门户证书、备份。",
       "accessResources": "用于访问申请的组、文件夹和应用程序，以及它们的所有者",
       "directory": "写入账户、允许的 OU 和组、是否必须有工单",
-      "remote": "计算机代理程序、注册令牌、连接策略、MSI 和辅助程序安装包。"
+      "remote": "计算机代理程序、注册令牌、连接策略、MSI 和辅助程序安装包。",
+      "changeRules": "谁审批变更：按类别和风险级别",
+      "chats": "没有所有者的群聊、指定所有者、匿名统计。",
+      "extensions": "按清单接入的外部服务：API 权限、Webhook、菜单链接。"
     },
     "directory": {
       "title": "AD 目录：写入",
@@ -577,6 +649,53 @@
       "groupOptional": "可选。",
       "ownerHint": "通讯录中的员工",
       "active": "在申请表单中显示"
+    },
+    "oidc": {
+      "title": "OpenID Connect 登录（SSO）",
+      "hint": "Keycloak、ADFS、Entra ID 等提供方。提供方确认身份；账户、角色和停用状态与密码登录一样来自 AD。",
+      "enabled": "启用提供方登录",
+      "issuer": "颁发者（issuer）",
+      "issuerHint": "配置和密钥从 <颁发者>/.well-known/openid-configuration 读取。仅限 https://。",
+      "clientId": "客户端 ID",
+      "secret": "客户端密钥",
+      "publicClient": "无密钥：公共客户端（仅 PKCE）。",
+      "dropSecret": "删除已保存的密钥",
+      "redirect": "回调地址（redirect URI）",
+      "redirectHint": "请在提供方处登记此地址：{{url}}",
+      "useThis": "填入",
+      "claim": "员工登录名",
+      "claimHint": "按 ID 令牌的此字段在 AD 镜像中查找账户。",
+      "claims": {
+        "preferred_username": "preferred_username（登录名或 UPN）",
+        "upn": "upn",
+        "email": "email（仅已验证）"
+      },
+      "buttonLabel": "登录按钮文字",
+      "allowExternal": "允许从互联网通过提供方登录",
+      "allowExternalHint": "从外部需要身份验证器代码的用户无法使用此方式：他们使用密码和代码登录。",
+      "test": "检查提供方",
+      "testOk": "提供方有响应，签名密钥：{{count}}",
+      "noKeys": "提供方未发布签名密钥。",
+      "identities": "已关联用户：{{count}}",
+      "identitiesHint": "首次登录时，提供方的永久用户标识（sub）会关联到门户账户。在提供方处改名无法登录他人的账户。如果用户已迁移到其他提供方或被重新创建，请重置关联。",
+      "reset": "重置关联",
+      "resetConfirm": "重置所有关联？每个用户将在下次登录时重新关联。"
+    },
+    "assist": {
+      "title": "助手",
+      "hint": "部署在独立服务器上的自有模型，使用 OpenAI 兼容 API（vLLM、Ollama、LM Studio 等）。助手基于知识库回答问题、为新工单建议类别，并为工程师撰写回复草稿和工单摘要。它只提供建议，不会自行执行任何操作。",
+      "enabled": "启用助手",
+      "url": "API 地址",
+      "urlHint": "末尾不含 /chat/completions，例如 http://llm.example.local:8000/v1。",
+      "model": "模型",
+      "key": "API 密钥",
+      "noKey": "未设置：模型服务器无需密钥。",
+      "dropKey": "删除密钥",
+      "timeout": "等待回答（秒）",
+      "maxTokens": "回答长度（token）",
+      "privacy": "模型会收到用户可见的文章和工单文本。请使用组织网络内的服务器；使用 http:// 地址时 API 密钥以明文传输。",
+      "test": "检查服务器",
+      "testOk": "模型在 {{ms}} 毫秒内作答"
     }
   },
   "status": {
@@ -665,7 +784,8 @@
       "phone": "电话",
       "walk_in": "现场",
       "login_help": "无法登录",
-      "api": "API"
+      "api": "API",
+      "monitoring": "监控"
     },
     "issues": {
       "forgot": "忘记密码",
@@ -721,7 +841,13 @@
       },
       "directory": {
         "operation": "AD 目录操作"
-      }
+      },
+      "alert_resolved": "监控：问题已解决",
+      "change_reset": "变更已修改——重新审批",
+      "change_submitted": "审批：{{state}}",
+      "change_decision": "审批人的决定",
+      "problem_linked": "已关联到问题 #{{number}}",
+      "problem_unlinked": "已取消与问题 #{{number}} 的关联"
     },
     "loginHelp": {
       "title": "无法登录",
@@ -929,7 +1055,14 @@
     "mergeInto": "主工单编号",
     "toKb": "知识库文章",
     "template": "模板",
-    "templateHint": "自动填写主题、描述、类别和检查清单。"
+    "templateHint": "自动填写主题、描述、类别和检查清单。",
+    "goodComment": "哪些方面令您满意？（可选）",
+    "survey": {
+      "hint": "如愿意可详细评价：1（差）到 5（优秀）。",
+      "speed": "速度",
+      "quality": "解决质量",
+      "courtesy": "礼貌"
+    }
   },
   "bulk": {
     "selected": "已选择：{{n}}",
@@ -992,6 +1125,67 @@
       "in_stock": "库存中",
       "repair": "维修中",
       "retired": "已报废"
+    },
+    "handover": {
+      "issue": "发放",
+      "return": "归还",
+      "transfer": "转交",
+      "current": "当前持有人",
+      "to": "发放给",
+      "newResponsible": "转交给",
+      "after": "归还后的状态",
+      "comment": "备注"
+    },
+    "events": {
+      "title": "设备历史",
+      "created": "已添加",
+      "issued": "已发放",
+      "returned": "已归还",
+      "transferred": "已转交",
+      "updated": "已修改",
+      "changed": "已修改"
+    },
+    "fields": {
+      "type_id": "类型",
+      "name": "名称",
+      "inventory_number": "资产编号",
+      "serial_number": "序列号",
+      "site_id": "站点",
+      "room": "房间",
+      "status": "状态",
+      "notes": "备注",
+      "attributes": "附加字段"
+    },
+    "mine": {
+      "title": "我的设备",
+      "hint": "分配给您的设备。如有问题或无法使用，请创建工单。",
+      "empty": "没有分配给您的设备。",
+      "since": "发放时间",
+      "report": "报告设备问题"
+    },
+    "import": {
+      "title": "从 CSV 导入",
+      "hint": "第一行为表头：name 和 type 为必填；inventory_number、serial_number、site、room、responsible（电子邮件或 AD 登录名）、status、notes 以及类型字段为可选。也可使用俄文、英文或中文的列名。分隔符为“;”或“,”，编码为 UTF-8。资产编号已在登记册中的行将被跳过。",
+      "sample": "name;type;inventory_number;site;responsible;型号\n财务部多功能一体机;打印机 / 多功能一体机;INV-0042;总部;i.petrova;HP M428",
+      "file": "CSV 文件",
+      "tooBig": "文件大于 2 MB，请拆分为多个部分。",
+      "checked": "检查：将创建 {{created}} 条，跳过 {{skipped}} 条，错误 {{errors}} 条。",
+      "done": "完成：已创建 {{created}} 条，跳过 {{skipped}} 条，错误 {{errors}} 条。",
+      "row": "第 {{row}} 行",
+      "check": "检查",
+      "run": "导入"
+    },
+    "found": {
+      "summary_other": "代理发现了 {{count}} 台不在登记册中的电脑",
+      "review": "查看",
+      "hide": "隐藏",
+      "empty": "列表为空。",
+      "host": "电脑",
+      "os": "操作系统",
+      "seen": "最后在线",
+      "accept": "加入登记册",
+      "reject": "不加入",
+      "showRejected": "显示已拒绝"
     }
   },
   "reports": {
@@ -1020,7 +1214,10 @@
     "byDepartment": "按部门",
     "byChannel": "按渠道",
     "topRequesters": "提交最多的申请人",
-    "load": "当前负载"
+    "load": "当前负载",
+    "survey": "速度 / 质量 / 礼貌",
+    "surveyHint_one": "平均分，{{count}} 条答复",
+    "surveyHint_other": "平均分，{{count}} 条答复"
   },
   "svc": {
     "name": "名称",
@@ -1193,7 +1390,42 @@
     "secretKeep": "留空则保留当前密钥。",
     "webhookUsage": "出错时会重试投递。请在您的一端验证 X-Pult-Signature。",
     "vip": "VIP 员工",
-    "vipHint": "高管和关键员工：他们的工单优先级提高一级（见上方设置），并在工单卡片中显示 VIP 标记。搜索员工即可添加。"
+    "vipHint": "高管和关键员工：他们的工单优先级提高一级（见上方设置），并在工单卡片中显示 VIP 标记。搜索员工即可添加。",
+    "monitoring": {
+      "title": "监控",
+      "new": "新来源",
+      "empty": "没有来源。",
+      "usage": "Zabbix、Prometheus Alertmanager 等系统使用来源令牌将告警发送到 /api/helpdesk/monitoring/alerts。新告警会通知超级管理员，并在启用时创建工单；“已解决”会记录在工单动态中。",
+      "tokenOnce": "令牌只显示一次，请将其保存到监控系统的设置中。",
+      "alertmanager": "Prometheus Alertmanager：",
+      "generic": "Zabbix（“Webhook”媒介类型）及其他系统 — JSON：",
+      "createTickets": "创建工单",
+      "minSeverity": "创建工单的最低严重程度",
+      "deleteConfirm": "删除该来源及其告警？工单将保留。",
+      "open_other": "{{count}} 个未解决",
+      "tickets": "工单",
+      "severity": {
+        "info": "信息",
+        "warning": "警告",
+        "critical": "严重"
+      }
+    },
+    "format": "目标",
+    "formats": {
+      "pult": "带签名的 JSON（自有服务）",
+      "chat": "聊天：Mattermost、Rocket.Chat、Slack",
+      "telegram": "Telegram"
+    },
+    "formatHint": {
+      "pult": "以 POST 发送工单 JSON 和 X-Pult-Signature 签名，用于自有服务和自动化。",
+      "chat": "向频道发送简短消息：事件、编号、主题、状态和链接。不发送评论内容。",
+      "telegram": "机器人向群组或频道发送消息：事件、编号、主题、状态和链接。需先将机器人加入聊天。"
+    },
+    "chatUrlHint": "频道设置中的传入 Webhook 地址（Mattermost：集成 → 传入 Webhook）。",
+    "chatId": "Telegram 聊天",
+    "chatIdHint": "群组的数字 ID（例如 -1001234567890）或公开频道的 @名称。",
+    "botToken": "机器人令牌",
+    "botTokenHint": "由 @BotFather 颁发，形如 123456789:AA…"
   },
   "access": {
     "panel": "访问申请",
@@ -1368,6 +1600,33 @@
       "noHelper": "什么都没有打开？您的计算机上需要安装 Pult Helper。",
       "getHelper": "下载辅助程序",
       "silentConfirm": "不征求用户同意就连接到会话？用户将不会看到提示。"
+    },
+    "hw": {
+      "title": "硬件",
+      "model": "型号",
+      "serial": "序列号",
+      "cpu": "处理器",
+      "memory": "内存",
+      "gb": "{{n}} GB",
+      "disks": "磁盘",
+      "disk": "{{name}} 可用 {{free}} GB，共 {{size}} GB",
+      "bios": "BIOS",
+      "collected": "采集时间",
+      "none": "暂无硬件信息：0.2 及以上版本的代理会在启动时和每天发送一次。"
+    },
+    "sw": {
+      "title": "软件（{{n}}）",
+      "filter": "按名称或发布者筛选",
+      "showAll": "显示全部（{{n}}）",
+      "empty": "代理未发现已安装的程序。",
+      "searchTitle": "程序安装在哪些电脑上",
+      "searchPlaceholder": "程序名称，例如“Chrome”",
+      "searchEmpty": "没有电脑安装此程序。",
+      "tooMany": "仅显示前 500 条，请细化名称。",
+      "col": {
+        "name": "程序",
+        "version": "版本"
+      }
     }
   },
   "remoteAdmin": {
@@ -1461,14 +1720,16 @@
       "phonebook": "通讯录",
       "directory": "AD 变更",
       "remote": "远程支持",
-      "telephony": "电话系统"
+      "telephony": "电话系统",
+      "chat": "沟通"
     },
     "moduleAbout": {
       "helpdesk": "员工工单、工程师工作台、知识库、设备、报表。",
       "phonebook": "来自 AD 的员工通讯录，含电话、部门和站点。",
       "directory": "在门户中启用账户、管理组和重置密码，需审批并记录审计。",
       "remote": "电脑上的代理程序：电脑列表和连接用户会话。",
-      "telephony": "通话记录，以及通过电话交换机从通讯录直接拨号。"
+      "telephony": "通话记录，以及通过电话交换机从通讯录直接拨号。",
+      "chat": "员工的私人对话和群聊。只有参与者可以阅读会话。"
     },
     "telephonyNeedsPhonebook": "必须与通讯录一起启用。",
     "sitesText": "站点是办公室和分支机构：地址、时区、紧急电话、负责工程师。可以稍后添加。",
@@ -1552,7 +1813,16 @@
     "totpRequired": "您的角色从互联网登录必须使用验证码：开启之前无法从外部登录。",
     "totpSetup": "开通",
     "totpOn": "已开启互联网登录验证码",
-    "totpOff": "已关闭互联网登录验证码"
+    "totpOff": "已关闭互联网登录验证码",
+    "password": "域密码",
+    "passwordHint": "与登录计算机和邮件的密码相同。密码要求由域设定。",
+    "passwordOld": "当前密码",
+    "passwordNew": "新密码",
+    "passwordAgain": "再次输入新密码",
+    "passwordMismatch": "两次输入的密码不一致。",
+    "passwordChange": "更改密码",
+    "passwordDone_one": "密码已更改。已关闭其他设备上的 {{count}} 个会话。",
+    "passwordDone_other": "密码已更改。已关闭其他设备上的 {{count}} 个会话。"
   },
   "search": {
     "nothing": "未找到结果。"
@@ -1565,5 +1835,395 @@
     "emptyFiltered": "没有符合这些筛选条件的工单",
     "emptyFilteredHint": "请修改筛选条件或打开“全部”标签。",
     "emptyHint": "新工单会自动出现在这里，列表每分钟刷新一次。"
+  },
+  "itil": {
+    "kind": {
+      "problem": "问题",
+      "change": "变更"
+    },
+    "new": {
+      "problem": "新建问题",
+      "change": "新建变更"
+    },
+    "list": {
+      "problem": "问题",
+      "change": "变更"
+    },
+    "about": {
+      "problem": "重复事件的根本原因：关联事件、原因和临时解决方案。",
+      "change": "计划内的基础设施工作：计划、回退、时间窗口和审批。"
+    },
+    "title": "主题",
+    "description": "描述",
+    "byCategory": "按类别",
+    "create": "创建",
+    "risk": "风险",
+    "risks": {
+      "low": "低",
+      "medium": "中",
+      "high": "高"
+    },
+    "problemTitle": "问题",
+    "knownError": "已知错误",
+    "cause": "原因",
+    "workaround": "临时解决方案",
+    "workaroundHint": "在原因消除之前怎么做：工程师会在关联事件中看到。",
+    "markKnown": "已知错误：已找到原因，并有临时解决方案",
+    "incidents": "关联事件：{{count}}",
+    "noIncidents": "暂无事件。",
+    "unlink": "取消关联 #{{n}}",
+    "unlinkShort": "取消关联",
+    "incidentNumber": "事件编号",
+    "link": "关联",
+    "resolveAll": "解决未结事件（{{count}}）",
+    "resolveAllHint": "每个事件都以此回复解决；申请人会通过邮件收到并确认。",
+    "resolveAllRun": "解决",
+    "resolveFailed": "未能解决：{{list}}。请打开并手动解决。",
+    "fromIncident": "根据此工单创建问题",
+    "changeTitle": "变更",
+    "approval": {
+      "draft": "草稿",
+      "pending": "审批中",
+      "approved": "已批准",
+      "rejected": "未批准"
+    },
+    "decision": {
+      "pending": "等待决定",
+      "approved": "已批准",
+      "rejected": "已拒绝",
+      "skipped": "无需决定"
+    },
+    "editResets": "修改计划、回退、时间窗口或风险会重新开始审批。",
+    "start": "开始时间",
+    "end": "结束时间",
+    "plan": "工作计划",
+    "planHint": "分步骤说明要做什么，以及如何检查结果。",
+    "rollback": "回退计划",
+    "rollbackHint": "出现问题时如何恢复原状。中、高风险必填。",
+    "saveFirst": "请先保存修改",
+    "submit": "提交审批",
+    "submitted": "已提交审批",
+    "approvals": "审批",
+    "round": "第 {{n}} 轮",
+    "changeApprovals": "变更",
+    "leads": "负责人 {{name}}",
+    "decisionComment": "备注（拒绝时必填）",
+    "rejectNeedsComment": "请填写拒绝原因",
+    "reject": "拒绝",
+    "approve": "批准",
+    "rulesHint": "谁审批变更：按类别并从某个风险级别起。所有匹配的规则都适用；若无匹配，变更立即批准。作者不能批准自己的变更。",
+    "anyCategory": "任意类别",
+    "fromRisk": "起始风险",
+    "fromRiskValue": "风险从“{{risk}}”起",
+    "approver": "审批人",
+    "addRule": "添加规则",
+    "noRules": "没有规则",
+    "noRulesHint": "没有规则时，任何变更提交后立即批准。"
+  },
+  "vault": {
+    "title": "密钥库",
+    "subtitle": "服务账户密码和密钥。每个密钥只对被共享的人开放。",
+    "create": "新建密钥",
+    "search": "按名称、登录名、地址搜索",
+    "empty": "暂无密钥",
+    "emptyHint": "创建密钥：您将成为其管理者，并决定共享给谁。",
+    "notFound": "未找到",
+    "name": "名称",
+    "login": "登录名",
+    "url": "地址",
+    "description": "描述",
+    "descriptionHint": "请勿在此填写密码：能看到卡片的人都能看到描述。",
+    "value": "值",
+    "valueHint": "在数据库中仅以加密形式存储。",
+    "newValue": "新值",
+    "newValueHint": "留空则保持不变。",
+    "copyLogin": "复制登录名",
+    "copyValue": "复制值",
+    "valueChanged": "值更改时间",
+    "createdBy": "创建者",
+    "reason": "原因",
+    "reasonHint": "将与查看记录一起写入审计日志。",
+    "reveal": "显示值",
+    "hide": "隐藏（{{n}}）",
+    "hideValue": "隐藏值",
+    "noReveal": "您只能看到密钥卡片，看不到其值。",
+    "edit": "编辑",
+    "deleteConfirm": "删除密钥“{{name}}”？其值将丢失。",
+    "access": "访问权限",
+    "accessHint": "访问权限授予员工或门户角色。“卡片”：可见名称和登录名；“值”：还可见密钥本身；“管理”：编辑、删除和管理访问权限。",
+    "role": "角色",
+    "level": "访问级别",
+    "levelFor": "访问级别：{{name}}",
+    "removeAccess": "移除访问权限：{{name}}",
+    "addPerson": "添加员工",
+    "addRole": "添加角色",
+    "levels": {
+      "view": "卡片",
+      "reveal": "值",
+      "manage": "管理"
+    }
+  },
+  "assist": {
+    "title": "助手",
+    "subtitle": "基于知识库回答问题。对话不会保存：关闭页面后即消失。",
+    "empty": "询问如何解决问题，例如“如何在家连接 VPN”。助手根据知识库文章回答并附上链接。",
+    "question": "您的问题",
+    "send": "提问",
+    "newChat": "新对话",
+    "you": "您",
+    "thinking": "助手正在思考…",
+    "sources": "来源",
+    "disclaimer": "助手可能出错，且不会自行执行任何操作。请勿向其发送密码。",
+    "off": "助手已关闭。管理员可在“设置”→“系统”中开启。",
+    "unavailable": "助手不可用",
+    "draft": "回复草稿",
+    "summary": "工单摘要",
+    "again": "重新生成",
+    "category": "建议类别",
+    "noCategory": "未找到合适的类别：请自行选择。"
+  },
+  "cmdb": {
+    "addRelation": "添加关系",
+    "relation": "关系",
+    "suggested": "建议",
+    "suggestedHint": "具有相同负责人或位于同一房间的对象。只有在您添加后才会建立关系。",
+    "reasons": {
+      "same_person": "相同负责人",
+      "same_room": "同一房间"
+    },
+    "findAsset": "查找对象",
+    "relations": "关系",
+    "removeRelation": "删除与“{{name}}”的关系",
+    "noRelations": "没有关系。",
+    "analysis": "关系分析",
+    "impact": "故障影响范围",
+    "map": "依赖关系图",
+    "noImpact": "没有对象依赖于此对象。",
+    "impactSummary": "受影响对象：{{n}}，相关负责人：{{people}}。",
+    "via": "通过",
+    "level": "第 {{n}} 级",
+    "mapLabel": "“{{name}}”的依赖关系图：{{n}} 个相关对象",
+    "mapLegend": "实线箭头表示有影响的关系，虚线表示无影响。显示两步以内的对象。",
+    "mapTruncated": "并未显示全部对象。",
+    "lifecycle": "生命周期",
+    "lifecycleLater": "可在创建类型后设置生命周期。",
+    "transitionsHint": "勾选允许的转换。未勾选任何项表示允许任意转换。发放和归还需要“库存 → 使用中”和“使用中 → 库存”。",
+    "transitions": "允许的转换",
+    "fromTo": "从 ↓ 到 →",
+    "transition": "从“{{from}}”转换到“{{to}}”",
+    "licenses": "许可证",
+    "licensesHint": "安装数根据电脑代理上报的程序统计。",
+    "noLicenses": "暂无许可证。",
+    "newLicense": "添加许可证",
+    "licenseName": "名称",
+    "vendor": "厂商",
+    "pattern": "程序名称片段",
+    "patternHint": "与“程序和功能”中一致；不区分大小写。",
+    "seats": "已购席位",
+    "seatsHint": "留空表示不限。",
+    "expiresOn": "有效期至",
+    "deleteLicense": "删除许可证？不会影响电脑上的程序。",
+    "notInstalled": "代理未在任何电脑上发现此程序。",
+    "usage": "{{used}} / {{seats}}",
+    "usageUnlimited": "安装数：{{used}}",
+    "until": "至 {{date}}",
+    "overSeats": "超出 {{n}}",
+    "expired": "已过期",
+    "expiresSoon": "即将到期",
+    "relationTypes": "关系类型",
+    "noRelationTypes": "没有关系类型。",
+    "newRelationType": "新关系类型",
+    "relationName": "从对象出发的名称",
+    "relationNameHint": "例如“依赖于”。",
+    "reverseName": "另一对象处的名称",
+    "reverseNameHint": "例如“被依赖于”。",
+    "impactFlag": "影响",
+    "impactFlagHint": "另一对象的故障会影响第一个对象：影响分析会考虑此关系。",
+    "impactShort": "影响",
+    "services": "服务状态",
+    "servicesOk": "一切正常",
+    "servicesBad": "有告警：{{n}}",
+    "states": {
+      "ok": "正常",
+      "info": "通知",
+      "warning": "警告",
+      "critical": "故障"
+    },
+    "alerts": "未关闭的监控告警：{{n}}",
+    "showStatus": "在“服务状态”中显示",
+    "showStatusHint": "此类型的对象将显示在工程师主页上，其状态取决于自身及其依赖对象的告警。"
+  },
+  "netbox": {
+    "summary": "在 NetBox 中发现但不在目录中：{{n}}",
+    "role": "角色和平台",
+    "kinds": {
+      "device": "设备",
+      "vm": "虚拟机"
+    },
+    "title": "NetBox",
+    "hint": "来自 NetBox 的网络设备、服务器和虚拟机。门户仅读取 NetBox；发现的对象须经工程师在“设备”中审核后才进入目录，已接受的卡片之后不会自动更改。",
+    "enabled": "每天同步一次",
+    "url": "NetBox 地址",
+    "token": "API 令牌",
+    "tokenHint": "只读令牌。加密存储，不会显示。",
+    "dropToken": "删除已保存的令牌",
+    "vms": "包括虚拟机",
+    "never": "尚未同步。",
+    "result": "获取 {{fetched}}，新增 {{added}}，消失 {{missing}}",
+    "sync": "立即同步",
+    "syncing": "正在同步…"
+  },
+  "chat": {
+    "title_list": "会话",
+    "new": "新建",
+    "newDirect": "私人对话",
+    "newGroup": "群聊",
+    "searchPeople": "查找员工：姓名或登录名",
+    "nobody": "未找到任何人。",
+    "title": "名称",
+    "members": "成员",
+    "membersN": "成员：{{n}}",
+    "groupHint": "您将成为所有者。被添加的人会立即看到聊天及全部历史记录，并收到通知。",
+    "create": "创建",
+    "pinned": "已置顶",
+    "locked": "聊天暂时不可用",
+    "lockedHint": "正在指定新的所有者。聊天重新开放时您会收到通知。",
+    "group": "群聊",
+    "direct": "私人对话",
+    "readOnly": "只读",
+    "readOnlyHint": "您已退出聊天：此前的历史记录为只读。",
+    "unread_one": "未读：{{count}}",
+    "unread_other": "未读：{{count}}",
+    "hiddenTitle": "已隐藏",
+    "showHidden": "已隐藏的聊天",
+    "showMain": "← 所有会话",
+    "empty": "暂无会话。",
+    "emptyHint": "使用“新建”开始私人对话或创建群聊。",
+    "noHidden": "没有已隐藏的聊天。",
+    "pick": "请在左侧选择会话。",
+    "back": "返回会话列表",
+    "pin": "置顶",
+    "unpin": "取消置顶",
+    "hide": "隐藏",
+    "unhide": "恢复到列表",
+    "info": "成员",
+    "older": "显示更早的消息",
+    "noMessages": "暂无消息。",
+    "message": "消息",
+    "placeholder": "消息…（Enter 发送，Shift+Enter 换行）",
+    "send": "发送",
+    "editing": "编辑消息（发送后 15 分钟内可编辑）",
+    "edited": "已编辑",
+    "versions": "消息版本",
+    "version": "版本 {{n}}",
+    "current": "当前",
+    "roles": {
+      "owner": "所有者",
+      "admin": "管理员",
+      "member": "成员"
+    },
+    "makeAdmin": "设为管理员",
+    "unmakeAdmin": "撤销管理员权限",
+    "remove": "移出聊天",
+    "addMembers": "添加成员",
+    "addHint": "立即添加，无需邀请；对方会收到通知。",
+    "memberHistory": "成员变更历史",
+    "actions": {
+      "created": "创建了聊天",
+      "added": "已加入",
+      "removed": "已被移出",
+      "left": "已退出",
+      "blocked": "已离开：AD 账户已停用",
+      "admin": "被设为管理员",
+      "member": "现为成员",
+      "owner": "成为所有者",
+      "locked": "聊天已锁定：没有所有者",
+      "unlocked": "聊天已重新开放"
+    },
+    "leave": "退出聊天",
+    "ownerHint": "所有者不能退出：由超级管理员转让所有权。"
+  },
+  "chatAdmin": {
+    "hint": "不含消息的群聊：管理员无法阅读会话，私人对话不在此列出。指定所有者（包括您自己）会记录到审计日志。",
+    "empty": "没有群聊。",
+    "owner": "所有者",
+    "locked": "已锁定：没有所有者",
+    "assign": "指定所有者",
+    "newOwner": "新所有者",
+    "previous": "原所有者（{{name}}）将成为",
+    "prev": {
+      "admin": "聊天管理员",
+      "member": "普通成员",
+      "remove": "被移出聊天"
+    },
+    "assignHint": "所有权立即转移，无需同意。已锁定的聊天将重新开放，成员会收到通知。",
+    "self": "指定我自己",
+    "stats": "统计",
+    "statsHint": "仅显示门户整体数字，不含人员、部门或聊天。小于 5 的数值不显示。",
+    "directChats": "私人对话",
+    "groupChats": "群聊",
+    "month": "月份",
+    "messages": "消息",
+    "directMessages": "私人",
+    "groupMessages": "群组中",
+    "edited": "已编辑",
+    "senders": "发送者"
+  },
+  "extensions": {
+    "hint": "扩展是带有 pult-extension.json 清单的外部服务。门户为其发放仅限读取、权限来自清单的 API 令牌、工单事件的签名 Webhook 以及菜单链接。扩展代码不会在门户内运行。",
+    "install": "安装扩展",
+    "fromFile": "清单文件",
+    "fromUrl": "或清单地址",
+    "check": "检查",
+    "badFile": "文件不是有效的 JSON。",
+    "catalog": "目录",
+    "catalogUrl": "目录地址",
+    "catalogHint": "通过 https 提供的清单 JSON 数组。留空表示不使用目录。",
+    "installedVersion": "已安装：{{v}}",
+    "empty": "未安装任何扩展。",
+    "willRead": "可通过 API 读取",
+    "noApi": "不请求 API 访问。",
+    "willReceive": "将接收工单事件",
+    "allEvents": "所有事件",
+    "menuLinks": "菜单链接",
+    "responsibility": "安装扩展即表示组织将其可访问的数据托付给该扩展的发布者。",
+    "alreadyInstalled": "已安装。如需更新，请删除后重新安装。",
+    "secretsTitle": "扩展的配置数据",
+    "secretsHint": "请立即将其复制到扩展的设置中：之后不会再次显示。",
+    "token": "API 令牌",
+    "webhookSecret": "Webhook 签名密钥",
+    "nothingToShow": "该扩展既不需要令牌也不需要 Webhook。",
+    "saved": "我已保存",
+    "lastUsed": "令牌最近使用于 {{at}}",
+    "on": "已启用",
+    "off": "已停用",
+    "enable": "启用",
+    "disable": "停用",
+    "confirmDelete": "删除扩展“{{name}}”？其令牌将被撤销，Webhook 将被删除。",
+    "newTab": "（在新标签页中打开）"
+  },
+  "push": {
+    "title": "此设备上的通知",
+    "hint": "即使标签页已关闭，也能收到门户通知。在手机上，请先将门户安装到主屏幕（浏览器菜单 → 安装应用 或 添加到主屏幕）。",
+    "unsupported": "此浏览器不支持通知，或门户未通过 HTTPS 打开。",
+    "unavailable": "管理员已关闭设备通知。",
+    "denied": "浏览器未允许通知。请在网站设置中允许后重试。",
+    "on": "已开启",
+    "off": "已关闭",
+    "enable": "开启",
+    "disable": "关闭",
+    "test": "测试",
+    "devices_one": "已订阅 {{count}} 台设备",
+    "devices_other": "已订阅 {{count}} 台设备",
+    "testResult": "已发送：{{sent}}，未送达：{{failed}}。"
+  },
+  "catalog": {
+    "title": "服务目录",
+    "hint": "选择需要帮助的事项：将打开带有相应字段的工单。没有找到？请创建工单并用自己的话描述。",
+    "search": "查找服务",
+    "empty": "未找到。",
+    "request": "请求",
+    "incident": "故障",
+    "withForm": "含表单"
   }
 }

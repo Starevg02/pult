@@ -15,8 +15,8 @@ use ldap3_proto::{
     LdapCodec,
     control::LdapControl,
     proto::{
-        LdapBindCred, LdapBindResponse, LdapFilter, LdapMsg, LdapOp, LdapPartialAttribute, LdapResult, LdapResultCode,
-        LdapSearchResultEntry, LdapSearchScope,
+        LdapBindCred, LdapBindResponse, LdapFilter, LdapModifyRequest, LdapModifyType, LdapMsg, LdapOp,
+        LdapPartialAttribute, LdapResult, LdapResultCode, LdapSearchResultEntry, LdapSearchScope,
     },
 };
 use pult_ad::{AdConfig, AdError, BindFailure, DcPool, TlsMode};
@@ -166,12 +166,20 @@ async fn serve(tls: tokio_rustls::server::TlsStream<tokio::net::TcpStream>, st: 
     let mut writer = FramedWrite::new(w, LdapCodec::default());
     let users = directory();
     let mut service = false;
+    // DN пользователя, вошедшего на этом соединении.
+    let mut bound: Option<String> = None;
     while let Some(Ok(msg)) = reader.next().await {
         let id = msg.msgid;
         let replies = match msg.op {
             LdapOp::BindRequest(b) => {
                 let LdapBindCred::Simple(pass) = b.cred else { break };
-                vec![bind_reply(id, bind(&users, &b.dn, &pass, &st, &mut service))]
+                let r = bind(&users, &b.dn, &pass, &st, &mut service);
+                bound = (r.0 == LdapResultCode::Success && !service).then(|| b.dn.clone());
+                vec![bind_reply(id, r)]
+            }
+            LdapOp::ModifyRequest(m) => {
+                let (code, text) = change_password(bound.as_deref(), &m);
+                vec![LdapMsg { msgid: id, op: LdapOp::ModifyResponse(result(code, &text)), ctrl: vec![] }]
             }
             LdapOp::SearchRequest(s) if s.base.is_empty() && s.scope == LdapSearchScope::Base => vec![
                 entry(
@@ -243,6 +251,38 @@ fn bind(users: &[User], dn: &str, pass: &str, st: &Stats, service: &mut bool) ->
         },
         Some(_) => (LdapResultCode::InvalidCredentials, ad("52e")),
         None => (LdapResultCode::InvalidCredentials, ad("525")),
+    }
+}
+
+/// Смена своего пароля, как в AD: только вошедший пользователь, только Delete старого + Add нового
+/// `unicodePwd` (UTF-16LE в кавычках). Политика подделки: не короче 8 символов и не равен старому.
+fn change_password(bound: Option<&str>, m: &LdapModifyRequest) -> (LdapResultCode, String) {
+    let pwd = |op: LdapModifyType| {
+        m.changes
+            .iter()
+            .find(|c| c.operation == op && c.modification.atype.eq_ignore_ascii_case("unicodePwd"))
+            .and_then(|c| c.modification.vals.first())
+            .map(|v| {
+                let units: Vec<u16> = v.chunks(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+                String::from_utf16(&units).unwrap().trim_matches('"').to_string()
+            })
+    };
+    let constraint = |code: &str| {
+        format!(
+            "{code}: AtrErr: DSID-03190F80, #1:\n\t0: {code}: DSID-03190F80, problem 1005 (CONSTRAINT_ATT_TYPE), data 0, Att 9005a (unicodePwd)\n\0"
+        )
+    };
+    match (bound, pwd(LdapModifyType::Delete), pwd(LdapModifyType::Add)) {
+        (Some(dn), Some(old), Some(new)) if dn.eq_ignore_ascii_case(&m.dn) => {
+            if old != USER_PASS {
+                (LdapResultCode::ConstraintViolation, constraint("00000056"))
+            } else if new.chars().count() < 8 || new == old {
+                (LdapResultCode::ConstraintViolation, constraint("0000052D"))
+            } else {
+                (LdapResultCode::Success, String::new())
+            }
+        }
+        _ => (LdapResultCode::InsufficentAccessRights, "00002098: SecErr: DSID-03150F94, problem 4003\0".into()),
     }
 }
 
@@ -354,6 +394,31 @@ async fn login_works_and_survives_first_dc_going_down() {
     assert_eq!(u.controller, dc2_addr, "после остановки первого DC вход идёт через второй");
     assert_eq!(p.current().to_string(), dc2_addr, "рабочий DC запомнен");
     assert_eq!(dc1_stats.user_binds.load(Ordering::Relaxed), 3);
+}
+
+#[tokio::test]
+async fn user_changes_own_password_and_domain_policy_decides() {
+    let ca = TestCa::new("PULT-TEST-CA");
+    let dc = FakeDc::start(&ca).await;
+    let p = pool(&[&dc], &ca);
+    let dn = "CN=Иванов Иван,OU=Users,DC=pult,DC=test";
+    let ok = p.change_own_password(dn, &Secret::new(USER_PASS), &Secret::new("New-Pass-789")).await.unwrap();
+    assert_eq!(ok, dc.endpoint());
+    let e = p.change_own_password(dn, &Secret::new("wrong"), &Secret::new("New-Pass-789")).await.unwrap_err();
+    assert!(matches!(e, AdError::Bind(BindFailure::InvalidCredentials)), "неверный старый пароль: {e:?}");
+    let e = p.change_own_password(dn, &Secret::new(USER_PASS), &Secret::new("short")).await.unwrap_err();
+    assert!(matches!(e, AdError::PasswordPolicy), "политика домена: {e:?}");
+    let e = p.change_own_password(dn, &Secret::new(""), &Secret::new("New-Pass-789")).await.unwrap_err();
+    assert!(matches!(e, AdError::Bind(BindFailure::InvalidCredentials)), "пустой пароль не уходит в AD: {e:?}");
+    let e = p
+        .change_own_password(
+            "CN=Отключённый,OU=Users,DC=pult,DC=test",
+            &Secret::new(USER_PASS),
+            &Secret::new("New-Pass-789"),
+        )
+        .await
+        .unwrap_err();
+    assert!(matches!(e, AdError::Bind(BindFailure::AccountDisabled)), "{e:?}");
 }
 
 #[tokio::test]

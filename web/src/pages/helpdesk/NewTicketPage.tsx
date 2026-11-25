@@ -1,12 +1,13 @@
 // Создание заявки: обычная и «по звонку» за сотрудника.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useMemo, useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { api, ok, type Category, type ComputerRow, type Created, type FoundObject, type Person, type ResourceView, type Site, type TicketContext, type TicketTemplate } from "../../api/client";
 import { AssetPicker } from "./AssetPicker";
 import { usePersonAssets } from "./cardUtil";
 import { KbSuggest } from "../kb/KbPages";
+import { AssistCategoryButton } from "./assist";
 import { can, useMe } from "../../session";
 import { Button, Card, ErrorBox, Field, Input, PageHeader, Select, Spinner } from "../../ui";
 import { fullName } from "../phonebookUtil";
@@ -111,14 +112,14 @@ function ComputerInput({ value, onChange }: { value: string; onChange: (v: strin
   );
 }
 
-function Form({ cats, sites, ctx, onBehalf }: { cats: Category[]; sites: Site[]; ctx: TicketContext; onBehalf: boolean }) {
+function Form({ cats, sites, ctx, onBehalf, initialCategory }: { cats: Category[]; sites: Site[]; ctx: TicketContext; onBehalf: boolean; initialCategory?: string }) {
   const { t } = useTranslation();
   const nav = useNavigate();
   const qc = useQueryClient();
   const tree = useMemo(() => paths(cats), [cats]);
   const [person, setPerson] = useState<Person | null>(null);
   const [channel, setChannel] = useState("phone");
-  const [category, setCategory] = useState("");
+  const [category, setCategory] = useState(() => (initialCategory && cats.some((c) => c.id === initialCategory) ? initialCategory : ""));
   const [site, setSite] = useState(ctx.site_id ?? "");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -274,24 +275,36 @@ function Form({ cats, sites, ctx, onBehalf }: { cats: Category[]; sites: Site[];
           </Field>
         )}
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label={t("helpdesk.category")}>
-            <Select
-              required
-              value={category}
-              onChange={(e) => {
-                setCategory(e.target.value);
-                // Поля формы — свои у каждой категории: ответы прежней не уходят на сервер.
-                setAnswers({});
+          <div>
+            <Field label={t("helpdesk.category")}>
+              <Select
+                required
+                value={category}
+                onChange={(e) => {
+                  setCategory(e.target.value);
+                  // Поля формы — свои у каждой категории: ответы прежней не уходят на сервер.
+                  setAnswers({});
+                }}
+              >
+                <option value="">{t("helpdesk.choose")}</option>
+                {tree.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.path}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <AssistCategoryButton
+              title={title}
+              description={description}
+              onPick={(id) => {
+                if (id !== category && tree.some((c) => c.id === id)) {
+                  setCategory(id);
+                  setAnswers({});
+                }
               }}
-            >
-              <option value="">{t("helpdesk.choose")}</option>
-              {tree.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.path}
-                </option>
-              ))}
-            </Select>
-          </Field>
+            />
+          </div>
           <Field label={t("helpdesk.site")}>
             <Select required value={site} onChange={(e) => setSite(e.target.value)}>
               <option value="">{t("helpdesk.choose")}</option>
@@ -371,6 +384,7 @@ export function NewTicketPage() {
   const { t } = useTranslation();
   const me = useMe().data;
   const [mode, setMode] = useState<"self" | "behalf">("self");
+  const { category } = useSearch({ from: "/tickets/new" });
   const cats = useQuery({ queryKey: ["categories"], queryFn: () => ok<Category[]>(api.GET("/api/helpdesk/categories")) });
   const sites = useQuery({ queryKey: ["sites"], queryFn: () => ok<Site[]>(api.GET("/api/sites")) });
   const ctx = useQuery({ queryKey: ["ticket-context"], queryFn: () => ok<TicketContext>(api.GET("/api/helpdesk/context")) });
@@ -386,7 +400,7 @@ export function NewTicketPage() {
           </Select>
         )}
       </PageHeader>
-      {error ? <ErrorBox error={error} /> : cats.data && sites.data && ctx.data ? <Form cats={cats.data} sites={sites.data} ctx={ctx.data} onBehalf={mode === "behalf"} /> : <Spinner />}
+      {error ? <ErrorBox error={error} /> : cats.data && sites.data && ctx.data ? <Form cats={cats.data} sites={sites.data} ctx={ctx.data} onBehalf={mode === "behalf"} initialCategory={category} /> : <Spinner />}
     </div>
   );
 }
