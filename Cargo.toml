@@ -52,7 +52,7 @@ time = { version = "0.3", features = ["serde"] }
 async-trait = "0.1"
 rust-embed = { version = "8", features = ["mime-guess"] }
 utoipa = { version = "5", features = ["axum_extras", "uuid", "time"] }
-utoipa-axum = "0.2"
+utoipa-axum = "0.3"
 tiberius = { version = "0.13", default-features = false, features = ["tds73", "rustls", "time", "winauth"] }
 tokio-util = { version = "0.7", features = ["compat"] }
 # Таймер для hyper: без него ограничение на чтение заголовков не действует.
