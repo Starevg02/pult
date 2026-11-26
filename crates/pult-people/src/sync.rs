@@ -293,7 +293,7 @@ async fn fail_run(core: &Core, run_id: Uuid, text: &str) -> Result<(), sqlx::Err
 
 {text}
 
-Подробности — в админке, раздел «Каталог AD»."
+Подробности — в настройках, раздел «Active Directory: синхронизация»."
             )),
         )
         .await?;

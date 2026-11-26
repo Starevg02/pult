@@ -214,12 +214,25 @@ pub const REQUEST_DEADLINE: Duration = Duration::from_secs(60);
 pub const UPLOAD_DEADLINE: Duration = Duration::from_secs(600);
 /// Маршруты загрузки: тело читают только после проверки входа и прав.
 const UPLOAD_PATHS: [&str; 2] = ["/api/helpdesk/files", "/api/admin/remote/packages"];
+/// Запрос к помощнику ждёт модель до `timeout_secs` из настроек (до 300 с) плюс поиск контекста: на сервере
+/// без видеокарты ответ идёт дольше минуты. Тело маленькое, вход проверяется до чтения тела, а число
+/// одновременных запросов к модели ограничено самим помощником.
+pub const ASSIST_DEADLINE: Duration =
+    Duration::from_secs(pult_core::settings::AssistSettings::MAX_TIMEOUT_SECS as u64 + 20);
+
+fn is_assist_call(req: &Request) -> bool {
+    let path = req.uri().path();
+    req.method() == axum::http::Method::POST
+        && (path.starts_with("/api/helpdesk/assist/") || path == "/api/admin/assist/test")
+}
 
 fn deadline_for(req: &Request) -> Duration {
     let len =
         req.headers().get(header::CONTENT_LENGTH).and_then(|v| v.to_str().ok()).and_then(|v| v.parse::<u64>().ok());
     if UPLOAD_PATHS.contains(&req.uri().path()) && len.is_some_and(|l| l > 2 * 1024 * 1024) {
         UPLOAD_DEADLINE
+    } else if is_assist_call(req) {
+        ASSIST_DEADLINE
     } else {
         REQUEST_DEADLINE
     }
@@ -355,6 +368,20 @@ mod tests {
         assert_eq!(with("/api/helpdesk/files", None), REQUEST_DEADLINE);
         // Заявленная большая длина на вход не продлевает срок: медленное тело держало бы соединение 10 минут.
         assert_eq!(with("/api/auth/login", Some(100 << 20)), REQUEST_DEADLINE);
+    }
+
+    #[test]
+    fn assist_calls_wait_for_the_model() {
+        let post = |path: &str| deadline_for(&Request::post(path).body(Body::empty()).unwrap());
+        assert_eq!(post("/api/helpdesk/assist/chat"), ASSIST_DEADLINE);
+        assert_eq!(post("/api/helpdesk/assist/tickets/1001/draft"), ASSIST_DEADLINE);
+        assert_eq!(post("/api/helpdesk/assist/category"), ASSIST_DEADLINE);
+        assert_eq!(post("/api/admin/assist/test"), ASSIST_DEADLINE);
+        assert!(ASSIST_DEADLINE > Duration::from_secs(300), "срок запроса длиннее самого долгого ожидания модели");
+        // Чтение настроек и всё остальное — обычный срок.
+        assert_eq!(deadline_for(&Request::get("/api/helpdesk/assist").body(Body::empty()).unwrap()), REQUEST_DEADLINE);
+        assert_eq!(post("/api/admin/assist"), REQUEST_DEADLINE);
+        assert_eq!(post("/api/helpdesk/tickets"), REQUEST_DEADLINE);
     }
 
     #[tokio::test]

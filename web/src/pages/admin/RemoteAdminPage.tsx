@@ -139,7 +139,7 @@ function TokensSection() {
                   {t("remoteAdmin.tokens.until", { d: formatDate(r.expires_at, i18n.language) })} · {t("remoteAdmin.tokens.uses", { n: r.uses })} · {r.created_by}
                 </span>
                 {!dead && (
-                  <Button variant="danger" className="ml-auto" disabled={revoke.isPending} onClick={() => revoke.mutate(r.id)}>
+                  <Button variant="danger" className="ml-auto" disabled={revoke.isPending} onClick={() => window.confirm(t("remoteAdmin.tokens.revokeConfirm", { name: r.name })) && revoke.mutate(r.id)}>
                     {t("remoteAdmin.tokens.revoke")}
                   </Button>
                 )}
@@ -327,7 +327,7 @@ function PackagesSection() {
               {p.is_current ? (
                 <Badge tone="accent">{t("remoteAdmin.packages.current")}</Badge>
               ) : (
-                <Button variant="ghost" className="ml-auto" disabled={current.isPending} onClick={() => current.mutate(p.id)}>
+                <Button variant="ghost" className="ml-auto" disabled={current.isPending} onClick={() => (p.kind !== "agent_update" || window.confirm(t("remoteAdmin.packages.rolloutConfirm", { version: p.version }))) && current.mutate(p.id)}>
                   {p.kind === "agent_update" ? t("remoteAdmin.packages.rollout") : t("remoteAdmin.packages.makeCurrent")}
                 </Button>
               )}
@@ -375,7 +375,7 @@ function DevicesSection() {
                 {d.agent_version ?? "—"} · {formatDate(d.last_seen_at, i18n.language)}
               </span>
               {d.is_active ? (
-                <Button variant="danger" className="ml-auto" disabled={off.isPending} onClick={() => off.mutate(d.id)}>
+                <Button variant="danger" className="ml-auto" disabled={off.isPending} onClick={() => window.confirm(t("remoteAdmin.devices.deactivateConfirm", { name: d.hostname })) && off.mutate(d.id)}>
                   {t("remoteAdmin.devices.deactivate")}
                 </Button>
               ) : (

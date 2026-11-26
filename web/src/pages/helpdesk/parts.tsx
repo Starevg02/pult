@@ -22,9 +22,11 @@ export function PriorityBadge({ priority }: { priority: string }) {
 }
 
 /** Markdown без HTML; картинки — только вложения портала (внешние заблокировала бы и CSP). */
-export function RichText({ text }: { text: string }) {
+export function RichText({ text, keepBreaks = true }: { text: string; keepBreaks?: boolean }) {
+  // keepBreaks: одиночный перенос строки в комментарии остаётся переносом. Ответу модели это не нужно:
+  // переводы строк между блоками markdown дали бы лишние пустые строки.
   return (
-    <div className="rich-text space-y-2 text-sm break-words whitespace-pre-wrap">
+    <div className={`rich-text space-y-2 text-sm break-words ${keepBreaks ? "whitespace-pre-wrap" : ""}`}>
       <Markdown
         components={{
           a: ({ href, children }) => (
@@ -82,6 +84,7 @@ export function Editor({
   tone,
   disabled,
   onBusy,
+  label,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -94,6 +97,8 @@ export function Editor({
   disabled?: boolean;
   /** Идёт загрузка файлов: отправку на это время надо заблокировать, иначе вложение потеряется. */
   onBusy?: (busy: boolean) => void;
+  /** Подпись поля для экранного диктора, если видимой подписи нет. */
+  label?: string;
 }) {
   const { t } = useTranslation();
   const [busy, setBusyState] = useState(false);
@@ -141,6 +146,7 @@ export function Editor({
     <div onDrop={drop} onDragOver={(e) => e.preventDefault()}>
       <textarea
         ref={textRef}
+        aria-label={label ?? placeholder}
         rows={rows}
         value={value}
         disabled={disabled}
@@ -195,9 +201,9 @@ export function Announcements({ action }: { action?: (a: AnnouncementView) => Re
   );
 }
 
-export function TicketLink({ number, children, className = "" }: { number: number; children: ReactNode; className?: string }) {
+export function TicketLink({ number, children, className = "", onClick }: { number: number; children: ReactNode; className?: string; onClick?: () => void }) {
   return (
-    <Link to="/tickets/$number" params={{ number: String(number) }} className={className}>
+    <Link to="/tickets/$number" params={{ number: String(number) }} className={className} onClick={onClick}>
       {children}
     </Link>
   );

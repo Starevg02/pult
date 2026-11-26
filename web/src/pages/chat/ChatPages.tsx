@@ -371,10 +371,20 @@ function Bubble({ m, mine, group, canVersions, onEdit, onVersions }: { m: ChatMe
   );
 }
 
+/** Неотправленные сообщения по чатам: не теряются, когда открывают правку другого сообщения или другой чат. */
+const drafts = new Map<string, string>();
+
 function Composer({ chat, editing, onDone }: { chat: string; editing: ChatMessage | null; onDone: () => void }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const [text, setText] = useState(editing?.body ?? "");
+  const [text, setTextState] = useState(editing ? editing.body : (drafts.get(chat) ?? ""));
+  const setText = (v: string) => {
+    setTextState(v);
+    if (!editing) {
+      if (v) drafts.set(chat, v);
+      else drafts.delete(chat);
+    }
+  };
   const box = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     box.current?.focus();

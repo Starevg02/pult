@@ -58,7 +58,7 @@ export function KbPage() {
           ) : list.isPending ? (
             <Spinner />
           ) : list.data.length === 0 ? (
-            <Empty>{t("kb.empty")}</Empty>
+            <Empty>{q.trim() ? t("kb.notFound") : t("kb.empty")}</Empty>
           ) : (
             <Card>
               <ul className="divide-y divide-line">

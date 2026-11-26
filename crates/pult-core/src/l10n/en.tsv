@@ -240,7 +240,7 @@ Pult: синхронизация с AD не удалась	Pult: AD synchronizat
 Сертификат — не в формате PEM.	The certificate is not in PEM format.
 Сертификат: {e}	Certificate: {e}
 Сеть «{s}» — нужен формат CIDR.	Network “{s}” must be in CIDR format.
-Синхронизация с Active Directory не удалась:\n\n{text}\n\nПодробности — в админке, раздел «Каталог AD».	Active Directory synchronization failed:\n\n{text}\n\nSee Admin → AD directory for details.
+Синхронизация с Active Directory не удалась:\n\n{text}\n\nПодробности — в настройках, раздел «Active Directory: синхронизация».	Active Directory synchronization failed:\n\n{text}\n\nSee Settings → Active Directory: sync for details.
 Синхронизация уже идёт.	Synchronization is already running.
 Слишком много дней.	Too many days.
 Слишком много неудачных попыток. Попробуйте через {} мин.	Too many failed attempts. Try again in {} min.
@@ -389,7 +389,7 @@ Pult: синхронизация с AD не удалась	Pult: AD synchronizat
 Группа AD — DN вида CN=…,OU=…,DC=…	The AD group must be a DN like CN=…,OU=…,DC=…
 Для группы AD укажите её DN.	Enter the DN of the AD group.
 Добавлять учётки в разрешённые группы AD	Add accounts to allowed AD groups
-Запись в AD не настроена: укажите учётку записи в разделе «Каталог AD → Запись».	Writing to AD is not configured: set the writer account in “AD directory → Writes”.
+Запись в AD не настроена: укажите учётку записи в разделе «Настройки → Active Directory: изменения».	Writing to AD is not configured: set the writer account in “Settings → Active Directory: changes”.
 Запрос отправлен на согласование владельцу ресурса «{resource}»: {}.	Sent for approval to the owner of “{resource}”: {}.
 Запрос уже отправлен на согласование.	The request has already been sent for approval.
 Заявка #{number}, пункт чек-листа «{title}».	Request #{number}, checklist item “{title}”.

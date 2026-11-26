@@ -107,7 +107,7 @@ fn validate(s: &AssistSettings) -> Result<(), &'static str> {
     if s.model.chars().count() > 200 || s.model.chars().any(char::is_control) {
         return Err("Модель — одна строка до 200 символов.");
     }
-    if !(5..=300).contains(&s.timeout_secs) {
+    if !(5..=AssistSettings::MAX_TIMEOUT_SECS).contains(&s.timeout_secs) {
         return Err("Время ожидания — от 5 до 300 секунд.");
     }
     if !(64..=8192).contains(&s.max_tokens) {

@@ -206,7 +206,7 @@ pub async fn request(core: &Core, who: &CurrentUser, n: NewOperation) -> ApiResu
     if writer(&core.db, dom.id).await?.is_none() {
         return Err(ApiError::bad_request(
             "writer_not_configured",
-            "Запись в AD не настроена: укажите учётку записи в разделе «Каталог AD → Запись».",
+            "Запись в AD не настроена: укажите учётку записи в разделе «Настройки → Active Directory: изменения».",
         ));
     }
     let basis = n.basis.trim();

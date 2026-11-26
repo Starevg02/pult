@@ -146,3 +146,49 @@ html {
     animation-iteration-count: 1 !important;
   }
 }
+
+/* Разметка статей, комментариев и ответов помощника: preflight Tailwind снимает маркеры списков и
+   заголовки — возвращаем их, иначе «1.», «-» и «###» из markdown выглядят как сплошной текст. */
+.rich-text ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+}
+.rich-text ol {
+  list-style: decimal;
+  padding-left: 1.25rem;
+}
+.rich-text li + li {
+  margin-top: 0.125rem;
+}
+.rich-text h1,
+.rich-text h2,
+.rich-text h3,
+.rich-text h4 {
+  font-weight: 600;
+}
+.rich-text h1 {
+  font-size: 1.125rem;
+}
+.rich-text h2 {
+  font-size: 1rem;
+}
+.rich-text code {
+  font-family: var(--font-mono);
+  background: var(--sunken);
+  padding: 0 0.25rem;
+  border-radius: 0.25rem;
+}
+.rich-text pre {
+  overflow-x: auto;
+  background: var(--sunken);
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+}
+.rich-text pre code {
+  padding: 0;
+}
+.rich-text blockquote {
+  border-left: 2px solid var(--line-strong);
+  padding-left: 0.75rem;
+  color: var(--muted);
+}

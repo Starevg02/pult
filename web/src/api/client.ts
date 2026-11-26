@@ -81,6 +81,7 @@ export type TicketRow = components["schemas"]["TicketRow"];
 export type TicketDetail = components["schemas"]["TicketDetail"];
 export type TicketHead = components["schemas"]["TicketHead"];
 export type FeedItem = components["schemas"]["FeedItem"];
+export type CommentResult = components["schemas"]["CommentResult"];
 export type AttachmentView = components["schemas"]["AttachmentView"];
 export type Category = components["schemas"]["Category"];
 export type Created = components["schemas"]["Created"];

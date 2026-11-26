@@ -1452,6 +1452,11 @@ async fn stage3_acceptance() {
         (r["problem"]["known_error"].as_bool(), r["problem"]["workaround"].as_str()),
         (Some(true), Some("Откатить драйвер"))
     );
+    // Без кода закрытия — отказ сразу, ни один инцидент не тронут.
+    let (code, _) =
+        eng1.post(&format!("/api/helpdesk/itil/{pn}/resolve-incidents"), json!({"body": "Откатили драйвер"})).await;
+    assert_eq!(code, StatusCode::BAD_REQUEST);
+    assert_ne!(ticket(&mut emp, inc2).await["status"], "resolved");
     // Все открытые инциденты проблемы — одним ответом, каждый как обычное решение.
     let (code, r) = eng1
         .post(

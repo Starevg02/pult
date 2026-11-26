@@ -10,6 +10,143 @@ automatically.
 格式：[Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号：[SemVer](https://semver.org/lang/zh-CN/)。
 1.0 版本之前，设置和 API 可能出现不兼容的变更；数据库迁移始终自动执行。
 
+## 0.2.1 — удобство и исправления после пилота · usability and fixes after the pilot · 试点后的易用性改进与修复
+
+### Русский
+
+**Меню и названия**
+
+- Меню разделено на группы: повседневное сверху, «ИТ-служба», «Справка», «Личное».
+- Новые названия: «Сообщения» (было «Переписка», модуль «Коммуникации»), «Очередь заявок» (было «Рабочее
+  место»), «Хранилище секретов», «ИИ-помощник», «Active Directory: синхронизация» и «Active Directory:
+  изменения» (было «Каталог AD» и «Каталог AD: запись»). В настройках «Почта» — в «Подключениях»,
+  «Сообщения» — в «Люди и права». Документация — с теми же названиями.
+
+**ИИ-помощник**
+
+- Запросы к помощнику больше не обрываются через 60 секунд: срок HTTP-запроса считается от тайм-аута
+  помощника (предел — 300 секунд) — модели без видеокарты отвечают дольше минуты.
+- Страница помощника — как чат: поле ввода внизу, прокрутка, разметка ответа, таймер ожидания и
+  «Остановить» (вопрос возвращается в поле). Беседа сохраняется при переходе в другой раздел до перезагрузки
+  вкладки; неотвеченный вопрос при уходе прерывается и возвращается в поле.
+- «Черновик ответа», «Кратко о заявке» и «Подобрать категорию» — с таймером и «Остановить»; запрос
+  прерывается при уходе со страницы. Подсказка категории не перебивает категорию, выбранную вручную, пока
+  модель думала. Черновик, запрошенный перед переключением на внутреннюю заметку, не теряется и не
+  вставляется дважды.
+
+**Заявки**
+
+- Ответ в решённую или закрытую заявку, который создал новую заявку, открывает её и говорит об этом.
+- В отменённой заявке вместо поля ответа — подсказка и ссылка на новую заявку.
+- После создания заявки — «Создать ещё»; отправка формы ждёт окончания загрузки вложений.
+- Ответы формы категории в карточке — с подписями полей и «Да» / «Нет» вместо ключей и `true` / `false`.
+- «Возобновить» для своей заявки в ожидании или отложенной; диалог передачи начинается с текущей линии
+  заявки и сбрасывается при закрытии.
+- Массовые «Решить» и «Объединить» в очереди — с подтверждением.
+- «Решить все инциденты» проблемы требует код закрытия; сервер проверяет его до начала, а не молча
+  отклоняет каждый инцидент.
+- Поле ответа подписано для экранного диктора; в карточке заявки подсвечен раздел «Мои заявки».
+
+**Остальное**
+
+- Сообщения: неотправленный текст не теряется при правке другого сообщения и при переходе в другой чат.
+- Уведомление отмечается прочитанным при переходе по нему.
+- Главная: ошибка загрузки своих заявок видна, счётчик показывает «6+», если заявок больше.
+- Поиск по базе знаний без результатов говорит «ничего не нашлось», а не «статей пока нет»; в статьях
+  оформлены списки, заголовки, код и цитаты.
+- Отчёты: дата «по» по умолчанию — сегодняшняя по местному времени (после полуночи была вчерашней).
+- Почта: сохранённый пароль SMTP можно удалить (сервер без входа).
+- Подтверждение перед отзывом токена регистрации, рассылкой обновления агентам, отключением ПК, удалением
+  правила согласования и повторным запуском мастера настройки.
+- Подписи пяти разделов настроек, которых не было в словаре.
+
+### English
+
+**Menu and names**
+
+- The menu is split into groups: everyday items on top, then “IT team”, “Help” and “Personal”.
+- New names: “Messages” (was the “Communications” module), “Ticket queue” (was “Workspace”), “Secrets
+  vault”, “AI assistant”, “Active Directory: sync” and “Active Directory: changes” (was “AD directory” and
+  “AD directory: writes”). In settings, “Mail” moved to “Connections” and “Messages” to “People and
+  access”. The documentation uses the same names.
+
+**AI assistant**
+
+- Assistant requests are no longer cut off after 60 seconds: the HTTP deadline follows the assistant timeout
+  (up to 300 seconds), since CPU-only models take more than a minute to answer.
+- The assistant page works like a chat: input at the bottom, scrolling, formatted answers, a wait timer and
+  “Stop” (the question goes back to the input). The conversation survives switching sections until the tab
+  is reloaded; an unanswered question is aborted on leaving and put back into the input.
+- “Draft reply”, “Summary” and “Suggest category” show a timer and “Stop”; the request is aborted when the
+  page is left. A category suggestion no longer overrides a category picked by hand while the model was
+  thinking. A draft requested before switching to an internal note is neither lost nor inserted twice.
+
+**Tickets**
+
+- A reply to a resolved or closed ticket that created a new ticket now opens it and says so.
+- A canceled ticket shows a hint and a link to a new ticket instead of the reply field.
+- “Create another” after creating a ticket; the form waits for attachments to finish uploading.
+- Category form answers on the ticket card show field labels and “Yes” / “No” instead of keys and
+  `true` / `false`.
+- “Resume” for your own waiting or on-hold ticket; the transfer dialog starts from the ticket’s current line
+  and resets on close.
+- Bulk “Resolve” and “Merge” in the queue ask for confirmation.
+- “Resolve all incidents” of a problem requires a closure code; the server checks it up front instead of
+  silently rejecting each incident.
+- The reply field has an accessible label; the “My tickets” menu item is highlighted on a ticket card.
+
+**Other**
+
+- Messages: unsent text is kept when editing another message or switching chats.
+- A notification is marked as read when it is opened.
+- Home: an error loading your tickets is shown, and the counter shows “6+” when there are more.
+- A knowledge base search with no results says “nothing found” instead of “no articles yet”; articles render
+  lists, headings, code and quotes.
+- Reports: the default “to” date is today in local time (after midnight it used to be yesterday).
+- Mail: the saved SMTP password can be removed (server without sign-in).
+- Confirmation before revoking an enrolment token, rolling out an agent update, deactivating a PC, deleting
+  an approval rule and rerunning the setup wizard.
+- Labels for five settings sections that were missing from the dictionary.
+
+### 中文
+
+**菜单与名称**
+
+- 菜单分组：日常功能在上方，其后为“IT 服务”“帮助”“个人”。
+- 新名称：“消息”（原“沟通”模块）、“工单队列”（原“工作台”）、“密钥库”、“AI 助手”、“Active Directory：同步”和
+  “Active Directory：变更”（原“AD 目录”和“AD 目录：写入”）。设置中“邮件”移至“连接”，“消息”移至“人员和访问权限”。
+  文档使用相同名称。
+
+**AI 助手**
+
+- 助手请求不再在 60 秒后中断：HTTP 时限随助手超时计算（最长 300 秒），无显卡的模型回答需要一分钟以上。
+- 助手页面采用聊天形式：输入框在底部、可滚动、回答带格式、显示等待计时和“停止”（问题回到输入框）。切换栏目时对话
+  保留，直到刷新标签页；离开时未回答的问题会被中止并放回输入框。
+- “回复草稿”“摘要”和“推荐类别”显示计时和“停止”；离开页面时中止请求。模型思考期间手动选择的类别不再被推荐覆盖。
+  切换到内部备注前请求的草稿不会丢失，也不会插入两次。
+
+**工单**
+
+- 对已解决或已关闭工单的回复若创建了新工单，现在会打开新工单并给出提示。
+- 已取消的工单显示提示和新建工单链接，而不是回复框。
+- 创建工单后可“再创建一个”；表单会等待附件上传完成。
+- 工单卡片中的类别表单答案显示字段名称和“是/否”，而不是键名和 `true` / `false`。
+- 自己的等待中或已挂起工单可“恢复处理”；转交对话框从工单当前线路开始，关闭时重置。
+- 队列中的批量“解决”和“合并”需要确认。
+- 问题的“解决全部事件”需要关闭代码；服务器会预先检查，而不是逐个静默拒绝事件。
+- 回复框带有无障碍标签；在工单卡片中“我的工单”菜单项保持高亮。
+
+**其他**
+
+- 消息：编辑其他消息或切换聊天时，未发送的文本会保留。
+- 打开通知即标记为已读。
+- 首页：加载自己的工单出错时会显示，工单较多时计数显示“6+”。
+- 知识库搜索无结果时提示“未找到”，而不是“暂无文章”；文章支持列表、标题、代码和引用格式。
+- 报表：默认“截止”日期为本地时间的今天（过去午夜后会显示为昨天）。
+- 邮件：可删除已保存的 SMTP 密码（无需登录的服务器）。
+- 撤销注册令牌、向代理推送更新、停用电脑、删除审批规则和重新运行设置向导前需要确认。
+- 补充词典中缺失的五个设置栏目说明。
+
 ## 0.2.0 — оборудование, проблемы и изменения, хранилище секретов, помощник, мониторинг, вход через домен · hardware, problems and changes, secrets vault, assistant, monitoring, domain sign-in · 设备、问题与变更、密钥库、助手、监控、域登录
 
 ### Русский

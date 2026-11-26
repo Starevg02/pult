@@ -1,10 +1,10 @@
 // Карточка заявки: лента, ответ, действия, свойства.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { AccessPanel, AccountPanel, Operations } from "./directory";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { api, ok, type Category, type EngineerView, type FeedItem, type Person, type Site, type TicketDetail, type TicketHead } from "../../api/client";
+import { api, ok, type Category, type CommentResult, type EngineerView, type FeedItem, type Person, type Site, type TicketDetail, type TicketHead } from "../../api/client";
 import { formatDate } from "../../format";
 import { ignoreHotkey } from "../../hotkeys";
 import { can, useMe, useModule } from "../../session";
@@ -52,16 +52,16 @@ const OPEN = ["new", "assigned", "in_progress", "waiting", "waiting_approval", "
 
 function useAction(number: number) {
   const qc = useQueryClient();
-  return <T,>(fn: (v: T) => Promise<unknown>, after?: () => void, toast?: string) =>
+  return <T,>(fn: (v: T) => Promise<unknown>, after?: (result: unknown) => void, toast?: string) =>
     // eslint-disable-next-line react-hooks/rules-of-hooks -- фабрика вызывается на верхнем уровне компонента
     useMutation({
       mutationFn: fn,
       // Итог действия — всплывающим сообщением (MutationCache в main.tsx).
       meta: { toast },
-      onSuccess: () => {
+      onSuccess: (result) => {
         void qc.invalidateQueries({ queryKey: ["ticket", number] });
         void qc.invalidateQueries({ queryKey: ["tickets"] });
-        after?.();
+        after?.(result);
       },
     });
 }
@@ -119,11 +119,16 @@ function Reply({ d, focus, tab, setTab }: { d: TicketDetail; focus: number; tab:
   const [minutes, setMinutes] = useState("");
   const [uploading, setUploading] = useState(false);
   const area = useRef<HTMLTextAreaElement>(null);
-  const clear = () => {
+  const nav = useNavigate();
+  const closed = d.ticket.status === "closed" || d.ticket.status === "canceled";
+  const clear = (result: unknown) => {
     setBody("");
     setFiles([]);
     setBroadcast(false);
     setMinutes("");
+    // Ответ на закрытую заявку сервер превращает в новую связанную: переходим на неё, иначе ответа «нигде нет».
+    const r = result as CommentResult | undefined;
+    if (r?.follow_up && r.number !== n) void nav({ to: "/tickets/$number", params: { number: String(r.number) } });
   };
   const send = action(
     () =>
@@ -134,13 +139,23 @@ function Reply({ d, focus, tab, setTab }: { d: TicketDetail; focus: number; tab:
         }),
       ),
     clear,
-    tab === "internal" ? t("helpdesk.done.noteSaved") : t("helpdesk.done.sent"),
+    tab === "internal" ? t("helpdesk.done.noteSaved") : closed ? t("helpdesk.done.followUp") : t("helpdesk.done.sent"),
   );
   useEffect(() => {
     if (focus) area.current?.focus();
   }, [focus]);
-  const closed = d.ticket.status === "closed" || d.ticket.status === "canceled";
   if (closed && d.can_work) return null;
+  // Отменённая заявка ответов не принимает (сервер: «Заявка отменена.») — сразу предлагаем новую.
+  if (d.ticket.status === "canceled") {
+    return (
+      <Card className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm text-muted">
+        {t("helpdesk.canceledReplyHint")}
+        <Link to="/tickets/new" className="font-medium text-accent hover:underline">
+          {t("nav.newTicket")}
+        </Link>
+      </Card>
+    );
+  }
   return (
     <Card className="p-3">
       {d.can_work && (
@@ -153,7 +168,7 @@ function Reply({ d, focus, tab, setTab }: { d: TicketDetail; focus: number; tab:
           </Button>
         </div>
       )}
-      <Editor textRef={area} value={body} onChange={setBody} files={files} onFiles={setFiles} onBusy={setUploading} tone={tab === "internal" ? "internal" : undefined} rows={4} placeholder={closed ? t("helpdesk.closedReplyHint") : undefined} />
+      <Editor textRef={area} label={tab === "internal" ? t("helpdesk.noteTab") : t("helpdesk.replyTab")} value={body} onChange={setBody} files={files} onFiles={setFiles} onBusy={setUploading} tone={tab === "internal" ? "internal" : undefined} rows={4} placeholder={closed ? t("helpdesk.closedReplyHint") : undefined} />
       {send.error && <ErrorBox error={send.error} />}
       <div className="mt-2 flex flex-wrap items-center gap-3">
         <Button variant="primary" disabled={send.isPending || uploading || (!body.trim() && files.length === 0)} onClick={() => send.mutate(undefined)}>
@@ -161,7 +176,12 @@ function Reply({ d, focus, tab, setTab }: { d: TicketDetail; focus: number; tab:
         </Button>
         {d.can_work && <MinutesInput value={minutes} onChange={setMinutes} />}
         {d.can_work && <ResponsePicker number={n} onInsert={(text) => setBody((b) => (b.trim() ? `${b}\n\n${text}` : text))} />}
-        {d.can_work && tab === "public" && <AssistDraftButton number={n} onInsert={(text) => setBody((b) => (b.trim() ? `${b}\n\n${text}` : text))} />}
+        {/* На вкладке заметки кнопка скрыта, но остаётся на месте: начатый запрос не теряется и черновик не вставится дважды. */}
+        {d.can_work && (
+          <span className={tab === "public" ? "contents" : "hidden"}>
+            <AssistDraftButton number={n} onInsert={(text) => setBody((b) => (b.trim() ? `${b}\n\n${text}` : text))} />
+          </span>
+        )}
         {d.ticket.is_major && tab === "public" && d.can_work && (
           <label className="inline-flex items-center gap-2 text-sm">
             <input type="checkbox" checked={broadcast} onChange={(e) => setBroadcast(e.target.checked)} />
@@ -187,6 +207,7 @@ function Actions({ d, dialog, setDialog }: { d: TicketDetail; dialog: DialogKind
     setTitle("");
     setFiles([]);
     setTarget("");
+    setLine(x.line);
     setParent("");
     setPerson(null);
     setCode("");
@@ -203,7 +224,7 @@ function Actions({ d, dialog, setDialog }: { d: TicketDetail; dialog: DialogKind
   const [title, setTitle] = useState("");
   const [files, setFiles] = useState<Uploaded[]>([]);
   const [target, setTarget] = useState("");
-  const [line, setLine] = useState("l1");
+  const [line, setLine] = useState(x.line);
   const [parent, setParent] = useState("");
   const [person, setPerson] = useState<Person | null>(null);
   const [code, setCode] = useState("");
@@ -276,6 +297,13 @@ function Actions({ d, dialog, setDialog }: { d: TicketDetail; dialog: DialogKind
         <Button variant="primary" disabled={take.isPending} onClick={() => take.mutate(undefined)}>
           <IconUserCheck />
           {t("helpdesk.start")}
+        </Button>
+      )}
+      {/* Своя заявка в ожидании или отложенная: вернуть в работу одной кнопкой. */}
+      {d.can_work && x.assignee_id === me?.user_id && (x.status === "waiting" || x.status === "on_hold") && (
+        <Button variant="primary" disabled={take.isPending} onClick={() => take.mutate(undefined)}>
+          <IconUserCheck />
+          {t("helpdesk.resume")}
         </Button>
       )}
       {d.can_work && open && (
@@ -432,7 +460,12 @@ function Properties({ d, lang }: { d: TicketDetail; lang: string }) {
   const directory = useModule("directory");
   const x: TicketHead = d.ticket;
   const qc = useQueryClient();
-  const cats = useQuery({ queryKey: ["categories"], queryFn: () => ok<Category[]>(api.GET("/api/helpdesk/categories")), enabled: d.can_work });
+  const answers = Object.entries((x.form_answers ?? {}) as Record<string, unknown>);
+  // Категории нужны и заявителю, если в заявке есть ответы формы: подписи полей берутся из формы категории.
+  const cats = useQuery({ queryKey: ["categories"], queryFn: () => ok<Category[]>(api.GET("/api/helpdesk/categories")), enabled: d.can_work || answers.length > 0 });
+  const formFields = (cats.data?.find((c) => c.id === x.category_id)?.form_schema ?? []) as unknown as { key: string; label: string }[];
+  const answerLabel = (k: string) => formFields.find((f) => f.key === k)?.label ?? k;
+  const answerText = (v: unknown) => (v === true ? t("helpdesk.answerYes") : v === false ? t("helpdesk.answerNo") : v === null || v === "" ? "—" : String(v));
   const sites = useQuery({ queryKey: ["sites"], queryFn: () => ok<Site[]>(api.GET("/api/sites")), enabled: d.can_work });
   const update = useMutation({
     mutationFn: (b: { priority?: string; category_id?: string; site_id?: string }) => ok(api.PUT("/api/helpdesk/tickets/{number}", { params: { path: { number: x.number } }, body: { version: x.version, ...b } })),
@@ -442,7 +475,6 @@ function Properties({ d, lang }: { d: TicketDetail; lang: string }) {
   const codes = useCloseCodes();
   const [newProblem, setNewProblem] = useState(false);
   const contact = x.unverified_contact as { name?: string; issue?: string } | null;
-  const answers = Object.entries((x.form_answers ?? {}) as Record<string, unknown>);
   return (
     <Card className="p-4">
       <dl>
@@ -471,7 +503,7 @@ function Properties({ d, lang }: { d: TicketDetail; lang: string }) {
             </Select>
           ) : (x.category_name ?? "—")}
         </Prop>
-        {answers.map(([k, v]) => <Prop key={k} label={k}>{String(v)}</Prop>)}
+        {answers.map(([k, v]) => <Prop key={k} label={answerLabel(k)}>{answerText(v)}</Prop>)}
         {d.can_work && (
           <Prop label={t("helpdesk.priorityLabel")}>
             <Select aria-label={t("helpdesk.priorityLabel")} value={x.priority} onChange={(e) => update.mutate({ priority: e.target.value })}>

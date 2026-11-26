@@ -154,7 +154,15 @@ function BulkBar({ numbers, onDone }: { numbers: number[]; onDone: () => void })
         {(action === "note" || action === "resolve" || action === "assign") && (
           <Input className="max-w-sm" aria-label={action === "resolve" ? t("helpdesk.resolveComment") : t("bulk.comment")} placeholder={action === "resolve" ? t("helpdesk.resolveComment") : t("bulk.comment")} value={comment} onChange={(e) => setComment(e.target.value)} />
         )}
-        <Button variant="primary" disabled={!ready || run.isPending} onClick={() => run.mutate()}>
+        <Button
+          variant="primary"
+          disabled={!ready || run.isPending}
+          onClick={() => {
+            // Решение и объединение уходят заявителям письмами и не отменяются одной кнопкой.
+            const risky = action === "resolve" || action === "merge";
+            if (!risky || window.confirm(t("bulk.confirm", { n: numbers.length, action: dyn(t, `bulk.actions.${action}`) }))) run.mutate();
+          }}
+        >
           {t("bulk.apply")}
         </Button>
         <Button variant="ghost" onClick={onDone}>

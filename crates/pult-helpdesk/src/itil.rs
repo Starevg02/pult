@@ -819,6 +819,9 @@ async fn resolve_incidents(
         lock_kind(&mut tx, number, &who, "problem").await?;
         tx.rollback().await?;
     }
+    // Код закрытия проверяется до цикла: иначе каждый инцидент упал бы с одной и той же ошибкой молча.
+    let cfg: crate::settings::HelpdeskSettings = pult_core::settings::load(&core.db).await?;
+    crate::card::check_close_code(&cfg.close_codes, &b.closure_code)?;
     let numbers: Vec<i64> = sqlx::query_scalar(
         "SELECT i.number FROM tickets i JOIN tickets p ON p.id = i.problem_id
           WHERE p.number = $1 AND p.kind = 'problem' AND i.status = ANY($2) ORDER BY i.number LIMIT $3",

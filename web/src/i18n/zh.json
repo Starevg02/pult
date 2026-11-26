@@ -4,6 +4,9 @@
     "tagline": "IT 支持"
   },
   "nav": {
+    "groupIt": "IT 服务",
+    "groupHelp": "帮助",
+    "groupMine": "个人",
     "home": "首页",
     "phonebook": "通讯录",
     "notifications": "通知",
@@ -14,7 +17,7 @@
     "status": "状态",
     "tickets": "我的工单",
     "newTicket": "创建工单",
-    "desk": "工作台",
+    "desk": "工单队列",
     "search": "搜索",
     "settings": "设置",
     "kb": "知识库",
@@ -31,7 +34,7 @@
     "problems": "问题",
     "changes": "变更",
     "vault": "密钥",
-    "assistant": "助手",
+    "assistant": "AI 助手",
     "chats": "消息",
     "catalog": "服务目录"
   },
@@ -330,7 +333,7 @@
       "extensions": "扩展"
     },
     "ad": {
-      "title": "AD 目录",
+      "title": "Active Directory：同步",
       "suspended": "无连接，会话已暂停",
       "failing": "无响应（连续 {{n}} 次检查）",
       "healthy": "域可访问",
@@ -500,6 +503,7 @@
       }
     },
     "mail": {
+      "dropPassword": "删除已保存的密码（无需登录的服务器）",
       "title": "邮件",
       "enabled": "发送邮件",
       "host": "SMTP 服务器",
@@ -605,6 +609,11 @@
       "system": "安全和系统"
     },
     "about": {
+      "sla": "按优先级的响应和解决时限、工作日历和节假日。",
+      "automation": "工程师组以及自动分派和更新工单的规则。",
+      "templates": "带检查清单的工单模板、周期性工单和回复模板。",
+      "assetTypes": "设备类型及其在资产登记中的字段。",
+      "integrations": "供外部系统使用的 API 令牌和 Webhook。",
       "sites": "办公地点、各站点由谁处理工单（一线和二线）、紧急电话。",
       "helpdesk": "工单类别、工作时间、自动关闭、工程师缺勤。",
       "mail": "向员工和工程师发送通知。",
@@ -625,7 +634,7 @@
       "extensions": "按清单接入的外部服务：API 权限、Webhook、菜单链接。"
     },
     "directory": {
-      "title": "AD 目录：写入",
+      "title": "Active Directory：变更",
       "noLdaps": "未启用 LDAPS：无法重置密码",
       "intro": "Pult 使用单独的账户写入 AD，该账户仅被委派了所需 OU 和组的权限。没有该账户时，Pult 只读取 AD。",
       "writer": "写入账户（DN 或 UPN）",
@@ -682,7 +691,7 @@
       "resetConfirm": "重置所有关联？每个用户将在下次登录时重新关联。"
     },
     "assist": {
-      "title": "助手",
+      "title": "AI 助手",
       "hint": "部署在独立服务器上的自有模型，使用 OpenAI 兼容 API（vLLM、Ollama、LM Studio 等）。助手基于知识库回答问题、为新工单建议类别，并为工程师撰写回复草稿和工单摘要。它只提供建议，不会自行执行任何操作。",
       "enabled": "启用助手",
       "url": "API 地址",
@@ -761,6 +770,11 @@
     "codeDocker": "Docker："
   },
   "helpdesk": {
+    "createAnother": "再创建一个",
+    "resume": "恢复处理",
+    "answerYes": "是",
+    "answerNo": "否",
+    "canceledReplyHint": "此工单已取消，无法回复。如问题仍存在，请创建新工单。",
     "status": {
       "new": "新建",
       "assigned": "已分配",
@@ -867,7 +881,7 @@
     "create": "创建工单",
     "newTitle": "新建工单",
     "myTickets": "我的工单",
-    "desk": "工作台",
+    "desk": "工单队列",
     "empty": "暂无工单。",
     "search": "搜索：编号、标题、人员",
     "filterOpen": "未关闭",
@@ -961,6 +975,7 @@
     "cancelConfirm": "确定取消工单？取消后无法恢复处理。",
     "emptyMineHint": "如果有故障或需要权限，请创建工单，工程师的回复会显示在这里。",
     "done": {
+      "followUp": "已根据您的回复创建新工单",
       "taken": "已接手工单",
       "resolved": "工单已解决",
       "transferred": "工单已转交",
@@ -1065,6 +1080,7 @@
     }
   },
   "bulk": {
+    "confirm": "对 {{n}} 个工单执行“{{action}}”？申请人将收到邮件。",
     "selected": "已选择：{{n}}",
     "action": "操作",
     "apply": "应用",
@@ -1082,6 +1098,7 @@
     }
   },
   "kb": {
+    "notFound": "未找到结果。请换个关键词，或创建工单。",
     "title": "知识库",
     "newArticle": "新建文章",
     "editArticle": "编辑文章",
@@ -1639,6 +1656,7 @@
       "dnsOff": "关闭此检查后，任何持有令牌的人都可以用 AD 计算机名注册自己的计算机并伪造其会话。仅当 Pult 位于代理服务器之后时才可临时关闭。"
     },
     "tokens": {
+      "revokeConfirm": "撤销令牌“{{name}}”？新电脑将无法再用它注册。",
       "title": "代理程序注册令牌",
       "hint": "令牌用于 MSI（ENROLLTOKEN）或组策略。只有 AD 中存在的计算机才能注册。",
       "name": "名称",
@@ -1665,6 +1683,7 @@
       "invalid": "已跳过的行：{{list}}"
     },
     "packages": {
+      "rolloutConfirm": "向所有代理推送更新 {{version}}？电脑将在下次检查时安装。",
       "title": "代理程序和辅助程序安装包",
       "hint": "代理程序 MSI 用于 GPO 部署，辅助程序供工程师使用。只有签名与安装时设置的密钥匹配，代理程序更新才会被接受。",
       "kind": "类型",
@@ -1686,6 +1705,7 @@
       }
     },
     "devices": {
+      "deactivateConfirm": "停用 {{name}}？该电脑将停止发送报告，远程协助不可用。",
       "title": "安装代理程序的计算机",
       "hint": "已停用的计算机不发送报告，在重新激活之前无法再次注册。",
       "deactivate": "停用",
@@ -1693,6 +1713,7 @@
     }
   },
   "org": {
+    "rerunConfirm": "重新运行设置向导？当前设置将保留，向导在下次登录时打开。",
     "wizardTitle": "组织设置",
     "wizardText": "几个步骤即可让门户适配您的组织。任何步骤都可以跳过，之后可在“设置 → 系统”中修改。",
     "steps": {
@@ -1718,10 +1739,10 @@
     "module": {
       "helpdesk": "工单",
       "phonebook": "通讯录",
-      "directory": "AD 变更",
+      "directory": "Active Directory：变更",
       "remote": "远程支持",
       "telephony": "电话系统",
-      "chat": "沟通"
+      "chat": "消息"
     },
     "moduleAbout": {
       "helpdesk": "员工工单、工程师工作台、知识库、设备、报表。",
@@ -1964,6 +1985,10 @@
     }
   },
   "assist": {
+    "categoryNeedsTitle": "请先填写工单主题",
+    "wait": "如果模型服务器没有显卡，回答可能需要一分钟以上。",
+    "stop": "停止",
+    "thinkingFor": "AI 助手正在思考… {{time}}",
     "title": "助手",
     "subtitle": "基于知识库回答问题。对话不会保存：关闭页面后即消失。",
     "empty": "询问如何解决问题，例如“如何在家连接 VPN”。助手根据知识库文章回答并附上链接。",
@@ -1971,11 +1996,11 @@
     "send": "提问",
     "newChat": "新对话",
     "you": "您",
-    "thinking": "助手正在思考…",
+    "thinking": "AI 助手正在思考…",
     "sources": "来源",
     "disclaimer": "助手可能出错，且不会自行执行任何操作。请勿向其发送密码。",
-    "off": "助手已关闭。管理员可在“设置”→“系统”中开启。",
-    "unavailable": "助手不可用",
+    "off": "AI 助手已关闭。超级管理员可在“设置”→“系统”→“AI 助手”中开启。",
+    "unavailable": "AI 助手不可用",
     "draft": "回复草稿",
     "summary": "工单摘要",
     "again": "重新生成",

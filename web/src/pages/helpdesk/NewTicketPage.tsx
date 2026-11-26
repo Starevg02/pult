@@ -112,7 +112,7 @@ function ComputerInput({ value, onChange }: { value: string; onChange: (v: strin
   );
 }
 
-function Form({ cats, sites, ctx, onBehalf, initialCategory }: { cats: Category[]; sites: Site[]; ctx: TicketContext; onBehalf: boolean; initialCategory?: string }) {
+function Form({ cats, sites, ctx, onBehalf, initialCategory, onAgain }: { cats: Category[]; sites: Site[]; ctx: TicketContext; onBehalf: boolean; initialCategory?: string; onAgain: () => void }) {
   const { t } = useTranslation();
   const nav = useNavigate();
   const qc = useQueryClient();
@@ -124,6 +124,8 @@ function Form({ cats, sites, ctx, onBehalf, initialCategory }: { cats: Category[
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [files, setFiles] = useState<Uploaded[]>([]);
+  // Скриншот ещё грузится — заявка без него уйти не должна.
+  const [uploading, setUploading] = useState(false);
   // Кабинет и телефон не подставляются из справочника — их указывает человек. ПК — из активного сеанса.
   const [phone, setPhone] = useState("");
   const [room, setRoom] = useState("");
@@ -221,6 +223,7 @@ function Form({ cats, sites, ctx, onBehalf, initialCategory }: { cats: Category[
           <Button variant="primary" onClick={() => void nav({ to: "/tickets/$number", params: { number: String(done.number) } })}>
             {t("helpdesk.openTicket")}
           </Button>
+          <Button onClick={onAgain}>{t("helpdesk.createAnother")}</Button>
           <Link to="/" className="rounded-lg px-3 py-2 text-sm text-muted hover:bg-hover">
             {t("nav.home")}
           </Link>
@@ -297,6 +300,7 @@ function Form({ cats, sites, ctx, onBehalf, initialCategory }: { cats: Category[
             <AssistCategoryButton
               title={title}
               description={description}
+              current={category}
               onPick={(id) => {
                 if (id !== category && tree.some((c) => c.id === id)) {
                   setCategory(id);
@@ -341,7 +345,7 @@ function Form({ cats, sites, ctx, onBehalf, initialCategory }: { cats: Category[
         </Field>
         {!onBehalf && <KbSuggest text={title} />}
         <Field label={t("helpdesk.description")}>
-          <Editor value={description} onChange={setDescription} files={files} onFiles={setFiles} rows={6} />
+          <Editor value={description} onChange={setDescription} files={files} onFiles={setFiles} onBusy={setUploading} rows={6} />
         </Field>
         {schema.map((f) => (
           <Field key={f.key} label={`${f.label}${f.required ? " *" : ""}`}>
@@ -372,7 +376,7 @@ function Form({ cats, sites, ctx, onBehalf, initialCategory }: { cats: Category[
         </div>
         <AssetPicker value={assets} onChange={setAssets} own={own} canSearch={engineer} ownLabel={onBehalf ? t("helpdesk.equipmentOf") : t("helpdesk.equipmentMine")} requesterKnown={!onBehalf || !!person} />
         {create.error && <ErrorBox error={create.error} />}
-        <Button type="submit" variant="primary" className="py-2.5" disabled={create.isPending || (onBehalf && !person)}>
+        <Button type="submit" variant="primary" className="py-2.5" disabled={create.isPending || uploading || (onBehalf && !person)}>
           {t("helpdesk.send")}
         </Button>
       </Card>
@@ -390,6 +394,8 @@ export function NewTicketPage() {
   const ctx = useQuery({ queryKey: ["ticket-context"], queryFn: () => ok<TicketContext>(api.GET("/api/helpdesk/context")) });
   const error = cats.error ?? sites.error ?? ctx.error;
   const behalf = can(me, "helpdesk.ticket.create_on_behalf");
+  // «Создать ещё» после отправки — чистая форма (новый экземпляр).
+  const [round, setRound] = useState(0);
   return (
     <div>
       <PageHeader title={t("helpdesk.newTitle")}>
@@ -400,7 +406,7 @@ export function NewTicketPage() {
           </Select>
         )}
       </PageHeader>
-      {error ? <ErrorBox error={error} /> : cats.data && sites.data && ctx.data ? <Form cats={cats.data} sites={sites.data} ctx={ctx.data} onBehalf={mode === "behalf"} initialCategory={category} /> : <Spinner />}
+      {error ? <ErrorBox error={error} /> : cats.data && sites.data && ctx.data ? <Form key={round} cats={cats.data} sites={sites.data} ctx={ctx.data} onBehalf={mode === "behalf"} initialCategory={category} onAgain={() => setRound((r) => r + 1)} /> : <Spinner />}
     </div>
   );
 }

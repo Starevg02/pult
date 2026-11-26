@@ -6,7 +6,8 @@ import { api, ok, type Bucket, type Report, type Site } from "../../api/client";
 import { dyn } from "../helpdesk/helpdeskUtil";
 import { Card, ErrorBox, Field, Input, PageHeader, Select, Spinner } from "../../ui";
 
-const iso = (d: Date) => d.toISOString().slice(0, 10);
+// Дата по местному времени: toISOString дал бы дату UTC, и после полуночи «сегодня» было бы вчера.
+const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 function monthStart() {
   const d = new Date();

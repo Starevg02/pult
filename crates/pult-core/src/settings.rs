@@ -238,6 +238,9 @@ impl SettingsGroup for AssistSettings {
 }
 
 impl AssistSettings {
+    /// Предел `timeout_secs`. Срок HTTP-запроса к помощнику (`pult-server`, http.rs) считается от него.
+    pub const MAX_TIMEOUT_SECS: u32 = 300;
+
     /// Изменилось, куда уходит ключ API: тогда сохранённый ключ не используется.
     pub fn endpoint_changed(&self, new: &Self) -> bool {
         let url = |s: &str| s.trim().trim_end_matches('/').to_lowercase();

@@ -39,17 +39,20 @@ export function NotificationsPage() {
       ) : (
         <Card>
           <ul className="divide-y divide-line">
-            {q.data.items.map((n) => (
+            {q.data.items.map((n) => {
+              // Переход по уведомлению — значит, его прочитали.
+              const opened = n.read_at ? undefined : () => read.mutate([n.id]);
+              return (
               <li key={n.id} className="flex items-start gap-3 px-4 py-3 text-sm">
                 {!n.read_at && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-accent" aria-label={t("notifications.unread")} />}
                 <div className="min-w-0 flex-1">
                   <div className={n.read_at ? "" : "font-semibold"}>{kindLabel(n.kind)}</div>
                   {typeof (n.payload as unknown as TicketPayload).number === "number" ? (
-                    <TicketLink number={(n.payload as unknown as Required<TicketPayload>).number} className="truncate text-xs text-accent">
+                    <TicketLink number={(n.payload as unknown as Required<TicketPayload>).number} className="truncate text-xs text-accent" onClick={opened}>
                       #{(n.payload as unknown as TicketPayload).number} {(n.payload as unknown as TicketPayload).title}
                     </TicketLink>
                   ) : typeof (n.payload as unknown as ChatPayload).chat === "string" ? (
-                    <Link to="/chats/$id" params={{ id: String((n.payload as unknown as ChatPayload).chat) }} className="block truncate text-xs text-accent">
+                    <Link to="/chats/$id" params={{ id: String((n.payload as unknown as ChatPayload).chat) }} className="block truncate text-xs text-accent" onClick={opened}>
                       {(n.payload as unknown as ChatPayload).title ?? ""}
                     </Link>
                   ) : typeof (n.payload as unknown as AlertPayload).title === "string" ? (
@@ -67,7 +70,8 @@ export function NotificationsPage() {
                   </Button>
                 )}
               </li>
-            ))}
+              );
+            })}
           </ul>
         </Card>
       )}

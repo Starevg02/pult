@@ -328,7 +328,7 @@ function ProblemPanel({ number, r, closed }: { number: number; r: NonNullable<It
             <Button variant="ghost" onClick={() => setResolving(false)}>
               {t("common.cancel")}
             </Button>
-            <Button variant="primary" disabled={!answer.trim() || resolveAll.isPending} onClick={() => resolveAll.mutate()}>
+            <Button variant="primary" disabled={!answer.trim() || !code || resolveAll.isPending} onClick={() => resolveAll.mutate()}>
               {t("itil.resolveAllRun")}
             </Button>
           </div>
@@ -567,7 +567,7 @@ export function ChangeRulesPage() {
                 <span className="w-48 truncate">{r.category_name ?? t("itil.anyCategory")}</span>
                 <span className="w-40 text-muted">{t("itil.fromRiskValue", { risk: dyn(t, `itil.risks.${r.min_risk}`) })}</span>
                 <span className="min-w-0 flex-1 truncate font-medium">{r.approver_name ?? "—"}</span>
-                <Button variant="ghost" className="min-h-7 px-2 text-xs" onClick={() => remove.mutate(r.id)}>
+                <Button variant="ghost" className="min-h-7 px-2 text-xs" onClick={() => window.confirm(t("common.confirmDelete")) && remove.mutate(r.id)}>
                   {t("common.delete")}
                 </Button>
               </li>

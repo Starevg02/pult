@@ -9,7 +9,7 @@ import { formatDate } from "../format";
 import { IconArrowRight, IconBook, IconContacts, IconKey, IconPlus, IconSearch, IconTicket } from "../icons";
 import { Announcements, StatusBadge, TicketLink } from "./helpdesk/parts";
 import { can, useMe, useModule } from "../session";
-import { Card, Empty, Input, Skeleton, Spinner } from "../ui";
+import { Card, Empty, ErrorBox, Input, Skeleton, Spinner } from "../ui";
 import { fullName } from "./phonebookUtil";
 import { ServiceStatusCard } from "./assets/ServiceStatus";
 
@@ -72,6 +72,9 @@ function WorkCard() {
   );
 }
 
+/** Сколько своих заявок показывать на главной. */
+const HOME_LIMIT = 6;
+
 export function HomePage() {
   const { t, i18n } = useTranslation();
   const me = useMe().data;
@@ -85,7 +88,7 @@ export function HomePage() {
   }, [q]);
   const recent = useQuery({
     queryKey: ["tickets", "home"],
-    queryFn: () => ok<TicketRow[]>(api.GET("/api/helpdesk/tickets", { params: { query: { scope: "mine", status: "active", limit: 6 } } })),
+    queryFn: () => ok<TicketRow[]>(api.GET("/api/helpdesk/tickets", { params: { query: { scope: "mine", status: "active", limit: HOME_LIMIT + 1 } } })),
     enabled: helpdesk,
   });
   const found = useQuery({
@@ -121,13 +124,19 @@ export function HomePage() {
               <div className="flex items-center gap-3 border-b border-line px-4 py-3">
                 <IconTicket className="text-muted" />
                 <h2 className="text-sm font-semibold">{t("home.myOpen")}</h2>
-                {recent.data && recent.data.length > 0 && <span className="rounded-full bg-sunken px-2 text-xs font-medium text-muted tabular-nums">{recent.data.length}</span>}
+                {recent.data && recent.data.length > 0 && (
+                  <span className="rounded-full bg-sunken px-2 text-xs font-medium text-muted tabular-nums">{recent.data.length > HOME_LIMIT ? `${HOME_LIMIT}+` : recent.data.length}</span>
+                )}
                 <Link to="/tickets" className="ml-auto inline-flex items-center gap-1 text-sm text-accent hover:underline">
                   {t("home.allMine")}
                   <IconArrowRight size={14} />
                 </Link>
               </div>
-              {recent.isPending ? (
+              {recent.error ? (
+                <div className="p-4">
+                  <ErrorBox error={recent.error} onRetry={() => void recent.refetch()} />
+                </div>
+              ) : recent.isPending ? (
                 <div className="p-4">
                   <Spinner />
                 </div>
@@ -146,7 +155,7 @@ export function HomePage() {
                 </Empty>
               ) : (
                 <ul className="divide-y divide-line">
-                  {recent.data.map((r) => (
+                  {recent.data.slice(0, HOME_LIMIT).map((r) => (
                     <li key={r.id}>
                       <TicketLink number={r.number} className="flex items-center gap-3 px-4 py-3 text-sm transition-colors hover:bg-hover">
                         <span className="w-12 shrink-0 font-mono text-xs text-muted">#{r.number}</span>

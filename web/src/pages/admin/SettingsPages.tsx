@@ -639,7 +639,7 @@ function OrgCard() {
       <OrgIdentityCard org={org} withLanguage={false} />
       <ModulesCard org={org} />
       {rerun.error && <ErrorBox error={rerun.error} />}
-      <Button variant="ghost" disabled={rerun.isPending} onClick={() => rerun.mutate(org)}>
+      <Button variant="ghost" disabled={rerun.isPending} onClick={() => window.confirm(t("org.rerunConfirm")) && rerun.mutate(org)}>
         {t("org.rerun")}
       </Button>
     </div>

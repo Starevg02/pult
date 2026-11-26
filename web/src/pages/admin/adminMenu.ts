@@ -20,7 +20,6 @@ export const adminGroups = [
       { to: "/admin/templates", key: "templates", perm: "helpdesk.admin", module: "helpdesk" },
       { to: "/admin/asset-types", key: "assetTypes", perm: "helpdesk.admin", module: "helpdesk" },
       { to: "/admin/change-rules", key: "changeRules", perm: "helpdesk.admin", module: "helpdesk" },
-      { to: "/admin/mail", key: "mail", perm: "core.mail.manage" },
       { to: "/admin/access-resources", key: "accessResources", perm: "helpdesk.access.resources", module: "helpdesk" },
     ],
   },
@@ -31,18 +30,19 @@ export const adminGroups = [
       { to: "/admin/roles", key: "roles", perm: "core.roles.manage" },
       { to: "/admin/phonebook", key: "phonebook", perm: "phonebook.edit", module: "phonebook" },
       { to: "/admin/linking", key: "linking", perm: "people.link.manage" },
+      // Такого разрешения нет ни у одной роли: раздел виден только суперадминистратору (как и его API).
+      { to: "/admin/chats", key: "chats", perm: "core.superadmin", module: "chat" },
     ],
   },
   {
     key: "connections",
     items: [
       { to: "/admin/ad", key: "ad", perm: "people.ad.manage" },
+      { to: "/admin/mail", key: "mail", perm: "core.mail.manage" },
       { to: "/admin/directory", key: "directory", perm: "directory.manage", module: "directory" },
       { to: "/admin/telephony", key: "telephony", perm: "phonebook.admin", module: "telephony" },
       { to: "/admin/integrations", key: "integrations", perm: "helpdesk.admin", module: "helpdesk" },
       { to: "/admin/remote", key: "remote", perm: "remote.manage", module: "remote" },
-      // Такого разрешения нет ни у одной роли: раздел виден только суперадминистратору (как и его API).
-      { to: "/admin/chats", key: "chats", perm: "core.superadmin", module: "chat" },
       { to: "/admin/extensions", key: "extensions", perm: "core.superadmin", module: "helpdesk" },
     ],
   },

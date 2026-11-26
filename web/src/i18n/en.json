@@ -14,7 +14,7 @@
     "status": "Status",
     "tickets": "My requests",
     "newTicket": "Create request",
-    "desk": "Workspace",
+    "desk": "Ticket queue",
     "search": "Search",
     "settings": "Settings",
     "kb": "Knowledge base",
@@ -31,10 +31,13 @@
     "myAssets": "My equipment",
     "problems": "Problems",
     "changes": "Changes",
-    "vault": "Secrets",
-    "assistant": "Assistant",
+    "vault": "Secrets vault",
+    "assistant": "AI assistant",
     "chats": "Messages",
-    "catalog": "Service catalog"
+    "catalog": "Service catalog",
+    "groupIt": "IT team",
+    "groupHelp": "Help",
+    "groupMine": "Personal"
   },
   "login": {
     "title": "Sign in to the IT portal",
@@ -307,7 +310,7 @@
   },
   "admin": {
     "menu": {
-      "ad": "AD directory",
+      "ad": "Active Directory: sync",
       "users": "Users",
       "roles": "Roles",
       "sites": "Sites and engineers",
@@ -325,14 +328,14 @@
       "assetTypes": "Equipment types",
       "integrations": "API and webhooks",
       "accessResources": "Access resources",
-      "directory": "AD directory: writes",
+      "directory": "Active Directory: changes",
       "remote": "Remote support",
       "changeRules": "Change approval",
-      "chats": "Communications",
+      "chats": "Messages",
       "extensions": "Extensions"
     },
     "ad": {
-      "title": "AD directory",
+      "title": "Active Directory: sync",
       "suspended": "No connection — sessions suspended",
       "failing": "No response ({{n}} checks in a row)",
       "healthy": "Domain reachable",
@@ -502,6 +505,7 @@
       }
     },
     "mail": {
+      "dropPassword": "Remove the saved password (server without sign-in)",
       "title": "Mail",
       "enabled": "Send email",
       "host": "SMTP server",
@@ -624,10 +628,15 @@
       "remote": "PC agents, enrollment tokens, connection policies, MSI and helper packages.",
       "changeRules": "Who approves changes: by category and risk level",
       "chats": "Group chats without an owner, assigning owners, anonymous statistics.",
-      "extensions": "External services by manifest: API rights, webhook, menu links."
+      "extensions": "External services by manifest: API rights, webhook, menu links.",
+      "sla": "Response and resolution targets by priority, working calendars and holidays.",
+      "automation": "Engineer groups and rules that route and update requests automatically.",
+      "templates": "Request templates with checklists, recurring requests and reply templates.",
+      "assetTypes": "Equipment types and their fields for the asset register.",
+      "integrations": "API tokens and webhooks for external systems."
     },
     "directory": {
-      "title": "AD directory: writes",
+      "title": "Active Directory: changes",
       "noLdaps": "No LDAPS: password reset is unavailable",
       "intro": "Pult writes to AD with a separate account delegated only to the needed OUs and groups. Without it, Pult only reads.",
       "writer": "Writer account (DN or UPN)",
@@ -684,7 +693,7 @@
       "resetConfirm": "Reset all links? Each user will be linked again on next sign-in."
     },
     "assist": {
-      "title": "Assistant",
+      "title": "AI assistant",
       "hint": "Your own model on a separate server with an OpenAI-compatible API (vLLM, Ollama, LM Studio and others). The assistant answers questions from the knowledge base, suggests a category for new tickets, and writes reply drafts and ticket summaries for engineers. It only advises and does nothing by itself.",
       "enabled": "Turn on the assistant",
       "url": "API address",
@@ -763,6 +772,10 @@
     "codeDocker": "Docker:"
   },
   "helpdesk": {
+    "createAnother": "Create another",
+    "resume": "Resume",
+    "answerYes": "Yes",
+    "answerNo": "No",
     "status": {
       "new": "New",
       "assigned": "Assigned",
@@ -869,7 +882,7 @@
     "create": "Create request",
     "newTitle": "New request",
     "myTickets": "My requests",
-    "desk": "Workspace",
+    "desk": "Ticket queue",
     "empty": "No requests.",
     "search": "Search: number, title, person",
     "filterOpen": "Open",
@@ -977,8 +990,10 @@
       "noteSaved": "Note saved",
       "confirmed": "Thank you! The request is closed",
       "returned": "Request returned to work",
-      "reopened": "Request reopened"
-    }
+      "reopened": "Request reopened",
+      "followUp": "A new request was created from your reply"
+    },
+    "canceledReplyHint": "This request was canceled and cannot take replies. If the issue remains, create a new request."
   },
   "card": {
     "slaTitle": "SLA targets",
@@ -1067,6 +1082,7 @@
     }
   },
   "bulk": {
+    "confirm": "Apply “{{action}}” to {{n}} requests? Requesters will be emailed.",
     "selected": "Selected: {{n}}",
     "action": "Action",
     "apply": "Apply",
@@ -1084,6 +1100,7 @@
     }
   },
   "kb": {
+    "notFound": "Nothing found. Try other words or create a request.",
     "title": "Knowledge base",
     "newArticle": "New article",
     "editArticle": "Edit article",
@@ -1643,6 +1660,7 @@
       "dnsOff": "Without the check anyone with the token can enroll their own PC under an AD computer name and fake its sessions. Turn it off only temporarily, if Pult sits behind a proxy."
     },
     "tokens": {
+      "revokeConfirm": "Revoke token “{{name}}”? New PCs will no longer enrol with it.",
       "title": "Agent enrollment tokens",
       "hint": "The token goes to the MSI (ENROLLTOKEN) or a group policy. Only PCs present in AD can enroll.",
       "name": "Name",
@@ -1669,6 +1687,7 @@
       "invalid": "Skipped lines: {{list}}"
     },
     "packages": {
+      "rolloutConfirm": "Roll out update {{version}} to all agents? PCs install it at their next check.",
       "title": "Agent and helper packages",
       "hint": "The agent MSI is for GPO, the helper is for engineers. An agent update is accepted only if its signature matches the key set at install.",
       "kind": "Type",
@@ -1690,6 +1709,7 @@
       }
     },
     "devices": {
+      "deactivateConfirm": "Deactivate {{name}}? The PC stops sending reports and remote help is unavailable.",
       "title": "PCs with the agent",
       "hint": "A deactivated PC sends no reports and cannot enroll again until it is activated.",
       "deactivate": "Deactivate",
@@ -1697,6 +1717,7 @@
     }
   },
   "org": {
+    "rerunConfirm": "Run the setup wizard again? Current settings are kept; the wizard opens at the next sign-in.",
     "wizardTitle": "Organization setup",
     "wizardText": "A few steps to fit the portal to your organization. You can skip any step and change it later in Settings → System.",
     "steps": {
@@ -1722,10 +1743,10 @@
     "module": {
       "helpdesk": "Requests",
       "phonebook": "Directory",
-      "directory": "AD changes",
+      "directory": "Active Directory: changes",
       "remote": "Remote support",
       "telephony": "Telephony",
-      "chat": "Communications"
+      "chat": "Messages"
     },
     "moduleAbout": {
       "helpdesk": "Employee requests, engineer workspace, knowledge base, equipment, reports.",
@@ -1970,23 +1991,27 @@
     }
   },
   "assist": {
-    "title": "Assistant",
+    "categoryNeedsTitle": "Write the request subject first",
+    "title": "AI assistant",
     "subtitle": "Answers from the knowledge base. The conversation is not saved: it is gone when you close the page.",
     "empty": "Ask how to solve a task, for example \"how to connect to VPN from home\". The assistant answers from knowledge base articles and links to them.",
-    "question": "Your question",
+    "question": "Your question… (Enter to send, Shift+Enter for a new line)",
     "send": "Ask",
     "newChat": "New conversation",
     "you": "You",
-    "thinking": "The assistant is thinking…",
+    "thinking": "The AI assistant is thinking…",
     "sources": "Sources",
     "disclaimer": "The assistant can be wrong and does nothing by itself. Do not send it passwords.",
-    "off": "The assistant is turned off. An administrator turns it on in Settings → System.",
-    "unavailable": "The assistant is unavailable",
+    "off": "The AI assistant is turned off. A superadministrator turns it on in Settings → System → AI assistant.",
+    "unavailable": "The AI assistant is unavailable",
     "draft": "Draft reply",
     "summary": "Ticket summary",
     "again": "Again",
     "category": "Suggest a category",
-    "noCategory": "No suitable category found: choose one yourself."
+    "noCategory": "No suitable category found: choose one yourself.",
+    "wait": "An answer may take more than a minute if the model server has no GPU.",
+    "stop": "Stop",
+    "thinkingFor": "The AI assistant is thinking… {{time}}"
   },
   "cmdb": {
     "addRelation": "Add relation",
@@ -2080,7 +2105,7 @@
     "syncing": "Synchronizing…"
   },
   "chat": {
-    "title_list": "Conversations",
+    "title_list": "Messages",
     "new": "New",
     "newDirect": "Direct message",
     "newGroup": "Group chat",
@@ -2103,10 +2128,10 @@
     "hiddenTitle": "Hidden",
     "showHidden": "Hidden chats",
     "showMain": "← All conversations",
-    "empty": "No conversations yet.",
+    "empty": "No chats yet.",
     "emptyHint": "Start a direct message or create a group chat with “New”.",
     "noHidden": "No hidden chats.",
-    "pick": "Pick a conversation on the left.",
+    "pick": "Pick a chat on the left.",
     "back": "Back to conversations",
     "pin": "Pin",
     "unpin": "Unpin",

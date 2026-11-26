@@ -22,13 +22,16 @@ function MailForm({ data }: { data: MailView }) {
   const qc = useQueryClient();
   const [v, setV] = useState(data.settings);
   const [password, setPassword] = useState("");
+  // Сервер понимает пустой пароль как «удалить сохранённый» (например, ретранслятор без входа).
+  const [dropPassword, setDropPassword] = useState(false);
   const [to, setTo] = useState("");
   const outbox = useQuery({ queryKey: ["outbox"], queryFn: () => ok<OutboxRow[]>(api.GET("/api/admin/mail/outbox")), refetchInterval: 30_000 });
   const save = useMutation({
     meta: { toast: t("common.saved") },
-    mutationFn: () => ok(api.PUT("/api/admin/mail", { body: { settings: v, password: password || null } })),
+    mutationFn: () => ok(api.PUT("/api/admin/mail", { body: { settings: v, password: dropPassword ? "" : password || null } })),
     onSuccess: () => {
       setPassword("");
+      setDropPassword(false);
       void qc.invalidateQueries({ queryKey: ["mail"] });
     },
   });
@@ -59,7 +62,13 @@ function MailForm({ data }: { data: MailView }) {
           <Input value={v.username} onChange={(e) => setV({ ...v, username: e.target.value })} />
         </Field>
         <Field label={t("admin.mail.password")} hint={data.has_password ? t("admin.ad.passwordKept") : undefined}>
-          <Input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <Input type="password" autoComplete="new-password" value={password} disabled={dropPassword} onChange={(e) => setPassword(e.target.value)} />
+          {data.has_password && (
+            <label className="mt-1 flex items-center gap-2 text-xs text-muted">
+              <input type="checkbox" checked={dropPassword} onChange={(e) => setDropPassword(e.target.checked)} />
+              {t("admin.mail.dropPassword")}
+            </label>
+          )}
         </Field>
         <Field label={t("admin.mail.from")}>
           <Input value={v.from_address} onChange={(e) => setV({ ...v, from_address: e.target.value })} placeholder="helpdesk@example.local" />

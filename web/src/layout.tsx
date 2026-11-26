@@ -377,30 +377,42 @@ function Shell({ me }: { me: Me }) {
     enabled: !!me.person_id && on("helpdesk"),
     staleTime: 300_000,
   });
-  // Разделы группами: заявки, ИТ-инструменты, справочник; настройки — внизу.
-  const helpdesk: NavItem[] = on("helpdesk")
-    ? [
-        { to: "/tickets", key: "tickets" },
-        { to: "/catalog", key: "catalog" },
-        { to: "/access", key: "access" },
-        ...((myAssets.data?.length ?? 0) > 0 ? [{ to: "/my-assets", key: "myAssets" } as NavItem] : []),
-        ...(anyApprovals ? [{ to: "/approvals", key: "approvals" } as NavItem] : []),
-        ...(can(me, "helpdesk.ticket.work")
-          ? [{ to: "/desk", key: "desk" } as NavItem, { to: "/problems", key: "problems" } as NavItem, { to: "/changes", key: "changes" } as NavItem]
-          : []),
-        { to: "/kb", key: "kb" },
-      ]
-    : [];
-  const tools: NavItem[] = [
-    ...(on("helpdesk") && can(me, "helpdesk.ticket.work") ? [{ to: "/assets", key: "assets" } as NavItem] : []),
-    ...(on("helpdesk") && can(me, "helpdesk.vault.use") ? [{ to: "/vault", key: "vault" } as NavItem] : []),
-    ...(on("helpdesk") && assist ? [{ to: "/assistant", key: "assistant" } as NavItem] : []),
-    ...(on("remote") && can(me, "remote.device.view") ? [{ to: "/computers", key: "computers" } as NavItem] : []),
-    ...(on("helpdesk") && can(me, "helpdesk.reports") ? [{ to: "/reports", key: "reports" } as NavItem] : []),
-    ...(on("phonebook") ? [{ to: "/phonebook", key: "phonebook" } as NavItem] : []),
-    ...(modules?.chat === true ? [{ to: "/chats", key: "chats" } as NavItem] : []),
+  // Разделы группами: каждодневное сверху (сообщения, свои заявки), затем работа ИТ-службы, справка и личное;
+  // настройки — внизу. Пункты, которые появляются по условию (оборудование, согласования), — в последней группе,
+  // чтобы не сдвигать остальные.
+  const when = (cond: boolean, ...items: NavItem[]) => (cond ? items : []);
+  const hd = on("helpdesk");
+  const engineer = hd && can(me, "helpdesk.ticket.work");
+  // Модули ещё не пришли: место под «Сообщения» держим, чтобы меню не прыгало.
+  const chatPending = modules === undefined;
+  const daily: NavItem[] = [
+    { to: "/", key: "home" },
+    ...when(modules?.chat === true, { to: "/chats", key: "chats" }),
+    ...when(hd, { to: "/tickets", key: "tickets" }, { to: "/catalog", key: "catalog" }),
   ];
-  const groups = [[{ to: "/", key: "home" } as NavItem, ...helpdesk], tools].filter((g) => g.length > 0);
+  const it: NavItem[] = [
+    ...when(engineer, { to: "/desk", key: "desk" }, { to: "/problems", key: "problems" }, { to: "/changes", key: "changes" }),
+    ...when(on("remote") && can(me, "remote.device.view"), { to: "/computers", key: "computers" }),
+    ...when(engineer, { to: "/assets", key: "assets" }),
+    ...when(hd && can(me, "helpdesk.vault.use"), { to: "/vault", key: "vault" }),
+    ...when(hd && can(me, "helpdesk.reports"), { to: "/reports", key: "reports" }),
+  ];
+  const help: NavItem[] = [
+    ...when(hd, { to: "/kb", key: "kb" }),
+    ...when(hd && assist, { to: "/assistant", key: "assistant" }),
+    ...when(on("phonebook"), { to: "/phonebook", key: "phonebook" }),
+  ];
+  const mine: NavItem[] = [
+    ...when(hd, { to: "/access", key: "access" }),
+    ...when((myAssets.data?.length ?? 0) > 0, { to: "/my-assets", key: "myAssets" }),
+    ...when(anyApprovals, { to: "/approvals", key: "approvals" }),
+  ];
+  const groups: { title?: string; items: NavItem[]; skeleton?: boolean }[] = [
+    { items: daily, skeleton: chatPending },
+    { title: t("nav.groupIt"), items: it },
+    { title: t("nav.groupHelp"), items: help },
+    { title: t("nav.groupMine"), items: mine },
+  ].filter((g) => g.items.length > 0);
   // Активный пункт — не только фоном: полоса акцента слева и значок цветом акцента (различимо и без цвета фона).
   const link =
     "group flex min-h-9 items-center gap-2.5 rounded-lg border-l-2 border-transparent px-2.5 py-1.5 text-sm text-muted transition-colors hover:bg-hover hover:text-ink [&.active]:border-accent [&.active]:bg-paper [&.active]:font-medium [&.active]:text-ink [&.active]:shadow-xs";
@@ -425,8 +437,10 @@ function Shell({ me }: { me: Me }) {
   }, [drawer]);
   const item = (i: NavItem) => {
     const Icon = NAV_ICONS[i.key];
+    // «/tickets» — точное совпадение (иначе горел бы и на «/tickets/new»), но карточка заявки — тоже этот раздел.
+    const ticketCard = i.to === "/tickets" && /^\/tickets\/\d+$/.test(path);
     return (
-      <Link key={i.to} to={i.to} activeOptions={{ exact: i.to === "/" || i.to === "/tickets" }} className={link} onClick={() => setOpen(false)}>
+      <Link key={i.to} to={i.to} activeOptions={{ exact: i.to === "/" || i.to === "/tickets" }} className={ticketCard ? `${link} active` : link} onClick={() => setOpen(false)}>
         <span className="text-muted group-hover:text-ink group-[.active]:text-accent">
           <Icon size={18} />
         </span>
@@ -477,8 +491,14 @@ function Shell({ me }: { me: Me }) {
         )}
         <nav aria-label={t("nav.menu")} className="flex flex-1 flex-col">
           {groups.map((g, gi) => (
-            <div key={gi} className={`space-y-0.5 ${gi > 0 ? "mt-3 border-t border-line pt-3" : ""}`}>
-              {g.map(item)}
+            <div key={gi} role={g.title ? "group" : undefined} aria-labelledby={g.title ? `nav-group-${gi}` : undefined} className={`space-y-0.5 ${gi > 0 ? "mt-4" : ""}`}>
+              {g.title && (
+                <div id={`nav-group-${gi}`} className="px-2.5 pb-1 text-xs font-medium tracking-wide text-muted uppercase">
+                  {g.title}
+                </div>
+              )}
+              {g.items.map(item)}
+              {g.skeleton && <div aria-hidden="true" className="h-9 animate-pulse rounded-lg bg-hover" />}
             </div>
           ))}
           {(extLinks.data?.length ?? 0) > 0 && (
