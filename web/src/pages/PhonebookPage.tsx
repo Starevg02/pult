@@ -2,7 +2,8 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, ok, type DictItem, type Me, type Person, type PhonebookConfig } from "../api/client";
+import { api, ok, type DictItem, type Me, type Person, type PhonebookConfig, type PresenceEntry } from "../api/client";
+import { Link } from "@tanstack/react-router";
 import type { components } from "../api/schema";
 
 type UserSettings = components["schemas"]["UserSettingsBody"]["settings"];
@@ -10,7 +11,8 @@ import { useMe, useModule } from "../session";
 import { PersonSessions } from "./remote/RemotePages";
 import { Badge, Button, Card, CloseButton, CopyButton, Dialog, Empty, ErrorBox, Input, Spinner } from "../ui";
 import { IconArchive, IconColumns, IconKeyboard, IconMail, IconPhone, IconPlus, IconSearch, IconStar } from "../icons";
-import { initials } from "../format";
+import { UserAvatar } from "./people/presence";
+import { usePresence } from "./people/profileHooks";
 import { CallDialog } from "./CallDialog";
 import { PersonEditor } from "./PersonEditor";
 
@@ -109,6 +111,8 @@ export function PhonebookPage() {
     placeholderData: keepPreviousData,
   });
   const list = useMemo(() => persons.data ?? [], [persons.data]);
+  // Учётки портала у сотрудников списка: аватар, присутствие, страница сотрудника.
+  const { byPerson } = usePresence({ persons: list.map((p) => p.id) });
   const current = list.find((p) => p.id === selected) ?? null;
   const canEdit = !!config.data?.can_edit;
   const total = departments.data?.reduce((s, d) => s + d.persons, 0) ?? 0;
@@ -280,7 +284,9 @@ export function PhonebookPage() {
                       {/* ФИО переносится целиком; должность и отдел — до двух строк, а не обрезаются на полуслове. */}
                       <td className="min-w-52 px-3 py-2 align-top font-medium">
                         {/* Кнопка — выбор строки с клавиатуры (Tab, Enter) открывает карточку. */}
-                        <button type="button" aria-pressed={p.id === selected} onClick={() => setSelected(p.id)} className="rounded text-left">
+                        <button type="button" aria-pressed={p.id === selected} onClick={() => setSelected(p.id)} className="inline-flex items-start gap-2 rounded text-left">
+                          <UserAvatar name={`${p.last_name} ${p.first_name}`} userId={byPerson.get(p.id)?.user_id} avatar={byPerson.get(p.id)?.avatar} presence={byPerson.get(p.id)?.presence} size="xs" />
+                          <span>
                           {fullName(p)}
                           {p.is_favorite && (
                             <>
@@ -288,6 +294,7 @@ export function PhonebookPage() {
                               <span className="sr-only">{t("phonebook.favorites")}</span>
                             </>
                           )}
+                          </span>
                         </button>
                       </td>
                       {columns.map((c) => (
@@ -312,9 +319,7 @@ export function PhonebookPage() {
                 {list.map((p) => (
                   <li key={p.id}>
                     <button type="button" onClick={() => setSelected(p.id)} className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-hover">
-                      <span aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accentsoft text-xs font-semibold text-accent-ink">
-                        {initials(`${p.last_name} ${p.first_name}`)}
-                      </span>
+                      <UserAvatar name={`${p.last_name} ${p.first_name}`} userId={byPerson.get(p.id)?.user_id} avatar={byPerson.get(p.id)?.avatar} presence={byPerson.get(p.id)?.presence} size="sm" />
                       <span className="min-w-0 flex-1">
                         <span className="block font-medium">{fullName(p)}</span>
                         <span className="block text-xs text-muted">{[p.position_name, p.department_name].filter(Boolean).join(" · ")}</span>
@@ -336,6 +341,7 @@ export function PhonebookPage() {
             onEdit={canEdit ? () => setEditing(current) : undefined}
             onCall={() => setCalling(current)}
             onFavorite={() => favorite.mutate(current)}
+            account={byPerson.get(current.id)}
           />
         )}
       </div>
@@ -411,7 +417,9 @@ function PersonCard({
   onEdit,
   onCall,
   onFavorite,
+  account,
 }: {
+  account?: PresenceEntry;
   person: Person;
   config?: PhonebookConfig;
   onClose: () => void;
@@ -449,9 +457,7 @@ function PersonCard({
   return (
     <aside className="animate-fade-in fixed inset-x-0 bottom-0 z-40 max-h-[80vh] overflow-y-auto rounded-t-2xl border border-line bg-paper p-5 shadow-xl md:inset-x-auto md:top-[4.5rem] md:right-4 md:bottom-4 md:w-80 md:max-h-none md:rounded-xl 2xl:sticky 2xl:max-h-[calc(100vh-5.5rem)] 2xl:w-auto 2xl:self-start 2xl:shadow-xs">
       <div className="mb-3 flex items-start gap-2">
-        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accentsoft text-sm font-semibold text-accent-ink">
-          {initials(`${p.last_name} ${p.first_name}`)}
-        </span>
+        <UserAvatar name={`${p.last_name} ${p.first_name}`} userId={account?.user_id} avatar={account?.avatar} presence={account?.presence} size="md" />
         <button
           type="button"
           onClick={onFavorite}
@@ -464,7 +470,18 @@ function PersonCard({
         <CloseButton onClick={onClose} />
       </div>
       <h2 className="text-lg font-semibold">{fullName(p)}</h2>
-      <p className="mb-4 text-sm text-muted">{[p.position_name, p.department_name].filter(Boolean).join(" · ")}</p>
+      <p className="mb-2 text-sm text-muted">{[p.position_name, p.department_name].filter(Boolean).join(" · ")}</p>
+      {account && (account.status_emoji || account.status_text) && (
+        <p className="mb-2 text-sm">
+          {account.status_emoji} {account.status_text}
+        </p>
+      )}
+      {account && (
+        <Link to="/people/$id" params={{ id: account.user_id }} className="mb-4 inline-block text-sm text-accent hover:underline">
+          {t("people.openPage")}
+        </Link>
+      )}
+      {!account && <div className="mb-2" />}
       {p.is_archived && (
         <div className="mb-3">
           <Badge tone="bad">{t("phonebook.archived")}</Badge>

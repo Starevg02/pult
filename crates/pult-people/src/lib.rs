@@ -9,6 +9,7 @@ pub mod oidc;
 pub mod profile;
 pub mod push;
 pub mod sites;
+pub mod social;
 pub mod sync;
 pub mod twofactor;
 
@@ -82,6 +83,17 @@ where
             .routes(routes!(profile::list_my_sessions))
             .routes(routes!(profile::revoke_my_session))
             .routes(routes!(profile::revoke_other_sessions))
+            .routes(routes!(social::get_my_card))
+            .routes(routes!(social::put_my_status))
+            .routes(routes!(social::put_my_about))
+            .routes(routes!(social::heartbeat))
+            .routes(routes!(social::put_my_avatar, social::delete_my_avatar))
+            .routes(routes!(social::get_avatar, social::moderate_avatar))
+            .routes(routes!(social::presence_lookup))
+            .routes(routes!(social::get_user_card))
+            .routes(routes!(social::get_wall, social::create_wall_post))
+            .routes(routes!(social::delete_wall_post))
+            .routes(routes!(social::like_post, social::unlike_post))
             .routes(routes!(twofactor::auth_context))
             .routes(routes!(twofactor::get_my_totp))
             .routes(routes!(twofactor::setup_my_totp))
@@ -108,7 +120,7 @@ where
     }
 
     fn permissions(&self) -> Vec<Permission> {
-        vec![perm::AD_MANAGE, perm::SITES_MANAGE, perm::LINK_MANAGE]
+        vec![perm::AD_MANAGE, perm::SITES_MANAGE, perm::LINK_MANAGE, social::MODERATE]
     }
 
     fn jobs(&self) -> Vec<pult_core::JobDefinition> {

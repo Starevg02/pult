@@ -4007,6 +4007,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/about": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** «О себе» и кто пишет на моей стене. */
+        put: operations["put_my_about"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Поставить аватар. Браузер заранее обрезает картинку до квадрата и уменьшает её; GIF приходит как есть,
+         *     чтобы не потерять анимацию (в кружок его вписывает интерфейс).
+         */
+        put: operations["put_my_avatar"];
+        post?: never;
+        /** Убрать свой аватар — снова инициалы. */
+        delete: operations["delete_my_avatar"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/card": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Мой статус, «о себе», режим стены и аватар. */
+        get: operations["get_my_card"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/heartbeat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Сигнал открытой вкладки — раз в минуту и при смене «нет действий». */
+        post: operations["heartbeat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/locale": {
         parameters: {
             query?: never;
@@ -4176,6 +4248,23 @@ export interface paths {
         /** Личные настройки интерфейса. */
         get: operations["get_my_settings"];
         put: operations["put_my_settings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Режим присутствия и свой статус (эмодзи, текст, срок). */
+        put: operations["put_my_status"];
         post?: never;
         delete?: never;
         options?: never;
@@ -4884,6 +4973,111 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/users/presence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Присутствие, свой статус и аватар коллег — для списков (сообщения, справочник). */
+        get: operations["presence_lookup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/{id}/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Аватар сотрудника. Адрес с `?v=` меняется вместе с картинкой, поэтому браузер держит её в кэше. */
+        get: operations["get_avatar"];
+        put?: never;
+        post?: never;
+        /** Убрать чужой неподходящий аватар. Пишется в аудит. */
+        delete: operations["moderate_avatar"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/{id}/card": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Страница сотрудника: имя, присутствие, свой статус, «о себе», карточка справочника. */
+        get: operations["get_user_card"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/{id}/wall": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Записи стены, новые сверху, по [`PAGE`]; к каждой — ответы. */
+        get: operations["get_wall"];
+        put?: never;
+        /** Написать на стене или ответить на запись. Владелец стены и автор записи получают уведомление. */
+        post: operations["create_wall_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/wall/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Удалить запись: автор, владелец стены или модератор. Удаление модератором пишется в аудит. */
+        delete: operations["delete_wall_post"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/wall/{id}/like": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Отметить «нравится». */
+        put: operations["like_post"];
+        post?: never;
+        /** Снять «нравится». */
+        delete: operations["unlike_post"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -4905,6 +5099,10 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AboutInput: {
+            about: string;
+            wall_mode: components["schemas"]["WallMode"];
+        };
         Absence: {
             /** Format: date-time */
             ends_at: string;
@@ -5562,6 +5760,10 @@ export interface components {
         AuthContext: {
             /** @description Не из сети организации: код из приложения спросят у тех, кто его подключил, и у ролей, которым он обязателен. */
             external: boolean;
+        };
+        AvatarInput: {
+            /** @description Картинка в base64: JPEG, PNG, WebP или GIF (в том числе анимированный), до 1 МБ. */
+            data: string;
         };
         /** @description Политика копий: сколько хранить и проверять ли каждую. */
         BackupPolicy: {
@@ -6522,6 +6724,10 @@ export interface components {
             status: string;
             version: string;
         };
+        Heartbeat: {
+            /** @description Пользователь давно ничего не делает во вкладке. */
+            idle?: boolean;
+        };
         HelpdeskSettings: {
             /**
              * Format: int32
@@ -6838,6 +7044,11 @@ export interface components {
             /** @description Разрешённые переходы `[из, в]`; пусто — любые между состояниями типа. */
             transitions?: string[][];
         };
+        Likes: {
+            liked: boolean;
+            /** Format: int64 */
+            likes: number;
+        };
         LinkCandidate: {
             ad_login: string;
             ad_mail?: string | null;
@@ -7103,6 +7314,17 @@ export interface components {
             status: string;
             type_name: string;
         };
+        MyCard: {
+            about: string;
+            /** @description Версия аватара (`/api/users/{id}/avatar?v=…`); нет аватара — инициалы. */
+            avatar?: string | null;
+            presence: components["schemas"]["PresenceMode"];
+            status_emoji?: string | null;
+            status_text?: string | null;
+            /** Format: date-time */
+            status_until?: string | null;
+            wall_mode: components["schemas"]["WallMode"];
+        };
         MySession: {
             /** Format: date-time */
             created_at: string;
@@ -7253,6 +7475,14 @@ export interface components {
         NewSecret: components["schemas"]["SecretFields"] & {
             /** Format: password */
             value: string;
+        };
+        NewWallPost: {
+            body: string;
+            /**
+             * Format: uuid
+             * @description Ответ на запись этой стены.
+             */
+            parent_id?: string | null;
         };
         Notification: {
             /** Format: date-time */
@@ -7559,6 +7789,23 @@ export interface components {
             /** Format: int32 */
             sort?: number;
         };
+        /**
+         * @description Что видят коллеги.
+         * @enum {string}
+         */
+        Presence: "online" | "away" | "dnd" | "offline";
+        PresenceEntry: {
+            avatar?: string | null;
+            /** Format: uuid */
+            person_id?: string | null;
+            presence: components["schemas"]["Presence"];
+            status_emoji?: string | null;
+            status_text?: string | null;
+            /** Format: uuid */
+            user_id: string;
+        };
+        /** @enum {string} */
+        PresenceMode: "auto" | "away" | "dnd" | "invisible";
         ProblemView: {
             cause: string;
             incidents: components["schemas"]["LinkedIncident"][];
@@ -8312,6 +8559,16 @@ export interface components {
         };
         /** @enum {string} */
         StartPage: "home" | "tickets" | "desk" | "phonebook" | "kb" | "notifications";
+        StatusInput: {
+            presence: components["schemas"]["PresenceMode"];
+            status_emoji?: string | null;
+            status_text?: string | null;
+            /**
+             * Format: date-time
+             * @description Когда свой статус пропадёт; нет — пока не сменят.
+             */
+            status_until?: string | null;
+        };
         Summary: {
             added: number;
             candidates: number;
@@ -8704,6 +8961,23 @@ export interface components {
             is_image: boolean;
             name: string;
         };
+        UserCard: {
+            about: string;
+            avatar?: string | null;
+            /** @description Можно убрать аватар и чужие записи. */
+            can_moderate: boolean;
+            /** @description Можно написать на стене (не ответ, а новую запись). */
+            can_post: boolean;
+            display_name: string;
+            is_me: boolean;
+            person?: null | components["schemas"]["ProfilePerson"];
+            presence: components["schemas"]["Presence"];
+            status_emoji?: string | null;
+            status_text?: string | null;
+            /** Format: uuid */
+            user_id: string;
+            wall_mode: components["schemas"]["WallMode"];
+        };
         UserInfo: {
             email?: string | null;
             /** Format: uuid */
@@ -8812,6 +9086,38 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
+        };
+        WallAuthor: {
+            avatar?: string | null;
+            name: string;
+            /** Format: uuid */
+            user_id: string;
+        };
+        /** @enum {string} */
+        WallMode: "everyone" | "me" | "off";
+        WallPage: {
+            /** @description Есть записи старше последней. */
+            more: boolean;
+            posts: components["schemas"]["WallPost"][];
+        };
+        WallPost: {
+            author: components["schemas"]["WallAuthor"];
+            /** @description Пусто у удалённой записи. */
+            body: string;
+            can_delete: boolean;
+            /** Format: date-time */
+            created_at: string;
+            deleted: boolean;
+            /** Format: uuid */
+            id: string;
+            liked: boolean;
+            /** Format: int64 */
+            likes: number;
+            /**
+             * @description Ответы — только у записей верхнего уровня, старые сверху.
+             *     `no_recursion`: без него сбор схем OpenAPI уходит в бесконечную рекурсию по самому типу.
+             */
+            replies: components["schemas"]["WallPost"][];
         };
         WatcherInput: {
             /** Format: uuid */
@@ -15984,6 +16290,125 @@ export interface operations {
             };
         };
     };
+    put_my_about: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AboutInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyCard"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    put_my_avatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AvatarInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyCard"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_my_avatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_my_card: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyCard"];
+                };
+            };
+        };
+    };
+    heartbeat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Heartbeat"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     put_my_locale: {
         parameters: {
             query?: never;
@@ -16334,6 +16759,37 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    put_my_status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StatusInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyCard"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
             };
         };
     };
@@ -17600,6 +18056,296 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Site"][];
                 };
+            };
+        };
+    };
+    presence_lookup: {
+        parameters: {
+            query?: {
+                /** @description Пользователи через запятую. */
+                users?: string | null;
+                /** @description Сотрудники справочника через запятую — найдутся их учётки портала. */
+                persons?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresenceEntry"][];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    get_avatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Картинка */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    moderate_avatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_user_card: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserCard"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    get_wall: {
+        parameters: {
+            query?: {
+                /** @description Записи старше этой (id последней показанной). */
+                before?: string | null;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WallPage"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    create_wall_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewWallPost"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WallPost"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    delete_wall_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    like_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Likes"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    unlike_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Likes"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

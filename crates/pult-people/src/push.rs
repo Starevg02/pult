@@ -283,7 +283,9 @@ pub async fn deliver(core: &Core) -> ApiResult<u64> {
               done AS (UPDATE notifications n SET pushed_at = now() FROM batch WHERE n.id = batch.id
                        RETURNING n.user_id, n.kind, n.payload, n.created_at)
          SELECT d.user_id, d.kind, d.payload, d.created_at > now() - make_interval(mins => $1), u.locale
-           FROM done d JOIN users u ON u.id = d.user_id AND u.is_active",
+           FROM done d JOIN users u ON u.id = d.user_id AND u.is_active
+          -- «Не беспокоить»: уведомление остаётся в колокольчике, на устройство не уходит.
+          WHERE NOT EXISTS (SELECT 1 FROM user_profiles p WHERE p.user_id = d.user_id AND p.presence = 'dnd')",
     )
     .bind(FRESH_MINUTES)
     .fetch_all(&core.db)

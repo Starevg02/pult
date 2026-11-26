@@ -5,7 +5,9 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, ok, type ChatDetail, type ChatItem, type ChatMessage, type ChatPerson, type ChatMemberEvent, type ChatMessageVersion } from "../../api/client";
+import { api, ok, type ChatDetail, type ChatItem, type ChatMessage, type ChatPerson, type ChatMemberEvent, type ChatMessageVersion, type PresenceEntry } from "../../api/client";
+import { UserAvatar } from "../people/presence";
+import { usePresence } from "../people/profileHooks";
 import { formatDate } from "../../format";
 import { IconArrowLeft, IconPlus, IconStar } from "../../icons";
 import { useMe } from "../../session";
@@ -112,7 +114,7 @@ function NewChatDialog({ mode, onClose }: { mode: "direct" | "group"; onClose: (
   );
 }
 
-function ChatRow({ c, active }: { c: ChatItem; active: boolean }) {
+function ChatRow({ c, active, peer }: { c: ChatItem; active: boolean; peer?: PresenceEntry }) {
   const { t, i18n } = useTranslation();
   return (
     <li>
@@ -122,6 +124,7 @@ function ChatRow({ c, active }: { c: ChatItem; active: boolean }) {
         className={`flex items-start gap-2 border-l-2 px-3 py-2.5 text-sm hover:bg-hover ${active ? "border-accent bg-hover" : "border-transparent"}`}
         aria-current={active ? "page" : undefined}
       >
+        <UserAvatar name={c.title} userId={c.peer_id} avatar={peer?.avatar} presence={peer?.presence} size="sm" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             {c.pinned && (
@@ -157,6 +160,7 @@ function ChatList({ current }: { current?: string }) {
   const [hidden, setHidden] = useState(false);
   const [creating, setCreating] = useState<"direct" | "group" | null>(null);
   const q = useChats(hidden);
+  const peers = usePresence({ users: (q.data ?? []).flatMap((c) => (c.peer_id ? [c.peer_id] : [])) });
   return (
     <Card className="flex min-h-0 flex-col">
       <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2">
@@ -180,7 +184,7 @@ function ChatList({ current }: { current?: string }) {
         ) : (
           <ul className="divide-y divide-line">
             {q.data.map((c) => (
-              <ChatRow key={c.id} c={c} active={c.id === current} />
+              <ChatRow key={c.id} c={c} active={c.id === current} peer={c.peer_id ? peers.byUser.get(c.peer_id) : undefined} />
             ))}
           </ul>
         )}
@@ -250,6 +254,7 @@ function ChatInfo({ d, onClose }: { d: ChatDetail; onClose: () => void }) {
   const nav = useNavigate();
   const me = useMe().data;
   const id = d.chat.id;
+  const memberInfo = usePresence({ users: d.members.map((m) => m.user_id) });
   const [title, setTitle] = useState(d.chat.title);
   const [history, setHistory] = useState(false);
   const refresh = () => {
@@ -287,10 +292,14 @@ function ChatInfo({ d, onClose }: { d: ChatDetail; onClose: () => void }) {
           <h3 className="mb-1 text-sm font-semibold">{t("chat.membersN", { n: d.members.length })}</h3>
           <ul className="divide-y divide-line rounded-lg border border-line">
             {d.members.map((m) => {
+              const pm = memberInfo.byUser.get(m.user_id);
               const removable = d.can_manage && m.user_id !== me?.user_id && m.role !== "owner" && (myRole === "owner" || m.role === "member");
               return (
                 <li key={m.user_id} className="flex items-center gap-2 px-3 py-1.5 text-sm">
-                  <span className="min-w-0 flex-1 truncate">{m.name}</span>
+                  <UserAvatar name={m.name} userId={m.user_id} avatar={pm?.avatar} presence={pm?.presence} size="xs" />
+                  <Link to="/people/$id" params={{ id: m.user_id }} className="min-w-0 flex-1 truncate hover:underline" onClick={onClose}>
+                    {m.name}
+                  </Link>
                   {m.role !== "member" && <Badge tone={m.role === "owner" ? "accent" : "muted"}>{dyn(t, `chat.roles.${m.role}`)}</Badge>}
                   {d.can_manage && m.role !== "owner" && m.user_id !== me?.user_id && (
                     <MenuButton
@@ -483,11 +492,13 @@ function Conversation({ id }: { id: string }) {
       void qc.invalidateQueries({ queryKey: ["chat", id] });
     },
   });
+  const peerInfo = usePresence({ users: detail.data?.chat.peer_id ? [detail.data.chat.peer_id] : [] });
   if (detail.error) return <ErrorBox error={detail.error} />;
   if (detail.isPending) return <Spinner />;
   const d = detail.data;
   const c = d.chat;
   const group = c.kind === "group";
+  const peer = c.peer_id ? peerInfo.byUser.get(c.peer_id) : undefined;
   const manager = c.active && (c.role === "owner" || c.role === "admin");
   return (
     <Card className="flex min-h-0 flex-col">
@@ -495,9 +506,26 @@ function Conversation({ id }: { id: string }) {
         <Link to="/chats" className="rounded-lg p-1 text-muted hover:bg-hover md:hidden" aria-label={t("chat.back")}>
           <IconArrowLeft size={18} />
         </Link>
+        {c.peer_id && <UserAvatar name={c.title} userId={c.peer_id} avatar={peer?.avatar} presence={peer?.presence} size="sm" />}
         <div className="min-w-0 flex-1">
-          <h2 className="truncate font-semibold">{c.title}</h2>
-          <div className="text-xs text-muted">{group ? (c.active ? t("chat.membersN", { n: d.members.length }) : t("chat.readOnly")) : t("chat.direct")}</div>
+          {c.peer_id ? (
+            <Link to="/people/$id" params={{ id: c.peer_id }} className="block truncate font-semibold hover:underline">
+              {c.title}
+            </Link>
+          ) : (
+            <h2 className="truncate font-semibold">{c.title}</h2>
+          )}
+          <div className="truncate text-xs text-muted">
+            {group
+              ? c.active
+                ? t("chat.membersN", { n: d.members.length })
+                : t("chat.readOnly")
+              : peer && (peer.status_emoji || peer.status_text)
+                ? `${peer.status_emoji ?? ""} ${peer.status_text ?? ""}`.trim()
+                : peer
+                  ? t(`people.presence.${peer.presence}`)
+                  : t("chat.direct")}
+          </div>
         </div>
         {(c.kind === "direct" || c.active) && (
           <Button variant="ghost" disabled={prefs.isPending} onClick={() => prefs.mutate({ pinned: !c.pinned })}>

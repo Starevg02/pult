@@ -57,6 +57,9 @@ export const IconX = make("X", <><path d="M6 6l12 12" /><path d="M18 6 6 18" /><
 export const IconMore = make("More", <><circle cx="5.5" cy="12" r="1.25" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.25" fill="currentColor" stroke="none" /><circle cx="18.5" cy="12" r="1.25" fill="currentColor" stroke="none" /></>);
 export const IconFilter = make("Filter", <path d="M4 5h16l-6.5 7.5V19l-3 1.5v-8Z" />);
 export const IconSort = make("Sort", <><path d="M7 4v16" /><path d="m3.5 16.5 3.5 3.5 3.5-3.5" /><path d="M13.5 6h7" /><path d="M13.5 11h5" /><path d="M13.5 16h3" /></>);
+export const IconHeart = make("Heart", <path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.1a4.4 4.4 0 0 1 7.5 2.8C19.5 15.4 12 20 12 20Z" />);
+export const IconTrash = make("Trash", <><path d="M4 7h16" /><path d="M9.5 7V4.5h5V7" /><path d="M6 7l1 12.5h10L18 7" /></>);
+export const IconCamera = make("Camera", <><path d="M4 8h3l1.5-2.5h7L17 8h3v11H4Z" /><circle cx="12" cy="13" r="3.5" /></>);
 export const IconStar = make("Star", <path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9Z" />);
 export const IconCopy = make("Copy", <><rect x="8.5" y="8.5" width="12" height="12" rx="2" /><path d="M15.5 8.5V5.5a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h3" /></>);
 export const IconCheck = make("Check", <path d="m5 12.5 4.5 4.5L19 7.5" />);

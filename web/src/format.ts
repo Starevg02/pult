@@ -4,7 +4,8 @@ import type { UserPrefs } from "./api/client";
 import { prefs } from "./prefs";
 
 export function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
+  // Только слова с буквой или цифрой: «АДМ - Статиков» → «АС», а не «А-».
+  const parts = name.trim().split(/\s+/).filter((p) => /[\p{L}\p{N}]/u.test(p));
   return (parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "");
 }
 

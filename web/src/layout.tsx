@@ -8,7 +8,9 @@ import { Logo, RequireAuth } from "./auth";
 import { can, useLogout, useMe, useModule, useOrg, type ModuleKey } from "./session";
 import { asLang, LANGUAGES, savedLanguage, setLanguage } from "./i18n";
 import { applyPrefs, changeLanguage, prefs, shownDark, START_PATHS, THEMES, useSavePrefs, type ThemeChoice } from "./prefs";
-import { initials } from "./format";
+import { UserAvatar } from "./pages/people/presence";
+import { useHeartbeat, useMyCard } from "./pages/people/profileHooks";
+import { PresencePicker, StatusDialog } from "./pages/people/StatusMenu";
 import { useServerEvents } from "./pages/helpdesk/helpdeskUtil";
 import { CloseButton, Dialog, Input, Toaster } from "./ui";
 import {
@@ -166,6 +168,8 @@ function ThemeToggle({ me }: { me: Me }) {
 
 /** Учётная запись: кто вошёл, профиль, тема, язык, выход. */
 function UserMenu({ me, onLogout }: { me: Me; onLogout: () => void }) {
+  const card = useMyCard();
+  const [statusOpen, setStatusOpen] = useState(false);
   const { t, i18n } = useTranslation();
   const qc = useQueryClient();
   const save = useSavePrefs();
@@ -216,23 +220,40 @@ function UserMenu({ me, onLogout }: { me: Me; onLogout: () => void }) {
         className="flex min-h-8 items-center gap-2 rounded-lg py-1 pr-1.5 pl-1 text-sm hover:bg-hover"
         onClick={() => setOpen(!open)}
       >
-        <span aria-hidden="true" className="flex h-7 w-7 items-center justify-center rounded-full bg-accentsoft text-xs font-semibold text-accent-ink">
-          {initials(me.display_name)}
-        </span>
+        <UserAvatar name={me.display_name} userId={me.user_id} avatar={card.data?.avatar} presence={card.data ? MODE_PRESENCE[card.data.presence] : undefined} size="xs" />
         <span className="hidden max-w-40 truncate lg:inline">{me.display_name}</span>
         <IconChevronDown size={14} className={`text-muted transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
         <div id="pult-account" className="animate-pop-in absolute right-0 z-40 mt-1.5 w-72 origin-top-right rounded-xl border border-line bg-paper p-2 shadow-xl">
           <div className="flex items-center gap-3 px-2 pt-1 pb-3">
-            <span aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accentsoft text-sm font-semibold text-accent-ink">
-              {initials(me.display_name)}
-            </span>
+            <UserAvatar name={me.display_name} userId={me.user_id} avatar={card.data?.avatar} size="md" />
             <div className="min-w-0">
               <div className="truncate font-medium">{me.display_name}</div>
               <div className="truncate font-mono text-xs text-muted">{me.login}</div>
             </div>
           </div>
+          {card.data && (
+            <>
+              <button
+                type="button"
+                className="mb-1 flex min-h-9 w-full items-center gap-2 rounded-lg border border-line px-2 text-left text-sm hover:bg-hover"
+                onClick={() => {
+                  setOpen(false);
+                  setStatusOpen(true);
+                }}
+              >
+                <span aria-hidden="true">{card.data.status_emoji || "🙂"}</span>
+                <span className={`flex-1 truncate ${card.data.status_text ? "" : "text-muted"}`}>{card.data.status_text || t("people.status.set")}</span>
+              </button>
+              <PresencePicker card={card.data} />
+              <div className="my-1.5 border-t border-line" />
+            </>
+          )}
+          <Link to="/people/$id" params={{ id: me.user_id }} className="flex min-h-9 items-center gap-2.5 rounded-lg px-2 text-sm hover:bg-hover" onClick={() => setOpen(false)}>
+            <IconContacts className="text-muted" />
+            {t("people.myPage")}
+          </Link>
           <Link to="/profile" className="flex min-h-9 items-center gap-2.5 rounded-lg px-2 text-sm hover:bg-hover" onClick={() => setOpen(false)}>
             <IconUser className="text-muted" />
             {t("nav.profile")}
@@ -269,9 +290,12 @@ function UserMenu({ me, onLogout }: { me: Me; onLogout: () => void }) {
           </button>
         </div>
       )}
+      {statusOpen && card.data && <StatusDialog card={card.data} open onClose={() => setStatusOpen(false)} />}
     </div>
   );
 }
+
+const MODE_PRESENCE = { auto: "online", away: "away", dnd: "dnd", invisible: "offline" } as const;
 
 /** Узкий экран (меню — выезжающая панель). */
 function useNarrow() {
@@ -319,6 +343,7 @@ function Shell({ me }: { me: Me }) {
   const n = useNotifications();
   const unread = n.data?.unread ?? 0;
   useServerEvents(true);
+  useHeartbeat();
   const nav = useNavigate();
   const path = useLocation().pathname;
   // Тема и плотность из учётки (выбранные на другом компьютере) — поверх сохранённых в браузере.

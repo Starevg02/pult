@@ -3,13 +3,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { api, ok, type Me, type MySession, type PasswordChanged, type Profile, type PushConfig, type PushTestResult, type Revoked, type TotpSetup, type TotpStatus, type UserPrefs } from "../api/client";
-import { formatDate, initials } from "../format";
+import { formatDate } from "../format";
 import { asLang, LANGUAGES } from "../i18n";
 import { changeLanguage, PAGE_SIZES, prefs, THEMES, useSavePrefs } from "../prefs";
 import { can, useMe, useModule } from "../session";
 import { Badge, Button, Card, ErrorBox, Input, PageHeader, Select, Spinner } from "../ui";
 import { currentEndpoint, pushSupported, subscribeBrowser, unsubscribeBrowser } from "../push";
 import { fullName } from "./phonebookUtil";
+import { ColleagueProfile } from "./people/ProfileCard";
+import { UserAvatar } from "./people/presence";
+import { useMyCard } from "./people/profileHooks";
 
 function Section({ title, hint, children }: { title: string; hint?: ReactNode; children: ReactNode }) {
   const id = useId();
@@ -541,6 +544,7 @@ export function ProfilePage() {
   const { t, i18n } = useTranslation();
   const me = useMe().data;
   const q = useQuery({ queryKey: ["profile"], queryFn: () => ok<Profile>(api.GET("/api/me/profile")) });
+  const myCard = useMyCard();
   if (!me) return <Spinner />;
   const prof = q.data;
   const person = prof?.person;
@@ -548,9 +552,7 @@ export function ProfilePage() {
     <div className="mx-auto max-w-4xl">
       <PageHeader title={t("profile.title")} />
       <div className="mb-4 flex items-center gap-4">
-        <span aria-hidden="true" className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-accentsoft text-lg font-semibold text-accent-ink">
-          {initials(me.display_name)}
-        </span>
+        <UserAvatar name={me.display_name} userId={me.user_id} avatar={myCard.data?.avatar} size="md" />
         <div className="min-w-0">
           <div className="truncate text-lg font-semibold">{person ? fullName(person) : me.display_name}</div>
           <div className="truncate font-mono text-sm text-muted">{prof?.upn ?? me.login}</div>
@@ -600,6 +602,7 @@ export function ProfilePage() {
         </div>
       )}
       <div className="mt-4">
+        <ColleagueProfile me={me} />
         <Personalization me={me} />
         {prof?.can_change_password && <PasswordForm />}
         <DevicePush />

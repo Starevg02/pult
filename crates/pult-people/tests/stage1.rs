@@ -388,6 +388,7 @@ async fn stage1_acceptance() {
     second_factor(&mut admin, &app, &pool).await;
     kerberos(&core, &pool).await;
     push(&core, &mut admin, &mut emp, &pool).await;
+    social(&mut admin, &mut emp, &pool).await;
     oidc(&mut admin, &app, &pool).await;
 
     // --- Выход ---
@@ -1041,6 +1042,215 @@ async fn profile(admin: &mut Browser, emp: &mut Browser, app: &Router, pool: &Pg
     assert_eq!(emp.post("/api/me/password", change(NEW_PASS, USER_PASS)).await.0, StatusCode::OK);
     sec.ad_password_change = false;
     pult_core::settings::save(pool, &sec, None).await.unwrap();
+}
+
+/// Профиль для коллег: присутствие и свой статус, «невидимка», аватар (только настоящие картинки),
+/// «о себе», стена с ответами, отметками, правами на удаление и уведомлениями.
+async fn social(admin: &mut Browser, emp: &mut Browser, pool: &PgPool) {
+    use base64::Engine;
+    let b64 = base64::engine::general_purpose::STANDARD;
+    let emp_id = emp.get("/api/me").await.1["user_id"].as_str().unwrap().to_string();
+    let admin_id = admin.get("/api/me").await.1["user_id"].as_str().unwrap().to_string();
+
+    // Новый пользователь: строки профиля ещё нет — режим «авто», стена открыта, аватара нет.
+    let (code, c) = emp.get("/api/me/card").await;
+    assert_eq!(code, StatusCode::OK, "{c}");
+    assert_eq!(
+        (c["presence"].as_str(), c["wall_mode"].as_str(), c["avatar"].is_null()),
+        (Some("auto"), Some("everyone"), true)
+    );
+    let (_, card) = admin.get(&format!("/api/users/{emp_id}/card")).await;
+    assert_eq!(card["presence"], "offline", "сигнала вкладки не было: {card}");
+
+    // Сигнал вкладки — «в сети», «нет действий» — «нет на месте».
+    assert_eq!(emp.post("/api/me/heartbeat", json!({"idle": false})).await.0, StatusCode::NO_CONTENT);
+    let p = |list: &Value| list.as_array().unwrap().iter().find(|e| e["user_id"] == emp_id.as_str()).cloned().unwrap();
+    let (code, list) = admin.get(&format!("/api/users/presence?users={emp_id},{admin_id}")).await;
+    assert_eq!(code, StatusCode::OK, "{list}");
+    assert_eq!(p(&list)["presence"], "online");
+    emp.post("/api/me/heartbeat", json!({"idle": true})).await;
+    let (_, list) = admin.get(&format!("/api/users/presence?users={emp_id}")).await;
+    assert_eq!(p(&list)["presence"], "away");
+    // Поиск по сотруднику справочника находит его учётку.
+    let person = emp.get("/api/me").await.1["person_id"].clone();
+    if let Some(pid) = person.as_str() {
+        let (_, list) = admin.get(&format!("/api/users/presence?persons={pid}")).await;
+        assert_eq!(p(&list)["person_id"], pid);
+    }
+    assert_eq!(admin.get("/api/users/presence?users=not-a-uuid").await.0, StatusCode::BAD_REQUEST);
+
+    // Свой статус и «не беспокоить».
+    let body = json!({"presence": "dnd", "status_emoji": "🏖", "status_text": "  В отпуске до 5.12  "});
+    let (code, c) = emp.put("/api/me/status", body).await;
+    assert_eq!(
+        (code, c["status_text"].as_str(), c["presence"].as_str()),
+        (StatusCode::OK, Some("В отпуске до 5.12"), Some("dnd")),
+        "{c}"
+    );
+    let (_, card) = admin.get(&format!("/api/users/{emp_id}/card")).await;
+    assert_eq!((card["presence"].as_str(), card["status_emoji"].as_str()), (Some("dnd"), Some("🏖")), "{card}");
+    let past = json!({"presence": "auto", "status_text": "x", "status_until": "2020-01-01T00:00:00Z"});
+    assert_eq!(emp.put("/api/me/status", past).await.1["error"], "invalid_until");
+    let long = json!({"presence": "auto", "status_text": "я".repeat(101)});
+    assert_eq!(emp.put("/api/me/status", long).await.1["error"], "too_long");
+    // Срок вышел — статуса нет ни у себя, ни у коллег.
+    sqlx::query("UPDATE user_profiles SET status_until = now() - interval '1 minute' WHERE user_id = $1::uuid")
+        .bind(&emp_id)
+        .execute(pool)
+        .await
+        .unwrap();
+    assert!(emp.get("/api/me/card").await.1["status_text"].is_null());
+    assert!(admin.get(&format!("/api/users/{emp_id}/card")).await.1["status_text"].is_null());
+
+    // «Не беспокоить» глушит рассылку на устройства: уведомление остаётся, но рассылка его не берёт.
+    let wall = format!("/api/users/{emp_id}/wall");
+    sqlx::query("UPDATE notifications SET pushed_at = now() WHERE pushed_at IS NULL").execute(pool).await.unwrap();
+    assert_eq!(admin.post(&wall, json!({"body": "Тихое сообщение"})).await.0, StatusCode::OK);
+    let pending: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM notifications WHERE user_id = $1::uuid AND pushed_at IS NULL")
+            .bind(&emp_id)
+            .fetch_one(pool)
+            .await
+            .unwrap();
+    assert_eq!(pending, 1, "уведомление в колокольчике есть");
+    let core_db = pool.clone();
+    let delivered: Vec<(String,)> = sqlx::query_as(
+        "SELECT kind FROM notifications n WHERE n.user_id = $1::uuid AND n.pushed_at IS NULL
+            AND NOT EXISTS (SELECT 1 FROM user_profiles p WHERE p.user_id = n.user_id AND p.presence = 'dnd')",
+    )
+    .bind(&emp_id)
+    .fetch_all(&core_db)
+    .await
+    .unwrap();
+    assert!(delivered.is_empty(), "условие рассылки отсекает «не беспокоить»");
+
+    // «Невидимка»: коллеги видят «не в сети» и без своего статуса, сам — выбранное.
+    emp.put("/api/me/status", json!({"presence": "invisible", "status_text": "тут"})).await;
+    emp.post("/api/me/heartbeat", json!({"idle": false})).await;
+    let (_, card) = admin.get(&format!("/api/users/{emp_id}/card")).await;
+    assert_eq!((card["presence"].as_str(), card["status_text"].is_null()), (Some("offline"), true), "{card}");
+    let (_, mine) = emp.get(&format!("/api/users/{emp_id}/card")).await;
+    assert_eq!((mine["is_me"].as_bool(), mine["status_text"].as_str()), (Some(true), Some("тут")), "{mine}");
+    emp.put("/api/me/status", json!({"presence": "auto"})).await;
+
+    // Аватар: только JPEG/PNG/WebP/GIF по сигнатуре, до 1 МБ; SVG под видом картинки — отказ.
+    let png = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDRtest".to_vec();
+    let (code, c) = emp.put("/api/me/avatar", json!({"data": b64.encode(&png)})).await;
+    assert_eq!(code, StatusCode::OK, "{c}");
+    let ver = c["avatar"].as_str().unwrap().to_string();
+    assert_eq!(ver.len(), 12);
+    let svg = b"<svg xmlns=\"http://www.w3.org/2000/svg\"><script>alert(1)</script></svg>";
+    let (code, e) = emp.put("/api/me/avatar", json!({"data": b64.encode(svg)})).await;
+    assert_eq!((code, e["error"].as_str()), (StatusCode::BAD_REQUEST, Some("invalid_image")), "{e}");
+    let gif =
+        b"GIF89a\x01\0\x01\0\x80\0\0\0\0\0\xff\xff\xff!\xf9\x04\x01\0\0\0\0,\0\0\0\0\x01\0\x01\0\0\x02\x02D\x01\0;";
+    let (code, c) = emp.put("/api/me/avatar", json!({"data": b64.encode(gif)})).await;
+    assert_eq!(code, StatusCode::OK, "GIF принимается как есть: {c}");
+    assert_ne!(c["avatar"].as_str(), Some(ver.as_str()), "новая картинка — новая версия адреса");
+    let (code, c) = emp.put("/api/me/avatar", json!({"data": b64.encode(&png)})).await;
+    assert_eq!((code, c["avatar"].as_str()), (StatusCode::OK, Some(ver.as_str())));
+    let big = [b"GIF89a".as_slice(), &vec![0u8; 1100 * 1024]].concat();
+    assert_eq!(emp.put("/api/me/avatar", json!({"data": b64.encode(&big)})).await.1["error"], "avatar_too_large");
+    assert_eq!(emp.put("/api/me/avatar", json!({"data": "не base64"})).await.1["error"], "invalid_image");
+    assert_eq!(admin.get(&format!("/api/users/{emp_id}/avatar?v={ver}")).await.0, StatusCode::OK, "виден коллегам");
+    assert_eq!(admin.get(&format!("/api/users/{admin_id}/avatar")).await.0, StatusCode::NOT_FOUND);
+    let (_, list) = admin.get(&format!("/api/users/presence?users={emp_id}")).await;
+    assert_eq!(p(&list)["avatar"], ver.as_str());
+    // Убрать чужой аватар — только модератор, с записью в аудит.
+    assert_eq!(emp.delete(&format!("/api/users/{admin_id}/avatar")).await.0, StatusCode::FORBIDDEN);
+    assert_eq!(admin.delete(&format!("/api/users/{emp_id}/avatar")).await.0, StatusCode::NO_CONTENT);
+    let audited: i64 = sqlx::query_scalar("SELECT count(*) FROM audit_log WHERE action = 'profile.avatar_removed'")
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    assert_eq!(audited, 1);
+    emp.put("/api/me/avatar", json!({"data": b64.encode(&png)})).await;
+    assert_eq!(emp.delete("/api/me/avatar").await.0, StatusCode::NO_CONTENT);
+
+    // «О себе».
+    let about = json!({"about": "Бухгалтерия, 1С.\nЗвонить после обеда.", "wall_mode": "everyone"});
+    let (code, c) = emp.put("/api/me/about", about).await;
+    assert_eq!((code, c["about"].as_str()), (StatusCode::OK, Some("Бухгалтерия, 1С.\nЗвонить после обеда.")), "{c}");
+    let long = json!({"about": "x".repeat(1001), "wall_mode": "everyone"});
+    assert_eq!(emp.put("/api/me/about", long).await.1["error"], "too_long");
+    assert!(emp.put("/api/me/about", json!({"about": "", "wall_mode": "all"})).await.0.is_client_error());
+
+    // Стена: коллега пишет, владелец получает уведомление; ответы, отметки, удаление.
+    let (code, post) = admin.post(&wall, json!({"body": "С днём рождения!"})).await;
+    assert_eq!(code, StatusCode::OK, "{post}");
+    let post_id = post["id"].as_str().unwrap().to_string();
+    assert_eq!(
+        (post["can_delete"].as_bool(), post["author"]["user_id"].as_str()),
+        (Some(true), Some(admin_id.as_str()))
+    );
+    let kinds: Vec<String> =
+        sqlx::query_scalar("SELECT kind FROM notifications WHERE user_id = $1::uuid ORDER BY created_at DESC LIMIT 1")
+            .bind(&emp_id)
+            .fetch_all(pool)
+            .await
+            .unwrap();
+    assert_eq!(kinds, ["people.wall_post"]);
+    let (code, reply) = emp.post(&wall, json!({"body": "Спасибо!", "parent_id": post_id})).await;
+    assert_eq!(code, StatusCode::OK, "{reply}");
+    let told: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM notifications WHERE user_id = $1::uuid AND kind = 'people.wall_reply'",
+    )
+    .bind(&admin_id)
+    .fetch_one(pool)
+    .await
+    .unwrap();
+    assert_eq!(told, 1, "автор записи узнаёт об ответе");
+    assert_eq!(emp.post(&wall, json!({"body": "   "})).await.1["error"], "empty");
+    let reply_id = reply["id"].as_str().unwrap().to_string();
+    let nested = emp.post(&wall, json!({"body": "ответ на ответ", "parent_id": reply_id})).await.0;
+    assert_eq!(nested, StatusCode::NOT_FOUND, "ответы — один уровень");
+    let (code, l) = emp.put(&format!("/api/wall/{post_id}/like"), json!({})).await;
+    assert_eq!((code, l["likes"].as_i64(), l["liked"].as_bool()), (StatusCode::OK, Some(1), Some(true)), "{l}");
+    emp.put(&format!("/api/wall/{post_id}/like"), json!({})).await;
+    let (code, page) = admin.get(&wall).await;
+    assert_eq!(code, StatusCode::OK, "{page}");
+    let first = page["posts"].as_array().unwrap().iter().find(|x| x["id"] == post_id.as_str()).unwrap();
+    assert_eq!(
+        (first["likes"].as_i64(), first["liked"].as_bool(), first["replies"].as_array().unwrap().len()),
+        (Some(1), Some(false), 1),
+        "{page}"
+    );
+    assert_eq!(page["more"], false);
+    // Модератор удаляет чужой ответ — с записью в аудит.
+    assert_eq!(admin.delete(&format!("/api/wall/{reply_id}")).await.0, StatusCode::NO_CONTENT);
+    let (_, page) = admin.get(&wall).await;
+    let first = page["posts"].as_array().unwrap().iter().find(|x| x["id"] == post_id.as_str()).unwrap();
+    assert!(first["replies"].as_array().unwrap().is_empty());
+    let removed: i64 = sqlx::query_scalar("SELECT count(*) FROM audit_log WHERE action = 'profile.wall_post_removed'")
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    assert_eq!(removed, 1, "удаление модератором — в аудите");
+    assert_eq!(emp.delete(&format!("/api/wall/{post_id}")).await.0, StatusCode::NO_CONTENT, "владелец стены удаляет");
+    let (_, page) = admin.get(&wall).await;
+    assert!(
+        !page["posts"].as_array().unwrap().iter().any(|x| x["id"] == post_id.as_str()),
+        "удалённая без ответов не видна"
+    );
+
+    // «Только я»: коллеги не пишут новых записей, но отвечают; «выключена» — стены нет для коллег.
+    emp.put("/api/me/about", json!({"about": "", "wall_mode": "me"})).await;
+    let (code, e) = admin.post(&wall, json!({"body": "привет"})).await;
+    assert_eq!((code, e["error"].as_str()), (StatusCode::FORBIDDEN, Some("wall_closed")), "{e}");
+    let (_, own) = emp.post(&wall, json!({"body": "Мой пост"})).await;
+    let own_id = own["id"].as_str().unwrap().to_string();
+    assert_eq!(admin.post(&wall, json!({"body": "ответ", "parent_id": own_id})).await.0, StatusCode::OK);
+    emp.put("/api/me/about", json!({"about": "", "wall_mode": "off"})).await;
+    assert_eq!(admin.get(&wall).await.0, StatusCode::NOT_FOUND);
+    assert_eq!(emp.get(&wall).await.0, StatusCode::OK, "владелец свою выключенную стену видит");
+    assert_eq!(emp.post(&wall, json!({"body": "x"})).await.0, StatusCode::FORBIDDEN);
+    emp.put("/api/me/about", json!({"about": "", "wall_mode": "everyone"})).await;
+
+    // Чужая запись на чужой стене: обычный сотрудник удалить не может.
+    let (_, on_admin) = admin.post(&format!("/api/users/{admin_id}/wall"), json!({"body": "моя стена"})).await;
+    let id = on_admin["id"].as_str().unwrap().to_string();
+    assert_eq!(emp.delete(&format!("/api/wall/{id}")).await.0, StatusCode::FORBIDDEN);
+    assert_eq!(emp.get("/api/users/00000000-0000-0000-0000-000000000000/card").await.0, StatusCode::NOT_FOUND);
 }
 
 /// Уведомления на устройства: выключены по умолчанию, подписки — только к службам push, закрытый ключ VAPID

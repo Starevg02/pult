@@ -266,7 +266,9 @@
         "chain_broken": "审计日志完整性已被破坏"
       },
       "people": {
-        "link_candidates": "有 AD 账户等待确认关联"
+        "link_candidates": "有 AD 账户等待确认关联",
+        "wall_post": "你的留言墙有新留言",
+        "wall_reply": "有人回复了你的留言"
       },
       "core": {
         "role_granted": "您已被授予角色"
@@ -2179,6 +2181,91 @@
     },
     "leave": "退出聊天",
     "ownerHint": "所有者不能退出：由超级管理员转让所有权。"
+  },
+  "people": {
+    "presence": {
+      "label": "在线状态",
+      "online": "在线",
+      "away": "离开",
+      "dnd": "请勿打扰",
+      "offline": "离线"
+    },
+    "mode": {
+      "auto": "自动",
+      "away": "离开",
+      "dnd": "请勿打扰",
+      "invisible": "隐身"
+    },
+    "status": {
+      "title": "状态",
+      "set": "设置状态",
+      "emoji": "图标",
+      "text": "状态文字",
+      "placeholder": "在忙什么？",
+      "clearAfter": "清除时间",
+      "clearNow": "清除状态",
+      "clear": {
+        "never": "不清除",
+        "30m": "30 分钟",
+        "1h": "1 小时",
+        "4h": "4 小时",
+        "today": "今天",
+        "week": "本周"
+      },
+      "preset": {
+        "vacation": "休假中",
+        "sick": "病假",
+        "remote": "远程办公",
+        "meeting": "开会中",
+        "lunch": "午餐",
+        "onTheRoad": "在路上"
+      }
+    },
+    "myPage": "我的主页",
+    "openPage": "员工主页",
+    "editProfile": "编辑资料",
+    "message": "发消息",
+    "removeAvatar": "移除头像",
+    "removeAvatarConfirm": "移除该员工的头像？此操作会记入审计日志。",
+    "avatarRemoved": "头像已移除",
+    "workPhone": "工作电话",
+    "ext": "分机",
+    "mobile": "手机",
+    "room": "办公室",
+    "about": "关于我",
+    "profile": {
+      "title": "同事可见的资料",
+      "hint": "头像、“关于我”和留言墙会在你的主页上向同事展示。",
+      "aboutHint": "你负责什么、可以找你咨询哪些问题。最多 1000 字。",
+      "uploadAvatar": "上传头像",
+      "changeAvatar": "更换头像",
+      "removeAvatar": "移除头像",
+      "avatarSaved": "头像已保存",
+      "badImage": "无法读取图片。支持 JPEG、PNG、WebP 或 GIF。",
+      "tooLarge": "图片压缩后仍然过大。",
+      "gifTooLarge": "GIF 大于 1 MB：请缩小尺寸或减少帧数。",
+      "avatarHint": "头像会裁成正方形；GIF 保留动画并缩放到圆形中。"
+    },
+    "wall": {
+      "title": "留言墙",
+      "offHint": "该员工已关闭留言墙。",
+      "placeholder": "在 {{name}} 的留言墙上留言",
+      "placeholderMine": "有什么新鲜事？",
+      "empty": "暂无留言。",
+      "more": "显示更多",
+      "reply": "回复",
+      "post": "发布",
+      "replyPlaceholder": "你的回复",
+      "deleteConfirm": "删除这条留言？",
+      "deleted": "留言已删除",
+      "like": "赞",
+      "mode": "谁可以在我的留言墙上发帖",
+      "modes": {
+        "everyone": "所有同事",
+        "me": "仅我本人，同事可回复",
+        "off": "关闭留言墙"
+      }
+    }
   },
   "chatAdmin": {
     "hint": "不含消息的群聊：管理员无法阅读会话，私人对话不在此列出。指定所有者（包括您自己）会记录到审计日志。",

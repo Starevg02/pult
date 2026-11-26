@@ -1,6 +1,21 @@
 # Каталог переводов сервера: русский<TAB>английский, по алфавиту русского текста.
 # {…} — подстановка из format!; \n в тексте — перевод строки. Полнота: cargo test -p pult-core --test l10n_coverage
 ## Проблема\n\n	## Problem\n\n
+«О себе» — не длиннее {ABOUT_MAX} символов.	"About" must be at most {ABOUT_MAX} characters.
+Записи на этой стене пишет только владелец.	Only the owner can post on this wall.
+Запись — не длиннее {POST_MAX} символов.	A post must be at most {POST_MAX} characters.
+Значок статуса — не длиннее {STATUS_EMOJI_MAX} символов.	The status emoji must be at most {STATUS_EMOJI_MAX} characters.
+Картинка больше 1 МБ.	The image is larger than 1 MB.
+Картинка не прочиталась.	The image could not be read.
+Напишите текст.	Write some text.
+Не больше {LOOKUP_MAX} за раз.	No more than {LOOKUP_MAX} at a time.
+Неверный идентификатор.	Invalid identifier.
+Подходят только JPEG, PNG, WebP и GIF.	Only JPEG, PNG, WebP and GIF are accepted.
+Слишком много записей подряд. Подождите {POST_WINDOW_MINUTES} минут.	Too many posts in a row. Wait {POST_WINDOW_MINUTES} minutes.
+Срок статуса уже прошёл.	The status end time has already passed.
+Статус — не длиннее {STATUS_TEXT_MAX} символов.	The status must be at most {STATUS_TEXT_MAX} characters.
+Стена выключена.	The wall is turned off.
+Удалять неподходящие аватары и записи на стенах сотрудников	Remove inappropriate avatars and wall posts of employees
 CSRF-токен отсутствует или неверен	CSRF token is missing or invalid
 HTTPS настроен вне портала — сертификат меняется там же.	HTTPS is configured outside the portal — change the certificate there.
 Pult (временный сертификат)	Pult (temporary certificate)

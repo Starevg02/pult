@@ -10,6 +10,100 @@ automatically.
 格式：[Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号：[SemVer](https://semver.org/lang/zh-CN/)。
 1.0 版本之前，设置和 API 可能出现不兼容的变更；数据库迁移始终自动执行。
 
+## 0.3.0 — профиль сотрудника: статус, аватар, стена · employee profile: status, avatar, wall · 员工主页：状态、头像、留言墙
+
+### Русский
+
+**Присутствие и статус**
+
+- Присутствие, как в мессенджерах: «В сети», «Отошёл», «Не беспокоить», «Не в сети». Открытая вкладка портала
+  раз в минуту сообщает, что сотрудник на месте; через 10 минут без действий — «Отошёл». Режим выбирается в
+  меню учётной записи: «Автоматически», «Отошёл», «Не беспокоить», «Невидимка» (коллеги видят «Не в сети»).
+- «Не беспокоить» не отправляет уведомления на устройства: они остаются в колокольчике.
+- Свой статус — значок и текст («В отпуске», «На совещании», «Работаю удалённо» или свой) со сроком: 30 минут,
+  час, 4 часа, сегодня, неделя или без срока.
+
+**Аватар и страница сотрудника**
+
+- Аватар загружается в «Мой профиль» → «Профиль для коллег»: картинка обрезается в квадрат и сжимается в
+  браузере, анимированный GIF загружается как есть и сохраняет анимацию; сервер принимает только JPEG, PNG,
+  WebP и GIF до 1 МБ и проверяет содержимое файла, а не расширение.
+- Страница сотрудника (`/people/<id>`): аватар, присутствие, статус, должность, отдел, площадка, контакты из
+  справочника, «О себе» и кнопка «Написать».
+- Аватары и присутствие — в справочнике, в меню учётной записи, в «Сообщениях» (список, шапка личной
+  переписки, участники группы).
+
+**Стена**
+
+- На странице сотрудника — стена: записи коллег, ответы, «Нравится». Владелец выбирает, кто пишет: все
+  коллеги, только он сам (коллеги отвечают) или стена выключена.
+- Владелец стены получает уведомление о новой записи, автор — об ответе. Не больше 30 записей за 10 минут.
+- Новое право «Модерация профилей и стен» (по умолчанию — у суперадминистратора): убрать чужой аватар или
+  запись. Действие попадает в журнал аудита.
+
+**Обновление**
+
+- Миграция `20261127000000_profile` добавляет таблицы профиля, аватаров и стены; данные не меняются.
+
+### English
+
+**Presence and status**
+
+- Messenger-style presence: Online, Away, Do not disturb, Offline. An open portal tab reports once a minute
+  that the employee is around; after 10 minutes without input they show as Away. The mode is picked in the
+  account menu: Automatic, Away, Do not disturb, Invisible (colleagues see Offline).
+- Do not disturb stops notifications from going to devices: they stay in the bell.
+- Custom status — an emoji and text ("On vacation", "In a meeting", "Working remotely" or your own) with an end
+  time: 30 minutes, an hour, 4 hours, today, this week or none.
+
+**Avatar and employee page**
+
+- Upload an avatar in My profile → Profile for colleagues: the browser crops the picture to a square and
+  shrinks it, an animated GIF is uploaded as is and keeps its animation; the server accepts only JPEG, PNG,
+  WebP and GIF up to 1 MB and checks the file content, not the extension.
+- Employee page (`/people/<id>`): avatar, presence, status, position, department, site, phonebook contacts,
+  About, and a Message button.
+- Avatars and presence appear in the phonebook, the account menu and Messages (list, direct chat header,
+  group members).
+
+**Wall**
+
+- The employee page has a wall: colleagues' posts, replies and likes. The owner chooses who can post: all
+  colleagues, only the owner (colleagues reply) or nobody (wall off).
+- The wall owner is notified about new posts, the author about replies. At most 30 posts per 10 minutes.
+- New permission "Moderate profiles and walls" (superadmin by default): remove someone's avatar or post. The
+  action is recorded in the audit log.
+
+**Upgrade**
+
+- Migration `20261127000000_profile` adds the profile, avatar and wall tables; existing data is untouched.
+
+### 中文
+
+**在线状态与个人状态**
+
+- 类似即时通讯软件的在线状态：在线、离开、请勿打扰、离线。打开的门户页面每分钟报告一次员工在线；10 分钟无操作后显示为
+  “离开”。在账户菜单中选择模式：自动、离开、请勿打扰、隐身（同事看到“离线”）。
+- “请勿打扰”时通知不会推送到设备，只保留在铃铛中。
+- 自定义状态：图标和文字（“休假中”“开会中”“远程办公”或自定义），可设置结束时间：30 分钟、1 小时、4 小时、今天、本周或不清除。
+
+**头像与员工主页**
+
+- 在“我的资料”→“同事可见的资料”中上传头像：浏览器将图片裁成正方形并压缩，动态 GIF 原样上传并保留动画；服务器只接受
+  1 MB 以内的 JPEG、PNG、WebP 和 GIF，并检查文件内容而非扩展名。
+- 员工主页（`/people/<id>`）：头像、在线状态、个人状态、职位、部门、站点、通讯录联系方式、“关于我”和“发消息”按钮。
+- 头像和在线状态显示在通讯录、账户菜单和“消息”中（列表、私聊标题、群成员）。
+
+**留言墙**
+
+- 员工主页上有留言墙：同事的留言、回复和点赞。主人可以选择谁能发帖：所有同事、仅本人（同事可回复）或关闭留言墙。
+- 有新留言时通知墙的主人，有回复时通知作者。每 10 分钟最多 30 条。
+- 新权限“管理资料和留言墙”（默认属于超级管理员）：移除他人的头像或留言。该操作记入审计日志。
+
+**升级**
+
+- 迁移 `20261127000000_profile` 新增资料、头像和留言墙的表；现有数据不变。
+
 ## 0.2.1 — удобство и исправления после пилота · usability and fixes after the pilot · 试点后的易用性改进与修复
 
 ### Русский

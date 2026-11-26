@@ -268,7 +268,9 @@
         "chain_broken": "Audit log integrity is broken"
       },
       "people": {
-        "link_candidates": "AD accounts are waiting for link confirmation"
+        "link_candidates": "AD accounts are waiting for link confirmation",
+        "wall_post": "New post on your wall",
+        "wall_reply": "Reply to your post"
       },
       "core": {
         "role_granted": "You were granted a role"
@@ -2186,6 +2188,91 @@
     },
     "leave": "Leave the chat",
     "ownerHint": "The owner cannot leave: a superadministrator transfers ownership."
+  },
+  "people": {
+    "presence": {
+      "label": "Presence",
+      "online": "Online",
+      "away": "Away",
+      "dnd": "Do not disturb",
+      "offline": "Offline"
+    },
+    "mode": {
+      "auto": "Automatic",
+      "away": "Away",
+      "dnd": "Do not disturb",
+      "invisible": "Invisible"
+    },
+    "status": {
+      "title": "Status",
+      "set": "Set a status",
+      "emoji": "Emoji",
+      "text": "Status text",
+      "placeholder": "What are you up to?",
+      "clearAfter": "Clear after",
+      "clearNow": "Clear status",
+      "clear": {
+        "never": "Don't clear",
+        "30m": "30 minutes",
+        "1h": "1 hour",
+        "4h": "4 hours",
+        "today": "Today",
+        "week": "This week"
+      },
+      "preset": {
+        "vacation": "On vacation",
+        "sick": "Out sick",
+        "remote": "Working remotely",
+        "meeting": "In a meeting",
+        "lunch": "Lunch",
+        "onTheRoad": "On the road"
+      }
+    },
+    "myPage": "My page",
+    "openPage": "Employee page",
+    "editProfile": "Edit profile",
+    "message": "Message",
+    "removeAvatar": "Remove avatar",
+    "removeAvatarConfirm": "Remove this employee's avatar? The action is recorded in the audit log.",
+    "avatarRemoved": "Avatar removed",
+    "workPhone": "Work phone",
+    "ext": "Extension",
+    "mobile": "Mobile",
+    "room": "Room",
+    "about": "About",
+    "profile": {
+      "title": "Profile for colleagues",
+      "hint": "Your avatar, about text and wall are shown to colleagues on your page.",
+      "aboutHint": "What you do and what people can ask you about. Up to 1000 characters.",
+      "uploadAvatar": "Upload avatar",
+      "changeAvatar": "Change avatar",
+      "removeAvatar": "Remove avatar",
+      "avatarSaved": "Avatar saved",
+      "badImage": "Couldn't read the image. JPEG, PNG, WebP or GIF will do.",
+      "tooLarge": "The image is too large even after compression.",
+      "gifTooLarge": "The GIF is larger than 1 MB: reduce its size or number of frames.",
+      "avatarHint": "The avatar is cropped to a square; a GIF keeps its animation and is fitted into the circle."
+    },
+    "wall": {
+      "title": "Wall",
+      "offHint": "This employee has turned the wall off.",
+      "placeholder": "Write on {{name}}'s wall",
+      "placeholderMine": "What's new?",
+      "empty": "No posts yet.",
+      "more": "Show more",
+      "reply": "Reply",
+      "post": "Post",
+      "replyPlaceholder": "Your reply",
+      "deleteConfirm": "Delete this post?",
+      "deleted": "Post deleted",
+      "like": "Like",
+      "mode": "Who can post on my wall",
+      "modes": {
+        "everyone": "All colleagues",
+        "me": "Only me, colleagues reply",
+        "off": "Wall turned off"
+      }
+    }
   },
   "chatAdmin": {
     "hint": "Group chats without messages: an administrator cannot read conversations, and direct messages are not listed here. Assigning an owner (including yourself) is recorded in the audit log.",

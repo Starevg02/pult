@@ -20,6 +20,8 @@
   --accentsoft: light-dark(#eef0ff, #23274a);
   --ok: light-dark(#146c36, #86efac);
   --bad: light-dark(#b91c1c, #fca5a5);
+  /* «Нет на месте» в статусе присутствия. */
+  --away: light-dark(#b45309, #fcd34d);
 }
 
 @theme inline {
@@ -37,6 +39,7 @@
   --color-accentsoft: var(--accentsoft);
   --color-ok: var(--ok);
   --color-bad: var(--bad);
+  --color-away: var(--away);
   --font-sans: Inter, system-ui, sans-serif;
   --font-mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
 }

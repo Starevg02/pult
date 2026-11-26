@@ -15,6 +15,8 @@ type TicketPayload = { number?: number; title?: string; error?: unknown };
 type AlertPayload = { source?: string; title?: string; host?: string | null };
 // Коммуникации: чат и его название.
 type ChatPayload = { chat?: string; title?: string | null };
+// Стена профиля: чья стена и текст записи.
+type WallPayload = { wall?: string; title?: string };
 
 export function NotificationsPage() {
   const { t, i18n } = useTranslation();
@@ -54,6 +56,10 @@ export function NotificationsPage() {
                   ) : typeof (n.payload as unknown as ChatPayload).chat === "string" ? (
                     <Link to="/chats/$id" params={{ id: String((n.payload as unknown as ChatPayload).chat) }} className="block truncate text-xs text-accent" onClick={opened}>
                       {(n.payload as unknown as ChatPayload).title ?? ""}
+                    </Link>
+                  ) : typeof (n.payload as unknown as WallPayload).wall === "string" ? (
+                    <Link to="/people/$id" params={{ id: String((n.payload as unknown as WallPayload).wall) }} className="block truncate text-xs text-accent" onClick={opened}>
+                      {(n.payload as unknown as WallPayload).title ?? ""}
                     </Link>
                   ) : typeof (n.payload as unknown as AlertPayload).title === "string" ? (
                     <div className="truncate text-xs text-muted">

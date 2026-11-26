@@ -30,6 +30,7 @@ import { HomePage } from "./pages/HomePage";
 import { NotificationsPage } from "./pages/NotificationsPage";
 import { PhonebookPage } from "./pages/PhonebookPage";
 import { ProfilePage } from "./pages/ProfilePage";
+import { UserPage } from "./pages/people/UserPage";
 import { ApprovalsPage, MyAccessPage } from "./pages/access/AccessPages";
 import { AccessResourcesPage, DirectoryAdminPage } from "./pages/admin/DirectoryPages";
 import { ComputersPage, DevicePage } from "./pages/remote/RemotePages";
@@ -100,6 +101,7 @@ const routeTree = rootRoute.addChildren([
     },
   }),
   page("/phonebook", only("phonebook", PhonebookPage)),
+  page("/people/$id", UserPage),
   page("/tickets", only("helpdesk", MyTicketsPage)),
   ticketsNew,
   page("/catalog", only("helpdesk", CatalogPage)),
