@@ -18,12 +18,16 @@ pub const SWEEP_JOB: &str = "chat.blocked_sweep";
 
 /// Сколько участий закрыто. Заодно убираются вложения, загруженные, но не отправленные за сутки.
 pub async fn sweep_blocked(db: &PgPool) -> Result<u64, sqlx::Error> {
-    let gone = sqlx::query("DELETE FROM chat_files WHERE message_id IS NULL AND created_at < now() - interval '1 day'")
+    // Уборка вложений не должна мешать главному — закрытию доступа отключённым учёткам.
+    match sqlx::query("DELETE FROM chat_files WHERE message_id IS NULL AND created_at < now() - interval '1 day'")
         .execute(db)
-        .await?
-        .rows_affected();
-    if gone > 0 {
-        tracing::info!(count = gone, "удалены неотправленные вложения сообщений");
+        .await
+    {
+        Ok(r) if r.rows_affected() > 0 => {
+            tracing::info!(count = r.rows_affected(), "удалены неотправленные вложения сообщений");
+        }
+        Ok(_) => {}
+        Err(e) => tracing::warn!(error = %e, "неотправленные вложения сообщений не удалены"),
     }
     let rows: Vec<(Uuid, Uuid, String)> = sqlx::query_as(
         "SELECT m.chat_id, m.user_id, m.role

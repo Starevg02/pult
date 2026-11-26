@@ -226,10 +226,22 @@ fn is_assist_call(req: &Request) -> bool {
         && (path.starts_with("/api/helpdesk/assist/") || path == "/api/admin/assist/test")
 }
 
+/// Загрузка файла: вложение заявки или сообщения, пакет агента, аватар (GIF до 15 МБ).
+fn is_upload(req: &Request) -> bool {
+    let path = req.uri().path();
+    UPLOAD_PATHS.contains(&path)
+        || (req.method() == axum::http::Method::PUT && path == "/api/me/avatar")
+        || (req.method() == axum::http::Method::POST
+            && path
+                .strip_prefix("/api/chat/")
+                .and_then(|p| p.strip_suffix("/files"))
+                .is_some_and(|id| !id.contains('/')))
+}
+
 fn deadline_for(req: &Request) -> Duration {
     let len =
         req.headers().get(header::CONTENT_LENGTH).and_then(|v| v.to_str().ok()).and_then(|v| v.parse::<u64>().ok());
-    if UPLOAD_PATHS.contains(&req.uri().path()) && len.is_some_and(|l| l > 2 * 1024 * 1024) {
+    if is_upload(req) && len.is_some_and(|l| l > 2 * 1024 * 1024) {
         UPLOAD_DEADLINE
     } else if is_assist_call(req) {
         ASSIST_DEADLINE
@@ -366,6 +378,11 @@ mod tests {
         assert_eq!(with("/api/admin/remote/packages", Some(30 << 20)), UPLOAD_DEADLINE);
         assert_eq!(with("/api/helpdesk/files", Some(1000)), REQUEST_DEADLINE, "маленький файл — обычный срок");
         assert_eq!(with("/api/helpdesk/files", None), REQUEST_DEADLINE);
+        assert_eq!(with("/api/chat/0190a0a0-0000-7000-8000-000000000000/files", Some(50 << 20)), UPLOAD_DEADLINE);
+        assert_eq!(with("/api/chat/a/b/files", Some(50 << 20)), REQUEST_DEADLINE);
+        let avatar =
+            Request::put("/api/me/avatar").header(header::CONTENT_LENGTH, 10u64 << 20).body(Body::empty()).unwrap();
+        assert_eq!(deadline_for(&avatar), UPLOAD_DEADLINE);
         // Заявленная большая длина на вход не продлевает срок: медленное тело держало бы соединение 10 минут.
         assert_eq!(with("/api/auth/login", Some(100 << 20)), REQUEST_DEADLINE);
     }

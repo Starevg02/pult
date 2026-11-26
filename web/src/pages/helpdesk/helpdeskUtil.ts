@@ -79,11 +79,18 @@ export function useServerEvents(enabled: boolean) {
       void qc.invalidateQueries({ queryKey: ["chat-messages"] });
     };
     es.addEventListener("chat", chats);
+    // Стены и лента: новая или удалённая запись.
+    const walls = () => {
+      void qc.invalidateQueries({ queryKey: ["feed"] });
+      void qc.invalidateQueries({ queryKey: ["wall"] });
+    };
+    es.addEventListener("wall", walls);
     es.addEventListener("refresh", () => {
       tickets();
       notifications();
       announcements();
       chats();
+      walls();
     });
     return () => es.close();
   }, [enabled, qc]);

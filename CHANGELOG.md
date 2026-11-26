@@ -10,6 +10,54 @@ automatically.
 格式：[Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号：[SemVer](https://semver.org/lang/zh-CN/)。
 1.0 版本之前，设置和 API 可能出现不兼容的变更；数据库迁移始终自动执行。
 
+## 0.3.2 — лента записей · post feed · 动态
+
+### Русский
+
+- «Лента» в меню: записи со стен всех коллег, новые сверху, с ответами и «Нравится». Новые записи появляются
+  сами, без обновления страницы. Свою запись можно опубликовать прямо из ленты. Выключенные стены в ленту не
+  попадают.
+- Анимированный GIF-аватар уменьшается без ошибки «даже уменьшенный он больше 1 МБ»: в каждый кадр пишется
+  только то, что изменилось, одинаковые кадры склеиваются. Если и так больше 1 МБ, сервер пропускает часть
+  кадров и уменьшает сторону.
+- «Сообщения»: файл, загружающийся при переключении чата или во время правки, больше не теряется; во время
+  отправки можно продолжать прикреплять файлы; файл, брошенный мимо поля, не открывается вместо портала; при
+  вставке текста из Word вместе с ним не прикрепляется картинка.
+- Безопасность и надёжность: загрузка вложений и аватара получает тот же долгий срок, что вложения заявок;
+  суточная квота вложений на сотрудника (1 ГБ) и проверка квоты под блокировкой; ограничено число одновременных
+  скачиваний; символы смены направления текста убираются из имён файлов, сообщений, статуса и записей;
+  уменьшение GIF не обходит предел одновременной работы при оборванном запросе.
+- Профиль: смена статуса не сбрасывает его срок; прозрачная картинка аватара — на белом фоне; справочник не
+  мигает аватарами при поиске; ответы на стене ограничены для каждой записи, а не для всей страницы.
+
+### English
+
+- Feed in the menu: posts from all colleagues' walls, newest first, with replies and likes. New posts appear on
+  their own without reloading. You can post from the feed. Walls that are turned off are not in the feed.
+- An animated GIF avatar no longer fails with "even shrunk it is larger than 1 MB": each frame stores only what
+  changed and identical frames are merged. If it is still larger than 1 MB, the server drops frames and reduces
+  the size.
+- Messages: a file still uploading when you switch chats or start editing is no longer lost; you can keep
+  attaching files while a message is being sent; a file dropped outside the box no longer replaces the portal
+  page; pasting text from Word no longer attaches its preview image.
+- Security and reliability: attachment and avatar uploads get the long upload deadline; a daily attachment quota
+  per employee (1 GB), checked under a lock; concurrent downloads are limited; text direction override characters
+  are removed from file names, messages, statuses and posts; GIF shrinking keeps its concurrency limit when a
+  request is aborted.
+- Profile: changing the status keeps its expiry; a transparent avatar picture gets a white background; the
+  phonebook no longer flickers avatars while searching; wall replies are limited per post, not per page.
+
+### 中文
+
+- 菜单中的“动态”：所有同事留言墙上的帖子，最新的在上方，含回复和点赞。新帖子无需刷新即可自动出现。可以直接在动态中发帖。
+  已关闭的留言墙不会出现在动态中。
+- 动态 GIF 头像不再出现“缩小后仍大于 1 MB”的错误：每帧只保存变化的部分，相同的帧会合并。若仍大于 1 MB，服务器会丢弃部分帧并缩小尺寸。
+- 消息：切换聊天或开始编辑时仍在上传的文件不再丢失；发送过程中可以继续添加附件；拖到输入框外的文件不再替换门户页面；
+  从 Word 粘贴文本时不再附带其预览图片。
+- 安全与可靠性：附件和头像上传使用较长的上传时限；每位员工每日附件配额（1 GB），在锁内检查；限制同时下载数；
+  文件名、消息、状态和帖子中的文字方向控制字符会被移除；请求中断时 GIF 缩小仍遵守并发限制。
+- 个人资料：修改状态不会重置其期限；透明头像图片使用白色背景；在通讯录中搜索时头像不再闪烁；留言墙回复按每条帖子限制，而非按整页。
+
 ## 0.3.1 — вложения в сообщениях · attachments in Messages · 消息附件
 
 ### Русский

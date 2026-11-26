@@ -36,10 +36,14 @@ pub const MAX_FILES: usize = 10;
 /// Неприкреплённые вложения пользователя за сутки: без квоты один сотрудник заполнил бы базу.
 const PENDING_MAX_FILES: i64 = 30;
 const PENDING_MAX_MB: i64 = 300;
+/// Всего загружено одним сотрудником за сутки (и отправленное тоже).
+const DAILY_MAX_MB: i64 = 1024;
 /// Тело загрузки: предел настройки (до 100 МБ) и запас на заголовки формы.
 const UPLOAD_BODY_LIMIT: usize = 105 * 1024 * 1024;
 /// Файл держится в памяти, пока шифруется и пишется: одновременно — не больше стольких загрузок.
 static UPLOADS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(4);
+/// Скачивание тоже расшифровывает файл целиком в памяти.
+static DOWNLOADS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(8);
 /// Обезличенная статистика: меньшие числа не показываются, чтобы по ним нельзя было узнать переписку.
 const MIN_COUNT: i64 = 5;
 
@@ -369,6 +373,7 @@ fn decrypt(core: &Core, blob: &[u8]) -> ApiResult<String> {
 }
 
 fn clean_body(s: &str) -> ApiResult<String> {
+    let s: String = s.chars().filter(|c| !pult_core::files::is_spoofing(*c)).collect();
     let s = s.trim();
     if s.is_empty() {
         return Err(ApiError::bad_request("empty_message", "Сообщение пустое."));
@@ -854,19 +859,7 @@ async fn chat_upload_file(
         });
     }
     m.require_unlocked()?;
-    let (count, bytes): (i64, i64) = sqlx::query_as(
-        "SELECT count(*), coalesce(sum(size), 0)::bigint FROM chat_files
-          WHERE uploaded_by = $1 AND message_id IS NULL AND created_at > now() - interval '1 day'",
-    )
-    .bind(user.user_id)
-    .fetch_one(&core.db)
-    .await?;
-    if count >= PENDING_MAX_FILES || bytes >= PENDING_MAX_MB * 1024 * 1024 {
-        return Err(ApiError::TooManyRequests {
-            message: "Слишком много файлов загружено и не отправлено. Отправьте их или повторите завтра.".into(),
-            retry_after_secs: 3600,
-        });
-    }
+    upload_quota(&core.db, user.user_id, 0).await?;
     let _slot = UPLOADS.try_acquire().map_err(|_| ApiError::TooManyRequests {
         message: "Сервер сейчас принимает много файлов. Повторите через минуту.".into(),
         retry_after_secs: 60,
@@ -874,13 +867,23 @@ async fn chat_upload_file(
     let max_mb = pult_core::files::max_file_mb(&core.db).await?;
     let limit = usize::try_from(max_mb).unwrap_or(usize::MAX).saturating_mul(1024 * 1024);
     let bad = |m: &str| ApiError::bad_request("invalid_file", m);
-    let mut field =
-        form.next_field().await.map_err(|_| bad("Файл не получен."))?.ok_or_else(|| bad("Файл не получен."))?;
+    let too_big = || ApiError::bad_request("file_too_large", format!("Файл больше {max_mb} МБ."));
+    let broken = |e: axum::extract::multipart::MultipartError, m: &str| {
+        if e.status() == StatusCode::PAYLOAD_TOO_LARGE { too_big() } else { bad(m) }
+    };
+    // Поле `file`; другие поля формы пропускаются.
+    let mut field = loop {
+        match form.next_field().await.map_err(|e| broken(e, "Файл не получен."))? {
+            Some(f) if f.name() == Some("file") => break f,
+            Some(_) => continue,
+            None => return Err(bad("Файл не получен.")),
+        }
+    };
     let name = pult_core::files::clean_name(field.file_name().unwrap_or("file"));
     let mut data = Vec::new();
-    while let Some(chunk) = field.chunk().await.map_err(|_| bad("Загрузка оборвалась."))? {
+    while let Some(chunk) = field.chunk().await.map_err(|e| broken(e, "Загрузка оборвалась."))? {
         if data.len() + chunk.len() > limit {
-            return Err(ApiError::bad_request("file_too_large", format!("Файл больше {max_mb} МБ.")));
+            return Err(too_big());
         }
         data.extend_from_slice(&chunk);
     }
@@ -889,8 +892,14 @@ async fn chat_upload_file(
     }
     let mime = pult_core::files::check_type(&name, &data).map_err(|m| ApiError::bad_request("invalid_file", m))?;
     let size = data.len() as i64;
-    let enc = core.secrets.encrypt_bytes(&data).map_err(ApiError::internal)?;
-    drop(data);
+    let enc = core.secrets.encrypt_vec(data).map_err(ApiError::internal)?;
+    // Квота ещё раз — под блокировкой сотрудника: параллельные загрузки не проскочат её вместе.
+    let mut tx = core.db.begin().await?;
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended('chat_files:' || $1::text, 0))")
+        .bind(user.user_id)
+        .execute(&mut *tx)
+        .await?;
+    upload_quota(&mut *tx, user.user_id, size).await?;
     let fid: Uuid = sqlx::query_scalar(
         "INSERT INTO chat_files (chat_id, uploaded_by, name, mime, size, data) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
     )
@@ -900,9 +909,37 @@ async fn chat_upload_file(
     .bind(mime)
     .bind(size)
     .bind(enc)
-    .fetch_one(&core.db)
+    .fetch_one(&mut *tx)
     .await?;
+    tx.commit().await?;
     Ok(Json(ChatFile { id: fid, name, mime: mime.to_string(), size, image: pult_core::files::is_inline_image(mime) }))
+}
+
+/// Квоты загрузки за сутки: неотправленные (число и объём) и всё загруженное; `extra` — размер нового файла.
+async fn upload_quota(db: impl PgExecutor<'_>, user: Uuid, extra: i64) -> ApiResult<()> {
+    let (pending, pending_bytes, total): (i64, i64, i64) = sqlx::query_as(
+        "SELECT count(*) FILTER (WHERE message_id IS NULL),
+                coalesce(sum(size) FILTER (WHERE message_id IS NULL), 0)::bigint,
+                coalesce(sum(size), 0)::bigint
+           FROM chat_files WHERE uploaded_by = $1 AND created_at > now() - interval '1 day'",
+    )
+    .bind(user)
+    .fetch_one(db)
+    .await?;
+    let mb = 1024 * 1024;
+    if pending >= PENDING_MAX_FILES || pending_bytes + extra > PENDING_MAX_MB * mb {
+        return Err(ApiError::TooManyRequests {
+            message: "Слишком много файлов загружено и не отправлено. Отправьте их или повторите завтра.".into(),
+            retry_after_secs: 3600,
+        });
+    }
+    if total + extra > DAILY_MAX_MB * mb {
+        return Err(ApiError::TooManyRequests {
+            message: format!("За сутки загружено больше {DAILY_MAX_MB} МБ файлов. Повторите завтра."),
+            retry_after_secs: 3600,
+        });
+    }
+    Ok(())
 }
 
 /// Скачать вложение. Видят участники, которым видно сообщение (бывший участник — до выхода), а
@@ -937,6 +974,10 @@ async fn chat_get_file(State(core): State<Core>, user: CurrentUser, Path(file): 
     if !visible {
         return Err(ApiError::NotFound);
     }
+    let _slot = DOWNLOADS.try_acquire().map_err(|_| ApiError::TooManyRequests {
+        message: "Сервер сейчас отдаёт много файлов. Повторите через минуту.".into(),
+        retry_after_secs: 30,
+    })?;
     let enc: Vec<u8> =
         sqlx::query_scalar("SELECT data FROM chat_files WHERE id = $1").bind(file).fetch_one(&core.db).await?;
     let data = core.secrets.decrypt_bytes(&enc).map_err(ApiError::internal)?;

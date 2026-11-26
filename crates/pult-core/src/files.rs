@@ -37,9 +37,15 @@ pub fn is_inline_image(mime: &str) -> bool {
 }
 
 /// Имя без пути и управляющих символов.
+/// Символ, которым подменяют видимый текст: смена направления (`report\u{202E}fdp.zip` выглядит как
+/// `reportpiz.pdf`) и невидимые пробелы. Соединитель эмодзи (U+200D) не трогается.
+pub fn is_spoofing(c: char) -> bool {
+    matches!(c, '\u{200B}' | '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}' | '\u{FEFF}')
+}
+
 pub fn clean_name(name: &str) -> String {
     let base = name.rsplit(['/', '\\']).next().unwrap_or(name);
-    let n: String = base.chars().filter(|c| !c.is_control()).take(200).collect();
+    let n: String = base.chars().filter(|c| !c.is_control() && !is_spoofing(*c)).take(200).collect();
     let n = n.trim().trim_matches('.').to_string();
     if n.is_empty() { "file".into() } else { n }
 }
@@ -108,5 +114,12 @@ mod tests {
         assert_eq!(clean_name("C:\\Users\\x\\скрин.png"), "скрин.png");
         assert_eq!(clean_name("a\r\nb.txt"), "ab.txt");
         assert_eq!(clean_name("..."), "file");
+    }
+
+    #[test]
+    fn direction_tricks_are_removed() {
+        assert_eq!(clean_name("отчёт\u{202E}fdp.zip"), "отчётfdp.zip");
+        assert_eq!(clean_name("\u{FEFF}a\u{200B}b.txt"), "ab.txt");
+        assert!(!is_spoofing('\u{200D}'), "соединитель эмодзи остаётся");
     }
 }

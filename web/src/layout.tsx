@@ -13,43 +13,14 @@ import { useHeartbeat, useMyCard } from "./pages/people/profileHooks";
 import { PresencePicker, StatusDialog } from "./pages/people/StatusMenu";
 import { useServerEvents } from "./pages/helpdesk/helpdeskUtil";
 import { CloseButton, Dialog, Input, Toaster } from "./ui";
-import {
-  IconAlert,
-  IconArrowLeft,
-  IconBell,
-  IconBook,
-  IconBox,
-  IconChart,
-  IconCheckCircle,
-  IconChevronDown,
-  IconChat,
-  IconColumns,
-  IconContacts,
-  IconHome,
-  IconInbox,
-  IconKey,
-  IconLogout,
-  IconMenu,
-  IconMonitor,
-  IconMoon,
-  IconPlus,
-  IconPlusSquare,
-  IconRotate,
-  IconSearch,
-  IconSettings,
-  IconShield,
-  IconSparkles,
-  IconSun,
-  IconTicket,
-  IconUser,
-} from "./icons";
+import { IconAlert, IconArrowLeft, IconBell, IconBook, IconBox, IconChart, IconChat, IconCheckCircle, IconChevronDown, IconColumns, IconContacts, IconHome, IconInbox, IconKey, IconLogout, IconMegaphone, IconMenu, IconMonitor, IconMoon, IconPlus, IconPlusSquare, IconRotate, IconSearch, IconSettings, IconShield, IconSparkles, IconSun, IconTicket, IconUser } from "./icons";
 import { adminGroups, visibleItems } from "./pages/admin/adminMenu";
 import { OrgWizard } from "./pages/OrgWizard";
 import { fullName } from "./pages/phonebookUtil";
 import { useAssist } from "./pages/helpdesk/useAssist";
 import { useChatUnread } from "./pages/chat/chatUtil";
 
-type NavItem = { to: string; key: "home" | "phonebook" | "tickets" | "catalog" | "newTicket" | "desk" | "problems" | "changes" | "vault" | "assistant" | "kb" | "assets" | "computers" | "reports" | "settings" | "access" | "approvals" | "myAssets" | "chats" };
+type NavItem = { to: string; key: "home" | "phonebook" | "tickets" | "catalog" | "newTicket" | "desk" | "problems" | "changes" | "vault" | "assistant" | "kb" | "assets" | "computers" | "reports" | "settings" | "access" | "approvals" | "myAssets" | "chats" | "feed" };
 
 function useNotifications() {
   return useQuery({
@@ -332,6 +303,7 @@ const NAV_ICONS: Record<NavItem["key"], (p: { size?: number; className?: string 
   reports: IconChart,
   phonebook: IconContacts,
   chats: IconChat,
+  feed: IconMegaphone,
   settings: IconSettings,
 };
 
@@ -412,6 +384,7 @@ function Shell({ me }: { me: Me }) {
   const chatPending = modules === undefined;
   const daily: NavItem[] = [
     { to: "/", key: "home" },
+    { to: "/feed", key: "feed" },
     ...when(modules?.chat === true, { to: "/chats", key: "chats" }),
     ...when(hd, { to: "/tickets", key: "tickets" }, { to: "/catalog", key: "catalog" }),
   ];

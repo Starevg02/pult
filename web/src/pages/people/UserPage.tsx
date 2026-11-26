@@ -1,15 +1,15 @@
 // Страница сотрудника: аватар, присутствие и свой статус, должность и контакты, «о себе», стена.
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { api, ok, type Likes, type UserCard, type WallPage, type WallPost } from "../../api/client";
-import { formatDate } from "../../format";
-import { IconChat, IconHeart, IconMail, IconPhone, IconTrash } from "../../icons";
+import { api, ok, type UserCard, type WallPage } from "../../api/client";
+import { IconChat, IconMail, IconPhone } from "../../icons";
 import { useModule } from "../../session";
 import { toast } from "../../toast";
 import { Button, Card, Empty, ErrorBox, Spinner } from "../../ui";
 import { UserAvatar } from "./presence";
+import { PostCard, WallComposer } from "./WallParts";
 
 export function UserPage() {
   const { id } = useParams({ strict: false }) as { id: string };
@@ -105,7 +105,7 @@ export function UserPage() {
           </div>
         )}
       </Card>
-      {(c.wall_mode !== "off" || c.is_me) && <Wall card={c} />}
+      {(c.wall_mode !== "off" || c.is_me) && <Wall key={c.user_id} card={c} />}
     </div>
   );
 }
@@ -135,12 +135,12 @@ function Wall({ card }: { card: UserCard }) {
         {t("people.wall.title")}
       </h2>
       {card.wall_mode === "off" && <p className="px-1 text-sm text-muted">{t("people.wall.offHint")}</p>}
-      {card.can_post && <Composer wall={id} placeholder={card.is_me ? t("people.wall.placeholderMine") : t("people.wall.placeholder", { name: card.display_name })} />}
+      {card.can_post && <WallComposer wall={id} placeholder={card.is_me ? t("people.wall.placeholderMine") : t("people.wall.placeholder", { name: card.display_name })} />}
       {q.isPending && <Spinner variant="list" />}
       {q.error && <ErrorBox error={q.error} onRetry={() => void q.refetch()} />}
       {q.data && posts.length === 0 && <Empty>{t("people.wall.empty")}</Empty>}
       {posts.map((post) => (
-        <PostCard key={post.id} wall={id} post={post} canReply={card.wall_mode !== "off"} />
+        <PostCard key={post.id} post={post} canReply={card.wall_mode !== "off"} />
       ))}
       {q.hasNextPage && (
         <div className="flex justify-center">
@@ -150,146 +150,5 @@ function Wall({ card }: { card: UserCard }) {
         </div>
       )}
     </section>
-  );
-}
-
-function Composer({ wall, parent, placeholder, onDone }: { wall: string; parent?: string; placeholder: string; onDone?: () => void }) {
-  const { t } = useTranslation();
-  const qc = useQueryClient();
-  const [body, setBody] = useState("");
-  const send = useMutation({
-    mutationFn: () => ok<WallPost>(api.POST("/api/users/{id}/wall", { params: { path: { id: wall } }, body: { body, parent_id: parent ?? null } })),
-    onSuccess: () => {
-      setBody("");
-      void qc.invalidateQueries({ queryKey: ["wall", wall] });
-      onDone?.();
-    },
-  });
-  const submit = (e: { preventDefault(): void }) => {
-    e.preventDefault();
-    if (body.trim()) send.mutate();
-  };
-  return (
-    <form onSubmit={submit} className={parent ? "mt-2" : ""}>
-      <Card className={parent ? "border-0 bg-transparent p-0 shadow-none" : "p-3"}>
-        <textarea
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) submit(e);
-          }}
-          rows={parent ? 2 : 3}
-          maxLength={2000}
-          aria-label={placeholder}
-          placeholder={placeholder}
-          className="w-full resize-y rounded-lg border border-control bg-paper px-3 py-2 text-sm"
-        />
-        {send.error && <p className="mt-1 text-sm text-bad">{send.error.message}</p>}
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <span className="text-xs text-muted">{body.length > 1800 ? `${body.length} / 2000` : ""}</span>
-          <Button type="submit" variant="primary" disabled={send.isPending || !body.trim()}>
-            {parent ? t("people.wall.reply") : t("people.wall.post")}
-          </Button>
-        </div>
-      </Card>
-    </form>
-  );
-}
-
-function PostCard({ wall, post, canReply }: { wall: string; post: WallPost; canReply: boolean }) {
-  const { t } = useTranslation();
-  const [replying, setReplying] = useState(false);
-  return (
-    <Card className="p-3 sm:p-4">
-      <PostBody wall={wall} post={post} />
-      {!post.deleted && (
-        <div className="mt-1 ml-11 flex items-center gap-1">
-          <LikeButton wall={wall} post={post} />
-          {canReply && (
-            <button type="button" className="min-h-8 rounded-lg px-2 text-xs text-muted hover:bg-hover hover:text-ink" onClick={() => setReplying(!replying)} aria-expanded={replying}>
-              {t("people.wall.reply")}
-            </button>
-          )}
-        </div>
-      )}
-      {(post.replies.length > 0 || replying) && (
-        <div className="mt-2 ml-5 space-y-3 border-l-2 border-line pl-4 sm:ml-11">
-          {post.replies.map((r) => (
-            <div key={r.id}>
-              <PostBody wall={wall} post={r} small />
-              <div className="ml-9">
-                <LikeButton wall={wall} post={r} />
-              </div>
-            </div>
-          ))}
-          {replying && <Composer wall={wall} parent={post.id} placeholder={t("people.wall.replyPlaceholder")} onDone={() => setReplying(false)} />}
-        </div>
-      )}
-    </Card>
-  );
-}
-
-function PostBody({ wall, post, small }: { wall: string; post: WallPost; small?: boolean }) {
-  const { t, i18n } = useTranslation();
-  const qc = useQueryClient();
-  const del = useMutation({
-    mutationFn: () => ok(api.DELETE("/api/wall/{id}", { params: { path: { id: post.id } } })),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["wall", wall] }),
-  });
-  return (
-    <div className="flex gap-3">
-      <Link to="/people/$id" params={{ id: post.author.user_id }} className="shrink-0" aria-hidden="true" tabIndex={-1}>
-        <UserAvatar name={post.author.name} userId={post.author.user_id} avatar={post.author.avatar} size={small ? "xs" : "sm"} />
-      </Link>
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-baseline gap-x-2">
-          <Link to="/people/$id" params={{ id: post.author.user_id }} className="text-sm font-medium hover:underline">
-            {post.author.name}
-          </Link>
-          <span className="text-xs text-muted">{formatDate(post.created_at, i18n.language)}</span>
-          {post.can_delete && (
-            <button
-              type="button"
-              aria-label={t("common.delete")}
-              title={t("common.delete")}
-              disabled={del.isPending}
-              className="ml-auto inline-flex h-7 w-7 items-center justify-center rounded-md text-muted hover:bg-hover hover:text-bad"
-              onClick={() => window.confirm(t("people.wall.deleteConfirm")) && del.mutate()}
-            >
-              <IconTrash size={14} />
-            </button>
-          )}
-        </div>
-        {post.deleted ? (
-          <p className="text-sm text-muted italic">{t("people.wall.deleted")}</p>
-        ) : (
-          <p className="text-sm break-words whitespace-pre-wrap">{post.body}</p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function LikeButton({ wall, post }: { wall: string; post: WallPost }) {
-  const { t } = useTranslation();
-  const qc = useQueryClient();
-  const like = useMutation({
-    mutationFn: () =>
-      ok<Likes>(post.liked ? api.DELETE("/api/wall/{id}/like", { params: { path: { id: post.id } } }) : api.PUT("/api/wall/{id}/like", { params: { path: { id: post.id } } })),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["wall", wall] }),
-  });
-  return (
-    <button
-      type="button"
-      aria-pressed={post.liked}
-      aria-label={t("people.wall.like")}
-      title={t("people.wall.like")}
-      disabled={like.isPending}
-      className={`inline-flex min-h-8 items-center gap-1 rounded-lg px-2 text-xs hover:bg-hover ${post.liked ? "text-bad" : "text-muted"}`}
-      onClick={() => like.mutate()}
-    >
-      <IconHeart size={14} fill={post.liked ? "currentColor" : "none"} />
-      {post.likes > 0 && <span className="tabular-nums">{post.likes}</span>}
-    </button>
   );
 }

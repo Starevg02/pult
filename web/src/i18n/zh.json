@@ -36,7 +36,8 @@
     "vault": "密钥",
     "assistant": "AI 助手",
     "chats": "消息",
-    "catalog": "服务目录"
+    "catalog": "服务目录",
+    "feed": "动态"
   },
   "login": {
     "title": "登录 IT 门户",
@@ -2216,7 +2217,8 @@
         "1h": "1 小时",
         "4h": "4 小时",
         "today": "今天",
-        "week": "本周"
+        "week": "本周",
+        "keep": "保留期限：{{until}}"
       },
       "preset": {
         "vacation": "休假中",
@@ -2270,7 +2272,14 @@
         "everyone": "所有同事",
         "me": "仅我本人，同事可回复",
         "off": "关闭留言墙"
-      }
+      },
+      "likes_other": "赞：{{count}}"
+    },
+    "feed": {
+      "title": "动态",
+      "hint": "同事留言墙上的帖子。新帖子会自动出现。",
+      "empty": "还没有帖子。来写第一条吧！",
+      "onWall": "在 {{name}} 的留言墙上"
     }
   },
   "chatAdmin": {

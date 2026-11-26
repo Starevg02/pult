@@ -828,8 +828,11 @@ NetBox прислал ссылку на другой сервер.	NetBox return
 GIF больше 15 МБ.	The GIF is larger than 15 MB.
 GIF не прочитался или больше 2048 точек по стороне.	The GIF could not be read or is larger than 2048 pixels on a side.
 В GIF больше 300 кадров.	The GIF has more than 300 frames.
-GIF слишком длинный: даже уменьшенный он больше 1 МБ.	The GIF is too long: even shrunk it is larger than 1 MB.
 Вложение не найдено — загрузите его снова.	Attachment not found — upload it again.
 Не больше 10 вложений в одном сообщении.	No more than 10 attachments per message.
 Слишком много файлов загружено и не отправлено. Отправьте их или повторите завтра.	Too many files uploaded and not sent. Send them or try again tomorrow.
 Файл больше {max_mb} МБ.	The file is larger than {max_mb} MB.
+GIF не уменьшается до 1 МБ даже с пропуском кадров. Сократите его.	The GIF does not shrink to 1 MB even with frames dropped. Make it shorter.
+Сервер сейчас уменьшает другие GIF. Повторите через минуту.	The server is shrinking other GIFs right now. Try again in a minute.
+Сервер сейчас отдаёт много файлов. Повторите через минуту.	The server is sending many files right now. Try again in a minute.
+За сутки загружено больше {DAILY_MAX_MB} МБ файлов. Повторите завтра.	More than {DAILY_MAX_MB} MB of files uploaded in a day. Try again tomorrow.

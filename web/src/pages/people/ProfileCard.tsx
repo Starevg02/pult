@@ -8,7 +8,7 @@ import { IconCamera } from "../../icons";
 import { toast } from "../../toast";
 import { Button, Card, ErrorBox, Field, Select, Spinner } from "../../ui";
 import { UserAvatar } from "./presence";
-import { useMyCard } from "./profileHooks";
+import { refreshWalls, useMyCard } from "./profileHooks";
 
 /** Сторона квадрата аватара: в списках он мельче, на странице сотрудника — 96 точек (×2 для чётких экранов). */
 const SIDE = 256;
@@ -35,6 +35,9 @@ async function squareImage(file: File): Promise<Blob> {
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("decode");
     ctx.imageSmoothingQuality = "high";
+    // JPEG не умеет прозрачность: без подложки прозрачный PNG стал бы чёрным.
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, SIDE, SIDE);
     ctx.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, SIDE, SIDE);
     const blob = (type: string) => new Promise<Blob | null>((r) => canvas.toBlob(r, type, 0.85));
     const webp = await blob("image/webp");
@@ -96,6 +99,8 @@ function Editor({ me, card }: { me: Me; card: MyCard }) {
   const fresh = (c: MyCard) => {
     qc.setQueryData(["my-card"], c);
     void qc.invalidateQueries({ queryKey: ["user-card", me.user_id] });
+    void qc.invalidateQueries({ queryKey: ["presence"] });
+    refreshWalls(qc);
   };
   const upload = useMutation({
     mutationFn: async (f: File) => {

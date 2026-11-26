@@ -1257,6 +1257,24 @@ async fn social(admin: &mut Browser, emp: &mut Browser, pool: &PgPool) {
     let (_, on_admin) = admin.post(&format!("/api/users/{admin_id}/wall"), json!({"body": "моя стена"})).await;
     let id = on_admin["id"].as_str().unwrap().to_string();
     assert_eq!(emp.delete(&format!("/api/wall/{id}")).await.0, StatusCode::FORBIDDEN);
+
+    // Лента: записи всех открытых стен, новые сверху, у каждой — чья стена; выключенная стена в ленту не попадает.
+    let (code, feed) = emp.get("/api/feed").await;
+    assert_eq!(code, StatusCode::OK, "{feed}");
+    let posts = feed["posts"].as_array().unwrap();
+    assert_eq!(posts[0]["id"], on_admin["id"], "новая сверху");
+    assert_eq!(posts[0]["wall"]["user_id"].as_str(), Some(admin_id.as_str()));
+    let mine = posts.iter().find(|p| p["id"] == own["id"]).expect("запись со стены сотрудника");
+    assert_eq!(mine["replies"].as_array().map(Vec::len), Some(1), "с ответом");
+    let (_, rest) = emp.get(&format!("/api/feed?before={}", on_admin["id"].as_str().unwrap())).await;
+    assert!(rest["posts"].as_array().unwrap().iter().all(|p| p["id"] != on_admin["id"]), "страница после записи");
+    emp.put("/api/me/about", json!({"about": "", "wall_mode": "off"})).await;
+    let (_, feed) = admin.get("/api/feed").await;
+    assert!(
+        feed["posts"].as_array().unwrap().iter().all(|p| p["wall"]["user_id"].as_str() != Some(emp_id.as_str())),
+        "{feed}"
+    );
+    emp.put("/api/me/about", json!({"about": "", "wall_mode": "everyone"})).await;
     assert_eq!(emp.get("/api/users/00000000-0000-0000-0000-000000000000/card").await.0, StatusCode::NOT_FOUND);
 }
 

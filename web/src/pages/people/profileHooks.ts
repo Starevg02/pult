@@ -1,5 +1,5 @@
 // Данные профиля: своя карточка, присутствие коллег, сигнал открытой вкладки.
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { api, ok, type MyCard, type PresenceEntry, type PresenceMode } from "../../api/client";
 
@@ -7,6 +7,12 @@ export const MODES: PresenceMode[] = ["auto", "away", "dnd", "invisible"];
 
 /** Адрес картинки аватара; версия в адресе меняется вместе с картинкой. */
 export const avatarUrl = (userId: string, version: string) => `/api/users/${userId}/avatar?v=${version}`;
+
+/** Записи стен изменились: перечитать открытые стены и ленту. */
+export function refreshWalls(qc: QueryClient) {
+  void qc.invalidateQueries({ queryKey: ["wall"] });
+  void qc.invalidateQueries({ queryKey: ["feed"] });
+}
 
 export function useMyCard() {
   return useQuery({ queryKey: ["my-card"], queryFn: () => ok<MyCard>(api.GET("/api/me/card")), staleTime: 60_000 });
@@ -35,6 +41,8 @@ export function usePresence({ users = [], persons = [] }: { users?: string[]; pe
     enabled: u.length + p.length > 0,
     refetchInterval: 60_000,
     staleTime: 30_000,
+    // При смене фильтра справочника аватары не мигают, пока грузится новый список.
+    placeholderData: keepPreviousData,
   });
   const byUser = new Map<string, PresenceEntry>();
   const byPerson = new Map<string, PresenceEntry>();

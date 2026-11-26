@@ -2,6 +2,7 @@
 import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import type { MyCard } from "../../api/client";
+import { formatDate } from "../../format";
 import { Button, Dialog, Field, Input, Select } from "../../ui";
 import { PresenceDot } from "./presence";
 import { MODES, useSaveStatus } from "./profileHooks";
@@ -13,13 +14,12 @@ export function PresencePicker({ card, onDone }: { card: MyCard; onDone?: () => 
   const { t } = useTranslation();
   const save = useSaveStatus();
   return (
-    <div role="radiogroup" aria-label={t("people.presence.label")}>
+    <div role="group" aria-label={t("people.presence.label")}>
       {MODES.map((m) => (
         <button
           key={m}
           type="button"
-          role="radio"
-          aria-checked={card.presence === m}
+          aria-pressed={card.presence === m}
           disabled={save.isPending}
           className={`flex min-h-9 w-full items-center gap-2.5 rounded-lg px-2 text-left text-sm hover:bg-hover ${card.presence === m ? "font-medium" : ""}`}
           onClick={() =>
@@ -48,11 +48,14 @@ const PRESETS = [
 ] as const;
 
 const CLEAR_AFTER = ["never", "30m", "1h", "4h", "today", "week"] as const;
-type ClearAfter = (typeof CLEAR_AFTER)[number];
+/** `keep` — оставить срок, который уже стоит. */
+type ClearAfter = (typeof CLEAR_AFTER)[number] | "keep";
 
-function untilOf(c: ClearAfter): string | null {
+function untilOf(c: ClearAfter, current: string | null | undefined): string | null {
   const now = new Date();
   switch (c) {
+    case "keep":
+      return current ?? null;
     case "never":
       return null;
     case "30m":
@@ -73,15 +76,15 @@ function untilOf(c: ClearAfter): string | null {
 
 /** Свой статус: эмодзи, текст, когда очистить. */
 export function StatusDialog({ card, open, onClose }: { card: MyCard; open: boolean; onClose: () => void }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const save = useSaveStatus();
   const [emoji, setEmoji] = useState(card.status_emoji ?? "");
   const [text, setText] = useState(card.status_text ?? "");
-  const [clear, setClear] = useState<ClearAfter>("never");
+  const [clear, setClear] = useState<ClearAfter>(card.status_until ? "keep" : "never");
   const submit = (e: FormEvent) => {
     e.preventDefault();
     save.mutate(
-      { presence: card.presence, status_emoji: emoji.trim() || null, status_text: text.trim() || null, status_until: untilOf(clear) },
+      { presence: card.presence, status_emoji: emoji.trim() || null, status_text: text.trim() || null, status_until: untilOf(clear, card.status_until) },
       { onSuccess: onClose },
     );
   };
@@ -115,6 +118,7 @@ export function StatusDialog({ card, open, onClose }: { card: MyCard; open: bool
         </div>
         <Field label={t("people.status.clearAfter")}>
           <Select value={clear} onChange={(e) => setClear(e.target.value as ClearAfter)}>
+            {card.status_until && <option value="keep">{t("people.status.clear.keep", { until: formatDate(card.status_until, i18n.language) })}</option>}
             {CLEAR_AFTER.map((c) => (
               <option key={c} value={c}>
                 {t(`people.status.clear.${c}`)}

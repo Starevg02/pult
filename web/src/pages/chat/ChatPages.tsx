@@ -5,19 +5,17 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ApiError, api, ok, type ChatDetail, type ChatFile, type ChatItem, type ChatMessage, type ChatPerson, type ChatMemberEvent, type ChatMessageVersion, type PresenceEntry } from "../../api/client";
+import { api, ok, type ChatDetail, type ChatFile, type ChatItem, type ChatMessage, type ChatPerson, type ChatMemberEvent, type ChatMessageVersion, type PresenceEntry } from "../../api/client";
 import { UserAvatar } from "../people/presence";
 import { usePresence } from "../people/profileHooks";
 import { formatDate } from "../../format";
 import { IconArrowLeft, IconFileText, IconPaperclip, IconPlus, IconStar, IconX } from "../../icons";
 import { useMe } from "../../session";
 import { Badge, Button, Card, Dialog, Empty, ErrorBox, Field, Input, MenuButton, Spinner } from "../../ui";
-import { dyn, formatSize, postFile } from "../helpdesk/helpdeskUtil";
-import { useChats } from "./chatUtil";
+import { dyn, formatSize } from "../helpdesk/helpdeskUtil";
+import { dropPending, MAX_FILES, uploadPending, useChats, usePendingFiles } from "./chatUtil";
 
 const area = "w-full resize-none rounded-lg border border-control bg-paper px-3 py-2 text-sm focus:border-accent";
-/** Вложений в одном сообщении (как на сервере). */
-const MAX_FILES = 10;
 const fileUrl = (id: string) => `/api/chat/files/${id}`;
 
 /** Поиск сотрудника (действующие учётки). */
@@ -138,7 +136,7 @@ function ChatRow({ c, active, peer }: { c: ChatItem; active: boolean; peer?: Pre
             )}
             <span className={`truncate ${c.unread > 0 ? "font-semibold" : "font-medium"}`}>{c.title}</span>
           </div>
-          <div className="truncate text-xs text-muted">{c.locked ? t("chat.locked") : (c.preview ?? (c.preview_files > 0 ? `📎 ${t("chat.files", { count: c.preview_files })}` : c.kind === "group" ? t("chat.group") : t("chat.direct")))}</div>
+          <div className="truncate text-xs text-muted">{c.locked ? t("chat.locked") : (c.preview || (c.preview_files > 0 ? `📎 ${t("chat.files", { count: c.preview_files })}` : c.kind === "group" ? t("chat.group") : t("chat.direct")))}</div>
           {!c.active && (
             <div className="mt-0.5">
               <Badge>{t("chat.readOnly")}</Badge>
@@ -410,9 +408,11 @@ function Attachments({ files }: { files: ChatFile[] }) {
   );
 }
 
-/** Неотправленные сообщения и вложения по чатам: не теряются, когда открывают правку другого сообщения или другой чат. */
+/** Неотправленный текст по чатам: не теряется, когда открывают правку другого сообщения или другой чат. */
 const drafts = new Map<string, string>();
-const draftFiles = new Map<string, ChatFile[]>();
+
+/** Перетаскивают файлы (а не выделенный текст). */
+const hasFiles = (e: { dataTransfer: DataTransfer }) => [...e.dataTransfer.types].includes("Files");
 
 function Composer({ chat, editing, onDone }: { chat: string; editing: ChatMessage | null; onDone: () => void }) {
   const { t } = useTranslation();
@@ -425,65 +425,46 @@ function Composer({ chat, editing, onDone }: { chat: string; editing: ChatMessag
       else drafts.delete(chat);
     }
   };
-  const [files, setFilesState] = useState<ChatFile[]>(editing ? [] : (draftFiles.get(chat) ?? []));
-  const filesRef = useRef(files);
-  const setFiles = (v: ChatFile[]) => {
-    filesRef.current = v;
-    setFilesState(v);
-    if (v.length) draftFiles.set(chat, v);
-    else draftFiles.delete(chat);
-  };
-  const [uploading, setUploading] = useState(0);
-  const [uploadError, setUploadError] = useState<string | null>(null);
+  const pendingFiles = usePendingFiles(chat);
+  const files = editing ? [] : pendingFiles.files;
+  const uploading = editing ? 0 : pendingFiles.uploading;
   const picker = useRef<HTMLInputElement>(null);
   const box = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     box.current?.focus();
   }, [editing]);
-  const add = async (list: File[]) => {
-    if (editing || list.length === 0) return;
-    setUploadError(null);
-    const room = MAX_FILES - filesRef.current.length;
-    if (list.length > room) setUploadError(t("chat.tooManyFiles", { count: MAX_FILES }));
-    for (const f of list.slice(0, Math.max(room, 0))) {
-      setUploading((n) => n + 1);
-      try {
-        const u = await postFile<ChatFile>(`/api/chat/${chat}/files`, f);
-        setFiles([...filesRef.current, u]);
-      } catch (e) {
-        setUploadError(e instanceof ApiError ? `${f.name}: ${e.message}` : t("common.error"));
-      } finally {
-        setUploading((n) => n - 1);
-      }
-    }
-  };
   const send = useMutation({
-    mutationFn: (body: string) =>
+    // Отправляется то, что было в поле в момент нажатия: добавленное во время отправки остаётся в черновике.
+    mutationFn: ({ body, ids }: { body: string; ids: string[] }) =>
       editing
         ? ok(api.PUT("/api/chat/{id}/messages/{message}", { params: { path: { id: chat, message: editing.id } }, body: { body } }))
-        : ok(api.POST("/api/chat/{id}/messages", { params: { path: { id: chat } }, body: { body, files: filesRef.current.map((f) => f.id) } })),
-    onSuccess: () => {
-      setText("");
-      if (!editing) setFiles([]);
+        : ok(api.POST("/api/chat/{id}/messages", { params: { path: { id: chat } }, body: { body, files: ids } })),
+    onSuccess: (_, sent) => {
+      if ((editing ? editing.body : (drafts.get(chat) ?? "")) === sent.body || editing) setText("");
+      if (!editing) dropPending(chat, sent.ids);
       onDone();
       void qc.invalidateQueries({ queryKey: ["chat-messages", chat] });
       void qc.invalidateQueries({ queryKey: ["chats"] });
     },
   });
-  const ready = (text.trim() !== "" || (!editing && files.length > 0)) && uploading === 0 && !send.isPending;
+  const ready = (text.trim() !== "" || files.length > 0) && uploading === 0 && !send.isPending;
   const submit = () => {
-    if (ready) send.mutate(text);
+    if (ready) send.mutate({ body: text, ids: files.map((f) => f.id) });
+  };
+  const add = (list: File[]) => {
+    if (!editing && list.length > 0) void uploadPending(chat, list, { tooMany: t("chat.tooManyFiles", { count: MAX_FILES }), failed: t("common.error") });
   };
   return (
     <div
       className="border-t border-line p-2"
+      // Файл, брошенный мимо поля (и во время правки), не открывается браузером вместо портала.
       onDragOver={(e) => {
-        if (!editing) e.preventDefault();
+        if (hasFiles(e)) e.preventDefault();
       }}
       onDrop={(e) => {
-        if (editing) return;
+        if (!hasFiles(e)) return;
         e.preventDefault();
-        void add([...e.dataTransfer.files]);
+        add([...e.dataTransfer.files]);
       }}
     >
       {editing && (
@@ -495,7 +476,7 @@ function Composer({ chat, editing, onDone }: { chat: string; editing: ChatMessag
         </div>
       )}
       {send.error && <ErrorBox error={send.error} />}
-      {(files.length > 0 || uploading > 0 || uploadError) && (
+      {!editing && (files.length > 0 || uploading > 0 || pendingFiles.error) && (
         <div className="mb-1 flex flex-wrap items-center gap-1.5 text-xs">
           {files.map((f) => (
             <span key={f.id} className="inline-flex max-w-full items-center gap-1 rounded-lg bg-sunken px-2 py-1">
@@ -506,7 +487,7 @@ function Composer({ chat, editing, onDone }: { chat: string; editing: ChatMessag
                 type="button"
                 className="rounded p-0.5 text-muted hover:bg-hover"
                 aria-label={t("chat.removeFile", { name: f.name })}
-                onClick={() => setFiles(filesRef.current.filter((x) => x.id !== f.id))}
+                onClick={() => dropPending(chat, [f.id])}
               >
                 <IconX size={12} />
               </button>
@@ -517,9 +498,9 @@ function Composer({ chat, editing, onDone }: { chat: string; editing: ChatMessag
               {t("chat.uploading")}
             </span>
           )}
-          {uploadError && (
+          {pendingFiles.error && (
             <span role="alert" className="text-bad">
-              {uploadError}
+              {pendingFiles.error}
             </span>
           )}
         </div>
@@ -531,7 +512,7 @@ function Composer({ chat, editing, onDone }: { chat: string; editing: ChatMessag
               variant="ghost"
               aria-label={t("chat.attach")}
               title={t("chat.attachHint")}
-              disabled={files.length >= MAX_FILES}
+              disabled={files.length + uploading >= MAX_FILES}
               onClick={() => picker.current?.click()}
             >
               <IconPaperclip size={18} />
@@ -542,7 +523,7 @@ function Composer({ chat, editing, onDone }: { chat: string; editing: ChatMessag
               multiple
               className="hidden"
               onChange={(e) => {
-                void add([...(e.target.files ?? [])]);
+                add([...(e.target.files ?? [])]);
                 e.target.value = "";
               }}
             />
@@ -558,10 +539,11 @@ function Composer({ chat, editing, onDone }: { chat: string; editing: ChatMessag
           className={area}
           onChange={(e) => setText(e.target.value)}
           onPaste={(e) => {
+            // Из Word или браузера вместе с текстом копируется и картинка-превью: тогда вставляется текст.
             const pasted = [...e.clipboardData.files];
-            if (pasted.length > 0 && !editing) {
+            if (pasted.length > 0 && !editing && !e.clipboardData.getData("text/plain")) {
               e.preventDefault();
-              void add(pasted);
+              add(pasted);
             }
           }}
           onKeyDown={(e) => {

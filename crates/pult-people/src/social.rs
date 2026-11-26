@@ -4,7 +4,8 @@
 //! Присутствие считается по сигналу открытой вкладки (`/api/me/heartbeat`, раз в минуту): нет сигнала
 //! дольше [`ONLINE_SECS`] — «не в сети». «Нет на месте» ставит сама вкладка, когда пользователь долго ничего
 //! не делает. «Не беспокоить» глушит уведомления на устройства. Аватар уменьшается в браузере и хранится в
-//! базе; сервер принимает только JPEG, PNG и WebP и проверяет сигнатуру файла, а не только заявленный тип.
+//! базе; анимированный GIF уменьшает сервер ([`shrink_gif`]). Принимаются только JPEG, PNG, WebP и GIF, тип
+//! проверяется по сигнатуре файла, а не по заявленному.
 
 use axum::{
     Json,
@@ -17,6 +18,7 @@ use pult_core::{
     ApiError, ApiResult, Core, CurrentUser, Permission,
     audit::{self, Entry, Source},
     crypto::sha256,
+    events::{self, Event},
     notify,
     rbac::ROLE_SUPERADMIN,
 };
@@ -51,7 +53,8 @@ const GIF_MAX_SIDE: u32 = 2048;
 const GIF_MAX_FRAMES: usize = 300;
 /// Тело запроса с GIF в base64 (на треть длиннее данных) и запасом на JSON.
 pub const AVATAR_BODY_LIMIT: usize = GIF_INPUT_MAX_BYTES / 3 * 4 + 64 * 1024;
-/// Одновременно уменьшается не больше двух GIF: работа для процессора, а не для очереди запросов.
+/// Одновременно уменьшается не больше двух GIF: работа для процессора, а не для очереди запросов. Место
+/// держит сама работа (а не запрос): оборванный запрос не освобождает его, пока GIF ещё уменьшается.
 static GIF_SLOTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
 pub const ABOUT_MAX: usize = 1000;
 pub const STATUS_TEXT_MAX: usize = 100;
@@ -168,14 +171,36 @@ pub enum GifError {
     /// Не читается или больше [`GIF_MAX_SIDE`] по стороне.
     Unreadable,
     TooManyFrames,
-    /// После уменьшения всё ещё больше [`AVATAR_MAX_BYTES`].
+    /// Даже на самой грубой ступени больше [`AVATAR_MAX_BYTES`].
     TooLarge,
 }
 
-/// Уменьшить GIF до квадрата [`AVATAR_SIDE`]: центр кадра, все кадры и их задержки, бесконечный повтор.
-/// Маленький GIF (не больше квадрата и предела) остаётся как есть.
+/// Ступени уменьшения: сторона, каждый какой кадр оставить, допуск «пиксель не изменился» (по каналу).
+/// Сначала — полный квадрат и все кадры; дальше реже кадры и меньше сторона, пока не уложится в предел.
+const GIF_STEPS: [(u32, usize, u8); 6] =
+    [(256, 1, 4), (256, 2, 8), (192, 2, 12), (160, 3, 16), (128, 4, 20), (96, 6, 24)];
+/// Дольше этого ступени не перебираются: работа на сервере, а не бесконечная очередь.
+const GIF_BUDGET: std::time::Duration = std::time::Duration::from_secs(30);
+/// Индекс прозрачного цвета в палитре кадра.
+const CLEAR: u8 = 255;
+
+/// Кадр после обрезки в квадрат и уменьшения: RGBA и задержка в миллисекундах.
+struct GifFrame {
+    rgba: image::RgbaImage,
+    delay_ms: u32,
+}
+
+/// Уменьшить GIF до квадрата [`AVATAR_SIDE`]: центр кадра, бесконечный повтор, задержки сохраняются.
+/// В каждый кадр пишется только изменившаяся часть (остальное прозрачно), одинаковые кадры склеиваются.
+/// Если результат больше [`AVATAR_MAX_BYTES`], кадры прореживаются и сторона уменьшается ([`GIF_STEPS`]).
+/// Маленький GIF (не больше квадрата и предела) остаётся как есть, если все его кадры читаются.
 pub fn shrink_gif(data: &[u8]) -> Result<Vec<u8>, GifError> {
-    use image::{AnimationDecoder, Frame, ImageDecoder, Limits, codecs::gif, imageops};
+    shrink_gif_within(data, GIF_BUDGET)
+}
+
+/// [`shrink_gif`] с заданным сроком работы.
+fn shrink_gif_within(data: &[u8], budget: std::time::Duration) -> Result<Vec<u8>, GifError> {
+    use image::{AnimationDecoder, ImageDecoder, Limits, codecs::gif, imageops};
     let mut dec = gif::GifDecoder::new(std::io::Cursor::new(data)).map_err(|_| GifError::Unreadable)?;
     let mut limits = Limits::default();
     limits.max_image_width = Some(GIF_MAX_SIDE);
@@ -186,41 +211,197 @@ pub fn shrink_gif(data: &[u8]) -> Result<Vec<u8>, GifError> {
     if w == 0 || h == 0 {
         return Err(GifError::Unreadable);
     }
-    if w <= AVATAR_SIDE && h <= AVATAR_SIDE && data.len() <= AVATAR_MAX_BYTES {
-        return Ok(data.to_vec());
-    }
+    let as_is = w <= AVATAR_SIDE && h <= AVATAR_SIDE && data.len() <= AVATAR_MAX_BYTES;
     let side = w.min(h);
     let (x, y) = ((w - side) / 2, (h - side) / 2);
     let out_side = side.min(AVATAR_SIDE);
-    let mut out = Vec::new();
-    {
-        let mut enc = gif::GifEncoder::new_with_speed(&mut out, 10);
-        enc.set_repeat(gif::Repeat::Infinite).map_err(|_| GifError::Unreadable)?;
-        for (i, frame) in dec.into_frames().enumerate() {
-            if i >= GIF_MAX_FRAMES {
-                return Err(GifError::TooManyFrames);
+    let started = std::time::Instant::now();
+    let mut frames = Vec::new();
+    for (i, frame) in dec.into_frames().enumerate() {
+        if i >= GIF_MAX_FRAMES {
+            return Err(GifError::TooManyFrames);
+        }
+        if started.elapsed() > budget {
+            return Err(GifError::TooLarge);
+        }
+        let frame = frame.map_err(|_| GifError::Unreadable)?;
+        if as_is {
+            continue;
+        }
+        let (numer, denom) = frame.delay().numer_denom_ms();
+        let delay_ms = if denom == 0 { 0 } else { numer / denom };
+        let full = frame.into_buffer();
+        let square = imageops::crop_imm(&full, x, y, side, side).to_image();
+        let rgba = if out_side < side {
+            imageops::resize(&square, out_side, out_side, imageops::FilterType::Triangle)
+        } else {
+            square
+        };
+        frames.push(GifFrame { rgba, delay_ms });
+    }
+    // Маленький GIF хранится как есть, но только если все кадры прочитались и их не больше предела.
+    if as_is {
+        return Ok(data.to_vec());
+    }
+    if frames.is_empty() {
+        return Err(GifError::Unreadable);
+    }
+    // С прозрачностью разностные кадры не годятся: прозрачная точка значит «оставить прежнюю».
+    let opaque = frames.iter().all(|f| f.rgba.pixels().all(|p| p[3] == 255));
+    // Размер прошлой попытки: ступень, которая по оценке (площадь кадра и число кадров) всё равно выйдет
+    // заметно больше предела, пропускается — не тратить на неё время.
+    let mut last: Option<(f64, u32, usize)> = None;
+    for (i, (step_side, every, tolerance)) in GIF_STEPS.into_iter().enumerate() {
+        if started.elapsed() > budget {
+            break;
+        }
+        let side = step_side.min(out_side);
+        // Последняя, самая грубая ступень пробуется всегда.
+        if let Some((bytes, s, e)) = last
+            && i + 1 < GIF_STEPS.len()
+        {
+            let guess = bytes * (f64::from(side) / f64::from(s)).powi(2) * (e as f64 / every as f64);
+            if guess > AVATAR_MAX_BYTES as f64 * 1.5 {
+                continue;
             }
-            let frame = frame.map_err(|_| GifError::Unreadable)?;
-            let delay = frame.delay();
-            let full = frame.into_buffer();
-            let square = imageops::crop_imm(&full, x, y, side, side).to_image();
-            let small = if out_side < side {
-                imageops::resize(&square, out_side, out_side, imageops::FilterType::Triangle)
-            } else {
-                square
-            };
-            enc.encode_frame(Frame::from_parts(small, 0, 0, delay)).map_err(|_| GifError::Unreadable)?;
+        }
+        let out = encode_gif(&frames, side, every, if opaque { Some(tolerance) } else { None })?;
+        if out.len() <= AVATAR_MAX_BYTES {
+            return Ok(out);
+        }
+        last = Some((out.len() as f64, side, every));
+    }
+    Err(GifError::TooLarge)
+}
+
+/// Записать кадры квадратом `side`, оставив каждый `every`-й (задержки пропущенных прибавляются).
+/// `diff` — допуск разностных кадров; `None` — каждый кадр целиком (для GIF с прозрачностью).
+fn encode_gif(frames: &[GifFrame], side: u32, every: usize, diff: Option<u8>) -> Result<Vec<u8>, GifError> {
+    use image::imageops;
+    let n = side as usize;
+    let mut out = Vec::new();
+    let mut enc = ::gif::Encoder::new(&mut out, side as u16, side as u16, &[]).map_err(|_| GifError::Unreadable)?;
+    enc.set_repeat(::gif::Repeat::Infinite).map_err(|_| GifError::Unreadable)?;
+    // Что сейчас на экране (исходные цвета последних записанных точек): с ним сравнивается следующий кадр.
+    let mut shown: Option<Vec<u8>> = None;
+    let mut pending: Option<::gif::Frame<'static>> = None;
+    for group in frames.chunks(every.max(1)) {
+        let delay_cs = (group.iter().map(|f| u64::from(f.delay_ms)).sum::<u64>() / 10).min(u64::from(u16::MAX)) as u16;
+        let img = if side == group[0].rgba.width() {
+            group[0].rgba.clone()
+        } else {
+            imageops::resize(&group[0].rgba, side, side, imageops::FilterType::Triangle)
+        };
+        let px = img.into_raw();
+        // Прямоугольник изменившихся точек (весь кадр — для первого и без разностей).
+        let changed = |i: usize, prev: &[u8], tol: u8| (0..3).any(|c| px[i * 4 + c].abs_diff(prev[i * 4 + c]) > tol);
+        let (mut x0, mut y0, mut x1, mut y1) = (0, 0, n, n);
+        if let (Some(tol), Some(prev)) = (diff, shown.as_deref()) {
+            (x0, y0, x1, y1) = (n, n, 0, 0);
+            for yy in 0..n {
+                for xx in 0..n {
+                    if changed(yy * n + xx, prev, tol) {
+                        (x0, y0, x1, y1) = (x0.min(xx), y0.min(yy), x1.max(xx + 1), y1.max(yy + 1));
+                    }
+                }
+            }
+            if x0 >= x1 {
+                // Ничего не изменилось: дольше показывать прежний кадр.
+                if let Some(p) = pending.as_mut() {
+                    p.delay = p.delay.saturating_add(delay_cs);
+                }
+                continue;
+            }
+        }
+        let (rw, rh) = (x1 - x0, y1 - y0);
+        let mut rect = Vec::with_capacity(rw * rh * 4);
+        let mut solid = Vec::with_capacity(rw * rh);
+        for yy in y0..y1 {
+            for xx in x0..x1 {
+                let i = yy * n + xx;
+                rect.extend_from_slice(&px[i * 4..i * 4 + 4]);
+                let keep = match (diff, shown.as_deref()) {
+                    (Some(tol), Some(prev)) => changed(i, prev, tol),
+                    _ => px[i * 4 + 3] >= 128,
+                };
+                solid.push(keep);
+            }
+        }
+        if diff.is_some() {
+            let screen = shown.get_or_insert_with(|| px.clone());
+            for (k, &keep) in solid.iter().enumerate() {
+                if keep {
+                    let i = (y0 + k / rw) * n + x0 + k % rw;
+                    screen[i * 4..i * 4 + 4].copy_from_slice(&px[i * 4..i * 4 + 4]);
+                }
+            }
+        }
+        let (palette, buffer) = indexed(&rect, &solid);
+        let frame = ::gif::Frame {
+            delay: delay_cs,
+            dispose: if diff.is_some() { ::gif::DisposalMethod::Keep } else { ::gif::DisposalMethod::Background },
+            transparent: Some(CLEAR),
+            left: x0 as u16,
+            top: y0 as u16,
+            width: rw as u16,
+            height: rh as u16,
+            palette: Some(palette),
+            buffer: std::borrow::Cow::Owned(buffer),
+            ..::gif::Frame::default()
+        };
+        if let Some(p) = pending.replace(frame) {
+            enc.write_frame(&p).map_err(|_| GifError::Unreadable)?;
         }
     }
-    if out.len() > AVATAR_MAX_BYTES {
-        return Err(GifError::TooLarge);
+    if let Some(p) = pending {
+        enc.write_frame(&p).map_err(|_| GifError::Unreadable)?;
     }
+    drop(enc);
     Ok(out)
+}
+
+/// Палитра (256 цветов, последний — прозрачный) и индексы точек: точная, если цветов не больше 255,
+/// иначе NeuQuant по видимым точкам.
+fn indexed(rgba: &[u8], solid: &[bool]) -> (Vec<u8>, Vec<u8>) {
+    let mut exact = std::collections::HashMap::<[u8; 3], u8>::new();
+    let mut fits = true;
+    for (p, _) in rgba.chunks_exact(4).zip(solid).filter(|(_, s)| **s) {
+        let c = [p[0], p[1], p[2]];
+        if !exact.contains_key(&c) {
+            if exact.len() == usize::from(CLEAR) {
+                fits = false;
+                break;
+            }
+            let i = exact.len() as u8;
+            exact.insert(c, i);
+        }
+    }
+    let mut palette = vec![0u8; 256 * 3];
+    let buffer = if fits {
+        for (c, &i) in &exact {
+            palette[usize::from(i) * 3..usize::from(i) * 3 + 3].copy_from_slice(c);
+        }
+        rgba.chunks_exact(4).zip(solid).map(|(p, &s)| if s { exact[&[p[0], p[1], p[2]]] } else { CLEAR }).collect()
+    } else {
+        let visible: Vec<u8> =
+            rgba.chunks_exact(4).zip(solid).filter(|(_, s)| **s).flat_map(|(p, _)| [p[0], p[1], p[2], 255]).collect();
+        let nq = color_quant::NeuQuant::new(10, usize::from(CLEAR), &visible);
+        palette[..usize::from(CLEAR) * 3].copy_from_slice(&nq.color_map_rgb());
+        rgba.chunks_exact(4)
+            .zip(solid)
+            .map(|(p, &s)| if s { nq.index_of(&[p[0], p[1], p[2], 255]) as u8 } else { CLEAR })
+            .collect()
+    };
+    (palette, buffer)
 }
 
 /// Убрать управляющие символы (кроме перевода строки в многострочных полях) и пробелы по краям.
 fn clean(s: &str, multiline: bool) -> String {
-    s.chars().filter(|c| !c.is_control() || (multiline && *c == '\n')).collect::<String>().trim().to_string()
+    s.chars()
+        .filter(|c| (!c.is_control() || (multiline && *c == '\n')) && !pult_core::files::is_spoofing(*c))
+        .collect::<String>()
+        .trim()
+        .to_string()
 }
 
 fn too_long(message: String) -> ApiError {
@@ -405,9 +586,13 @@ pub(crate) async fn put_my_avatar(
     user: CurrentUser,
     Json(req): Json<AvatarInput>,
 ) -> ApiResult<Json<MyCard>> {
-    // base64 длиннее данных на треть: слишком длинную строку не декодируем вовсе.
+    // base64 длиннее данных на треть: слишком длинную строку не декодируем вовсе. Больше 1 МБ — только GIF
+    // (в base64 он начинается с «R0lG»).
     if req.data.len() > GIF_INPUT_MAX_BYTES / 3 * 4 + 8 {
         return Err(ApiError::bad_request("avatar_too_large", "GIF больше 15 МБ."));
+    }
+    if req.data.len() > AVATAR_MAX_BYTES / 3 * 4 + 8 && !req.data.trim_start().starts_with("R0lG") {
+        return Err(ApiError::bad_request("avatar_too_large", "Картинка больше 1 МБ."));
     }
     let data = base64::engine::general_purpose::STANDARD
         .decode(req.data.trim())
@@ -415,19 +600,26 @@ pub(crate) async fn put_my_avatar(
     let mime = sniff_image(&data)
         .ok_or_else(|| ApiError::bad_request("invalid_image", "Подходят только JPEG, PNG, WebP и GIF."))?;
     let data = if mime == "image/gif" {
-        let _slot = GIF_SLOTS.acquire().await.map_err(|e| ApiError::Internal(e.to_string()))?;
-        tokio::task::spawn_blocking(move || shrink_gif(&data))
-            .await
-            .map_err(|e| ApiError::Internal(e.to_string()))?
-            .map_err(|e| match e {
-                GifError::Unreadable => {
-                    ApiError::bad_request("invalid_image", "GIF не прочитался или больше 2048 точек по стороне.")
-                }
-                GifError::TooManyFrames => ApiError::bad_request("avatar_too_large", "В GIF больше 300 кадров."),
-                GifError::TooLarge => {
-                    ApiError::bad_request("avatar_too_large", "GIF слишком длинный: даже уменьшенный он больше 1 МБ.")
-                }
-            })?
+        let slot = GIF_SLOTS.try_acquire().map_err(|_| ApiError::TooManyRequests {
+            message: "Сервер сейчас уменьшает другие GIF. Повторите через минуту.".into(),
+            retry_after_secs: 60,
+        })?;
+        tokio::task::spawn_blocking(move || {
+            let _slot = slot;
+            shrink_gif(&data)
+        })
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .map_err(|e| match e {
+            GifError::Unreadable => {
+                ApiError::bad_request("invalid_image", "GIF не прочитался или больше 2048 точек по стороне.")
+            }
+            GifError::TooManyFrames => ApiError::bad_request("avatar_too_large", "В GIF больше 300 кадров."),
+            GifError::TooLarge => ApiError::bad_request(
+                "avatar_too_large",
+                "GIF не уменьшается до 1 МБ даже с пропуском кадров. Сократите его.",
+            ),
+        })?
     } else {
         data
     };
@@ -486,15 +678,21 @@ pub(crate) async fn get_avatar(
 ) -> ApiResult<Response> {
     let row: Option<(String, String, Vec<u8>)> = sqlx::query_as(
         "SELECT a.mime, a.sha256, a.data FROM user_avatars a JOIN users u ON u.id = a.user_id
-          WHERE a.user_id = $1 AND u.is_active",
+           JOIN ad_accounts acc ON acc.id = u.ad_account_id
+          WHERE a.user_id = $1 AND u.is_active AND acc.is_enabled AND NOT acc.is_missing",
     )
     .bind(id)
     .fetch_optional(&core.db)
     .await?;
     let (mime, sha, data) = row.ok_or(ApiError::NotFound)?;
     let etag = format!("\"{}\"", avatar_version(&sha));
-    let cache = (header::CACHE_CONTROL, "private, max-age=86400".to_string());
-    if headers.get(header::IF_NONE_MATCH).and_then(|v| v.to_str().ok()) == Some(etag.as_str()) {
+    // Час, а не сутки: убранный модератором аватар быстро пропадает и у коллег.
+    let cache = (header::CACHE_CONTROL, "private, max-age=3600".to_string());
+    let matches = headers
+        .get(header::IF_NONE_MATCH)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.split(',').any(|t| t.trim().trim_start_matches("W/") == etag));
+    if matches {
         return Ok((StatusCode::NOT_MODIFIED, [cache, (header::ETAG, etag)]).into_response());
     }
     Ok(([(header::CONTENT_TYPE, mime), cache, (header::ETAG, etag)], data).into_response())
@@ -713,6 +911,8 @@ pub struct WallAuthor {
 pub struct WallPost {
     pub id: Uuid,
     pub author: WallAuthor,
+    /// Чья стена (в ленте запись может быть на чужой стене).
+    pub wall: WallAuthor,
     /// Пусто у удалённой записи.
     pub body: String,
     pub deleted: bool,
@@ -741,31 +941,112 @@ pub struct WallQuery {
     pub before: Option<Uuid>,
 }
 
-/// id, автор, имя автора, аватар автора, текст, удалена, создана, родитель, отметок, моя отметка.
-type PostRow = (Uuid, Uuid, String, Option<String>, String, bool, OffsetDateTime, Option<Uuid>, i64, bool);
+#[derive(sqlx::FromRow)]
+struct PostRow {
+    id: Uuid,
+    author_id: Uuid,
+    author_name: String,
+    author_avatar: Option<String>,
+    wall_user_id: Uuid,
+    wall_name: String,
+    wall_avatar: Option<String>,
+    body: String,
+    deleted: bool,
+    created_at: OffsetDateTime,
+    parent_id: Option<Uuid>,
+    likes: i64,
+    liked: bool,
+}
 
-const POST_SELECT: &str = "SELECT w.id, w.author_id, coalesce(a.display_name, a.sam_account_name), av.sha256,
-        CASE WHEN w.deleted_at IS NULL THEN w.body ELSE '' END, w.deleted_at IS NOT NULL, w.created_at, w.parent_id,
-        (SELECT count(*) FROM wall_likes l WHERE l.post_id = w.id),
-        EXISTS (SELECT 1 FROM wall_likes l WHERE l.post_id = w.id AND l.user_id = $2)
+/// `$2` — кто смотрит (его отметка «нравится»). `ou`/`oa`/`op` — владелец стены, его учётка и профиль.
+const POST_SELECT: &str = "SELECT w.id, w.author_id, coalesce(a.display_name, a.sam_account_name) AS author_name,
+        av.sha256 AS author_avatar, w.wall_user_id, coalesce(oa.display_name, oa.sam_account_name) AS wall_name,
+        oav.sha256 AS wall_avatar, CASE WHEN w.deleted_at IS NULL THEN w.body ELSE '' END AS body,
+        w.deleted_at IS NOT NULL AS deleted, w.created_at, w.parent_id,
+        (SELECT count(*) FROM wall_likes l WHERE l.post_id = w.id) AS likes,
+        EXISTS (SELECT 1 FROM wall_likes l WHERE l.post_id = w.id AND l.user_id = $2) AS liked
    FROM wall_posts w
    JOIN users u ON u.id = w.author_id
    JOIN ad_accounts a ON a.id = u.ad_account_id
-   LEFT JOIN user_avatars av ON av.user_id = w.author_id";
+   LEFT JOIN user_avatars av ON av.user_id = w.author_id
+   JOIN users ou ON ou.id = w.wall_user_id
+   JOIN ad_accounts oa ON oa.id = ou.ad_account_id
+   LEFT JOIN user_avatars oav ON oav.user_id = w.wall_user_id
+   LEFT JOIN user_profiles op ON op.user_id = w.wall_user_id";
 
-fn post(r: PostRow, wall_owner: Uuid, user: &CurrentUser) -> WallPost {
-    let deleted = r.5;
+fn post(r: PostRow, user: &CurrentUser) -> WallPost {
     WallPost {
-        id: r.0,
-        can_delete: !deleted && (r.1 == user.user_id || wall_owner == user.user_id || user.grants.has(&MODERATE)),
-        author: WallAuthor { user_id: r.1, name: r.2, avatar: r.3.as_deref().map(avatar_version) },
-        body: r.4,
-        deleted,
-        created_at: r.6,
-        likes: r.8,
-        liked: r.9,
+        id: r.id,
+        can_delete: !r.deleted
+            && (r.author_id == user.user_id || r.wall_user_id == user.user_id || user.grants.has(&MODERATE)),
+        author: WallAuthor {
+            user_id: r.author_id,
+            name: r.author_name,
+            avatar: r.author_avatar.as_deref().map(avatar_version),
+        },
+        wall: WallAuthor {
+            user_id: r.wall_user_id,
+            name: r.wall_name,
+            avatar: r.wall_avatar.as_deref().map(avatar_version),
+        },
+        body: r.body,
+        deleted: r.deleted,
+        created_at: r.created_at,
+        likes: r.likes,
+        liked: r.liked,
         replies: Vec::new(),
     }
+}
+
+/// Страница записей верхнего уровня, новые сверху, по [`PAGE`]; к каждой — до [`REPLIES_PER_POST`] ответов.
+/// `wall` — одна стена; `None` — лента: все стены действующих сотрудников, кроме выключенных.
+async fn page_of(
+    db: &sqlx::PgPool,
+    user: &CurrentUser,
+    wall: Option<Uuid>,
+    before: Option<Uuid>,
+) -> ApiResult<WallPage> {
+    // Удалённая запись без ответов не показывается: от неё ничего не осталось.
+    let sql = format!(
+        "{POST_SELECT}
+          WHERE w.parent_id IS NULL
+            AND ($1::uuid IS NULL OR w.wall_user_id = $1)
+            AND ($1::uuid IS NOT NULL OR (ou.is_active AND oa.is_enabled AND NOT oa.is_missing
+                                          AND coalesce(op.wall_mode, 'everyone') <> 'off'))
+            AND (w.deleted_at IS NULL OR EXISTS (SELECT 1 FROM wall_posts r WHERE r.parent_id = w.id AND r.deleted_at IS NULL))
+            AND ($3::uuid IS NULL OR (w.created_at, w.id) < (SELECT created_at, id FROM wall_posts WHERE id = $3))
+          ORDER BY w.created_at DESC, w.id DESC
+          LIMIT $4"
+    );
+    let mut rows: Vec<PostRow> =
+        sqlx::query_as(&sql).bind(wall).bind(user.user_id).bind(before).bind(PAGE + 1).fetch_all(db).await?;
+    let more = rows.len() as i64 > PAGE;
+    rows.truncate(PAGE as usize);
+    let mut posts: Vec<WallPost> = rows.into_iter().map(|r| post(r, user)).collect();
+    let parents: Vec<Uuid> = posts.iter().map(|p| p.id).collect();
+    // Предел ответов — на каждую запись, а не на всю страницу.
+    let sql = format!(
+        "WITH r AS (SELECT id, row_number() OVER (PARTITION BY parent_id ORDER BY created_at, id) AS n
+                      FROM wall_posts WHERE parent_id = ANY($1) AND deleted_at IS NULL)
+         {POST_SELECT}
+         JOIN r ON r.id = w.id
+         WHERE r.n <= $3
+         ORDER BY w.created_at, w.id"
+    );
+    let replies: Vec<PostRow> =
+        sqlx::query_as(&sql).bind(&parents).bind(user.user_id).bind(REPLIES_PER_POST).fetch_all(db).await?;
+    for r in replies {
+        if let Some(parent) = posts.iter_mut().find(|p| Some(p.id) == r.parent_id) {
+            parent.replies.push(post(r, user));
+        }
+    }
+    Ok(WallPage { posts, more })
+}
+
+/// Записи стен изменились: открытые ленты и стены перечитываются (в событии нет текста).
+async fn wall_changed(db: impl sqlx::PgExecutor<'_>) -> ApiResult<()> {
+    events::publish(db, &Event { kind: "wall".into(), permission: Some("*".into()), ..Default::default() }).await?;
+    Ok(())
 }
 
 /// Стена открыта для чтения: владелец активен и не выключил её. Возвращает режим.
@@ -795,39 +1076,17 @@ pub(crate) async fn get_wall(
     Query(q): Query<WallQuery>,
 ) -> ApiResult<Json<WallPage>> {
     open_wall(&core.db, id, user.user_id).await?;
-    // Удалённая запись без ответов не показывается: от неё ничего не осталось.
-    let sql = format!(
-        "{POST_SELECT}
-          WHERE w.wall_user_id = $1 AND w.parent_id IS NULL
-            AND (w.deleted_at IS NULL OR EXISTS (SELECT 1 FROM wall_posts r WHERE r.parent_id = w.id AND r.deleted_at IS NULL))
-            AND ($3::uuid IS NULL OR w.created_at < (SELECT created_at FROM wall_posts WHERE id = $3))
-          ORDER BY w.created_at DESC
-          LIMIT $4"
-    );
-    let mut rows: Vec<PostRow> =
-        sqlx::query_as(&sql).bind(id).bind(user.user_id).bind(q.before).bind(PAGE + 1).fetch_all(&core.db).await?;
-    let more = rows.len() as i64 > PAGE;
-    rows.truncate(PAGE as usize);
-    let mut posts: Vec<WallPost> = rows.into_iter().map(|r| post(r, id, &user)).collect();
-    let parents: Vec<Uuid> = posts.iter().map(|p| p.id).collect();
-    let sql = format!(
-        "{POST_SELECT}
-          WHERE w.parent_id = ANY($1) AND w.deleted_at IS NULL
-          ORDER BY w.created_at
-          LIMIT $3"
-    );
-    let replies: Vec<PostRow> = sqlx::query_as(&sql)
-        .bind(&parents)
-        .bind(user.user_id)
-        .bind(REPLIES_PER_POST * PAGE)
-        .fetch_all(&core.db)
-        .await?;
-    for r in replies {
-        if let Some(parent) = posts.iter_mut().find(|p| Some(p.id) == r.7) {
-            parent.replies.push(post(r, id, &user));
-        }
-    }
-    Ok(Json(WallPage { posts, more }))
+    Ok(Json(page_of(&core.db, &user, Some(id), q.before).await?))
+}
+
+/// Лента: записи со всех открытых стен, новые сверху. Новые записи приходят событием `wall`.
+#[utoipa::path(get, path = "/api/feed", tag = "profile", params(WallQuery), responses((status = 200, body = WallPage)))]
+pub(crate) async fn get_feed(
+    State(core): State<Core>,
+    user: CurrentUser,
+    Query(q): Query<WallQuery>,
+) -> ApiResult<Json<WallPage>> {
+    Ok(Json(page_of(&core.db, &user, None, q.before).await?))
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -881,12 +1140,18 @@ pub(crate) async fn create_wall_post(
     if mode == WallMode::Off {
         return Err(ApiError::Refused { code: "wall_closed", message: "Стена выключена.".into() });
     }
+    // Подсчёт и запись — под блокировкой автора: параллельные запросы не проскочат предел вместе.
+    let mut tx = core.db.begin().await?;
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended('wall_posts:' || $1::text, 0))")
+        .bind(user.user_id)
+        .execute(&mut *tx)
+        .await?;
     let recent: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM wall_posts WHERE author_id = $1 AND created_at > now() - make_interval(mins => $2)",
     )
     .bind(user.user_id)
     .bind(POST_WINDOW_MINUTES)
-    .fetch_one(&core.db)
+    .fetch_one(&mut *tx)
     .await?;
     if recent >= POSTS_PER_WINDOW {
         return Err(ApiError::TooManyRequests {
@@ -894,7 +1159,6 @@ pub(crate) async fn create_wall_post(
             retry_after_secs: u64::try_from(POST_WINDOW_MINUTES).unwrap_or(10) * 60,
         });
     }
-    let mut tx = core.db.begin().await?;
     let post_id: Uuid = sqlx::query_scalar(
         "INSERT INTO wall_posts (wall_user_id, author_id, parent_id, body) VALUES ($1, $2, $3, $4) RETURNING id",
     )
@@ -920,10 +1184,11 @@ pub(crate) async fn create_wall_post(
         let k = if parent_author.is_some() { kind::WALL_REPLY } else { kind::WALL_POST };
         notify::notify(&mut *tx, id, k, payload(k)).await?;
     }
+    wall_changed(&mut *tx).await?;
     tx.commit().await?;
     let sql = format!("{POST_SELECT} WHERE w.id = $1");
     let row: PostRow = sqlx::query_as(&sql).bind(post_id).bind(user.user_id).fetch_one(&core.db).await?;
-    Ok(Json(post(row, id, &user)))
+    Ok(Json(post(row, &user)))
 }
 
 /// Удалить запись: автор, владелец стены или модератор. Удаление модератором пишется в аудит.
@@ -961,6 +1226,7 @@ pub(crate) async fn delete_wall_post(
         )
         .await?;
     }
+    wall_changed(&mut *tx).await?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -1075,6 +1341,89 @@ mod tests {
         assert_eq!(shrink_gif(&tiny).unwrap(), tiny);
         // Узкий, но меньше квадрата по одной стороне: обрезается до квадрата по меньшей стороне.
         assert_eq!(frames_of(&shrink_gif(&gif_of(300, 100, 1)).unwrap()), (100, 100, 1));
+    }
+
+    /// GIF, который от кадра к кадру меняется целиком (шум): без пропуска кадров в 1 МБ не уложить.
+    fn noisy_gif(side: u32, frames: u32) -> Vec<u8> {
+        use image::{Delay, Frame, RgbaImage, codecs::gif::GifEncoder};
+        let mut seed = 0x1234_5678u32;
+        let mut out = Vec::new();
+        {
+            let mut enc = GifEncoder::new_with_speed(&mut out, 30);
+            for _ in 0..frames {
+                let img = RgbaImage::from_fn(side, side, |_, _| {
+                    seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                    let b = seed.to_be_bytes();
+                    image::Rgba([b[0], b[1], b[2], 255])
+                });
+                enc.encode_frame(Frame::from_parts(img, 0, 0, Delay::from_numer_denom_ms(50, 1))).unwrap();
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn busy_gif_drops_frames_to_fit() {
+        let big = noisy_gif(300, 60);
+        assert!(big.len() > AVATAR_MAX_BYTES, "исходный больше предела");
+        // Отладочная сборка медленнее рабочей в десятки раз: срок здесь свой.
+        let small = shrink_gif_within(&big, std::time::Duration::from_secs(900)).unwrap();
+        assert!(small.len() <= AVATAR_MAX_BYTES, "{} байт", small.len());
+        let (w, h, n) = frames_of(&small);
+        assert!(w == h && w <= AVATAR_SIDE && n > 1 && n < 60, "{w}×{h}, {n} кадров");
+    }
+
+    #[test]
+    fn calm_gif_keeps_every_frame() {
+        // Неподвижный фон и бегущий квадрат: пишется только изменившаяся часть, все кадры на месте.
+        use image::{Delay, Frame, RgbaImage, codecs::gif::GifEncoder};
+        let mut src = Vec::new();
+        {
+            let mut enc = GifEncoder::new(&mut src);
+            for i in 0..60u32 {
+                let img = RgbaImage::from_fn(400, 400, |x, y| {
+                    if x / 20 == i % 20 && y < 60 {
+                        image::Rgba([255, 0, 0, 255])
+                    } else {
+                        let c = if (x / 25 + y / 25) % 2 == 0 { 40 } else { 200 };
+                        image::Rgba([c, c, 255 - c, 255])
+                    }
+                });
+                enc.encode_frame(Frame::from_parts(img, 0, 0, Delay::from_numer_denom_ms(40, 1))).unwrap();
+            }
+        }
+        let small = shrink_gif(&src).unwrap();
+        assert_eq!(frames_of(&small), (256, 256, 60));
+        assert!(small.len() < 300 * 1024, "{} байт", small.len());
+        // Одинаковые кадры склеиваются в один с общей задержкой.
+        let still = gif_of(400, 400, 1);
+        let mut twice = Vec::new();
+        {
+            use image::codecs::gif::GifEncoder;
+            let mut enc = GifEncoder::new(&mut twice);
+            let img = RgbaImage::from_pixel(400, 400, image::Rgba([9, 99, 199, 255]));
+            for _ in 0..5 {
+                enc.encode_frame(Frame::from_parts(img.clone(), 0, 0, Delay::from_numer_denom_ms(100, 1))).unwrap();
+            }
+        }
+        assert_eq!(frames_of(&shrink_gif(&twice).unwrap()), (256, 256, 1));
+        assert_eq!(frames_of(&shrink_gif(&still).unwrap()), (256, 256, 1));
+    }
+
+    #[test]
+    fn transparent_gif_keeps_frames() {
+        use image::{Delay, Frame, RgbaImage, codecs::gif::GifEncoder};
+        let mut src = Vec::new();
+        {
+            let mut enc = GifEncoder::new(&mut src);
+            for i in 0..3u8 {
+                let img = RgbaImage::from_fn(300, 300, |x, _| {
+                    if x < 100 { image::Rgba([0, 0, 0, 0]) } else { image::Rgba([i * 60, 100, 200, 255]) }
+                });
+                enc.encode_frame(Frame::from_parts(img, 0, 0, Delay::from_numer_denom_ms(100, 1))).unwrap();
+            }
+        }
+        assert_eq!(frames_of(&shrink_gif(&src).unwrap()), (256, 256, 3));
     }
 
     #[test]

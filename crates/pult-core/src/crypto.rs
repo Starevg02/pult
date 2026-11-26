@@ -65,17 +65,19 @@ impl SecretBox {
 
     /// Зашифровать произвольные байты (вложения сообщений) тем же ключом и в том же формате.
     pub fn encrypt_bytes(&self, plain: &[u8]) -> Result<Vec<u8>, CryptoError> {
+        self.encrypt_vec(plain.to_vec())
+    }
+
+    /// То же, что [`Self::encrypt_bytes`], но без копии: большой файл не держится в памяти дважды.
+    pub fn encrypt_vec(&self, mut data: Vec<u8>) -> Result<Vec<u8>, CryptoError> {
         let mut nonce = [0u8; NONCE_LEN];
         self.rng.fill(&mut nonce).map_err(|_| CryptoError::Rng)?;
-        let mut data = plain.to_vec();
         self.key
             .seal_in_place_append_tag(Nonce::assume_unique_for_key(nonce), Aad::from([FORMAT_V1]), &mut data)
             .map_err(|_| CryptoError::Rng)?;
-        let mut out = Vec::with_capacity(1 + NONCE_LEN + data.len());
-        out.push(FORMAT_V1);
-        out.extend_from_slice(&nonce);
-        out.extend_from_slice(&data);
-        Ok(out)
+        // Заголовок (версия и nonce) — в начало того же буфера.
+        data.splice(0..0, std::iter::once(FORMAT_V1).chain(nonce));
+        Ok(data)
     }
 
     pub fn decrypt(&self, blob: &[u8]) -> Result<Secret, CryptoError> {

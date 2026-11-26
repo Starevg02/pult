@@ -37,7 +37,8 @@
     "catalog": "Service catalog",
     "groupIt": "IT team",
     "groupHelp": "Help",
-    "groupMine": "Personal"
+    "groupMine": "Personal",
+    "feed": "Feed"
   },
   "login": {
     "title": "Sign in to the IT portal",
@@ -2224,7 +2225,8 @@
         "1h": "1 hour",
         "4h": "4 hours",
         "today": "Today",
-        "week": "This week"
+        "week": "This week",
+        "keep": "Keep the expiry: {{until}}"
       },
       "preset": {
         "vacation": "On vacation",
@@ -2278,7 +2280,15 @@
         "everyone": "All colleagues",
         "me": "Only me, colleagues reply",
         "off": "Wall turned off"
-      }
+      },
+      "likes_one": "Like: {{count}}",
+      "likes_other": "Likes: {{count}}"
+    },
+    "feed": {
+      "title": "Feed",
+      "hint": "Posts from colleagues' walls. New ones appear on their own.",
+      "empty": "No posts yet. Write the first one!",
+      "onWall": "on the wall of {{name}}"
     }
   },
   "chatAdmin": {

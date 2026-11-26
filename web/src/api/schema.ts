@@ -2210,6 +2210,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/feed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Лента: записи со всех открытых стен, новые сверху. Новые записи приходят событием `wall`. */
+        get: operations["get_feed"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/helpdesk/access/mine": {
         parameters: {
             query?: never;
@@ -9181,6 +9198,8 @@ export interface components {
              *     `no_recursion`: без него сбор схем OpenAPI уходит в бесконечную рекурсию по самому типу.
              */
             replies: components["schemas"]["WallPost"][];
+            /** @description Чья стена (в ленте запись может быть на чужой стене). */
+            wall: components["schemas"]["WallAuthor"];
         };
         WatcherInput: {
             /** Format: uuid */
@@ -13332,6 +13351,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExtensionLink"][];
+                };
+            };
+        };
+    };
+    get_feed: {
+        parameters: {
+            query?: {
+                /** @description Записи старше этой (id последней показанной). */
+                before?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WallPage"];
                 };
             };
         };

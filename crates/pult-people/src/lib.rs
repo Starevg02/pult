@@ -97,6 +97,7 @@ where
             .routes(routes!(social::presence_lookup))
             .routes(routes!(social::get_user_card))
             .routes(routes!(social::get_wall, social::create_wall_post))
+            .routes(routes!(social::get_feed))
             .routes(routes!(social::delete_wall_post))
             .routes(routes!(social::like_post, social::unlike_post))
             .routes(routes!(twofactor::auth_context))
