@@ -147,7 +147,7 @@
     "assignedToMe": "Assigned to me",
     "unassigned": "Unassigned",
     "breached": "Overdue",
-    "openDesk": "Open the desk"
+    "openDesk": "Open the ticket queue"
   },
   "phonebook": {
     "title": "Directory",
@@ -365,6 +365,11 @@
       "runKind": "Kind",
       "runCounts": "+new / ~changed / −disabled",
       "runStatus": "Result",
+      "runState": {
+        "running": "Running",
+        "ok": "Done",
+        "error": "Error"
+      },
       "confirmMassDisable": "Disable these accounts anyway?"
     },
     "users": {
@@ -505,6 +510,12 @@
       }
     },
     "mail": {
+      "status": {
+        "queued": "Queued",
+        "sending": "Sending",
+        "sent": "Sent",
+        "failed": "Failed"
+      },
       "dropPassword": "Remove the saved password (server without sign-in)",
       "title": "Mail",
       "enabled": "Send email",
@@ -772,6 +783,7 @@
     "codeDocker": "Docker:"
   },
   "helpdesk": {
+    "noSites": "There are no sites yet, so the request cannot be sent. An administrator adds them in Settings → Sites.",
     "createAnother": "Create another",
     "resume": "Resume",
     "answerYes": "Yes",
@@ -1082,7 +1094,8 @@
     }
   },
   "bulk": {
-    "confirm": "Apply “{{action}}” to {{n}} requests? Requesters will be emailed.",
+    "confirm_one": "Apply “{{action}}” to {{count}} request? The requester will be emailed.",
+    "confirm_other": "Apply “{{action}}” to {{count}} requests? Requesters will be emailed.",
     "selected": "Selected: {{n}}",
     "action": "Action",
     "apply": "Apply",
@@ -1511,7 +1524,7 @@
     "confirmText": "“{{action}}” for account {{login}}. The change will be written to AD and audited.",
     "resetHint": "A temporary password will be set and must be changed at sign-in. You will see it once.",
     "groupDn": "AD group (DN)",
-    "groupDnHint": "Only groups from the allowed list in “AD directory → Writes”.",
+    "groupDnHint": "Only groups from the allowed list in “Active Directory: changes”.",
     "basis": "Reason",
     "sure": "I checked that this is the right account",
     "login": "Account login",
@@ -1749,7 +1762,7 @@
       "chat": "Messages"
     },
     "moduleAbout": {
-      "helpdesk": "Employee requests, engineer workspace, knowledge base, equipment, reports.",
+      "helpdesk": "Employee requests, ticket queue for engineers, knowledge base, equipment, reports.",
       "phonebook": "Employee directory from AD with phones, departments and sites.",
       "directory": "Enable accounts, manage groups and reset passwords from the portal, with approval and audit.",
       "remote": "Agent on PCs: computer list and connecting to the user's session.",
@@ -2110,7 +2123,7 @@
     "newDirect": "Direct message",
     "newGroup": "Group chat",
     "searchPeople": "Find an employee: name or login",
-    "nobody": "Nobody found.",
+    "nobody": "Nobody found. You can message employees who have signed in to the portal at least once.",
     "title": "Title",
     "members": "Members",
     "membersN": "Members: {{n}}",

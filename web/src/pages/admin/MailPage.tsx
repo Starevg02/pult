@@ -6,6 +6,7 @@ import { api, ok } from "../../api/client";
 import type { components } from "../../api/schema";
 import { formatDate } from "../../format";
 import { Badge, Button, Card, ErrorBox, Field, Input, PageHeader, Select, Spinner } from "../../ui";
+import { dyn } from "../helpdesk/helpdeskUtil";
 
 type MailView = components["schemas"]["MailView"];
 type OutboxRow = components["schemas"]["OutboxRow"];
@@ -113,7 +114,7 @@ function MailForm({ data }: { data: MailView }) {
                 <td className="px-3 py-1.5">{r.to_addrs.join(", ")}</td>
                 <td className="px-3 py-1.5">{r.subject}</td>
                 <td className="px-3 py-1.5">
-                  <Badge tone={r.status === "sent" ? "ok" : r.status === "failed" ? "bad" : "muted"}>{r.status}</Badge>
+                  <Badge tone={r.status === "sent" ? "ok" : r.status === "failed" ? "bad" : "muted"}>{dyn(t, `admin.mail.status.${r.status}`)}</Badge>
                   {r.last_error && <div className="text-xs text-bad">{r.last_error}</div>}
                 </td>
               </tr>

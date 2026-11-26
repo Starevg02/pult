@@ -42,7 +42,8 @@ automatically.
 - Ответы формы категории в карточке — с подписями полей и «Да» / «Нет» вместо ключей и `true` / `false`.
 - «Возобновить» для своей заявки в ожидании или отложенной; диалог передачи начинается с текущей линии
   заявки и сбрасывается при закрытии.
-- Массовые «Решить» и «Объединить» в очереди — с подтверждением.
+- Массовые «Решить» и «Объединить» в очереди — с подтверждением («для 1 заявки», «для 5 заявок»).
+- Пока площадок нет, форма новой заявки говорит, что заявку не отправить и где их добавить.
 - «Решить все инциденты» проблемы требует код закрытия; сервер проверяет его до начала, а не молча
   отклоняет каждый инцидент.
 - Поле ответа подписано для экранного диктора; в карточке заявки подсвечен раздел «Мои заявки».
@@ -59,6 +60,9 @@ automatically.
 - Подтверждение перед отзывом токена регистрации, рассылкой обновления агентам, отключением ПК, удалением
   правила согласования и повторным запуском мастера настройки.
 - Подписи пяти разделов настроек, которых не было в словаре.
+- Журналы писем и синхронизации AD показывают статусы словами («В очереди», «Готово»), а не служебными кодами.
+- Поиск собеседника в «Сообщениях» без результатов объясняет, что написать можно тому, кто уже входил в портал.
+- Адрес `/login` из закладки после входа ведёт на главную, а не на «Страница не найдена».
 
 ### English
 
@@ -90,7 +94,8 @@ automatically.
   `true` / `false`.
 - “Resume” for your own waiting or on-hold ticket; the transfer dialog starts from the ticket’s current line
   and resets on close.
-- Bulk “Resolve” and “Merge” in the queue ask for confirmation.
+- Bulk “Resolve” and “Merge” in the queue ask for confirmation, with correct plural forms.
+- While there are no sites, the new ticket form says the request cannot be sent and where to add them.
 - “Resolve all incidents” of a problem requires a closure code; the server checks it up front instead of
   silently rejecting each incident.
 - The reply field has an accessible label; the “My tickets” menu item is highlighted on a ticket card.
@@ -107,6 +112,9 @@ automatically.
 - Confirmation before revoking an enrolment token, rolling out an agent update, deactivating a PC, deleting
   an approval rule and rerunning the setup wizard.
 - Labels for five settings sections that were missing from the dictionary.
+- The mail and AD sync logs show statuses as words (“Queued”, “Done”) instead of internal codes.
+- A people search in Messages with no results explains that you can message those who have signed in before.
+- A bookmarked `/login` address leads to the home page after sign-in instead of “Page not found”.
 
 ### 中文
 
@@ -133,6 +141,7 @@ automatically.
 - 工单卡片中的类别表单答案显示字段名称和“是/否”，而不是键名和 `true` / `false`。
 - 自己的等待中或已挂起工单可“恢复处理”；转交对话框从工单当前线路开始，关闭时重置。
 - 队列中的批量“解决”和“合并”需要确认。
+- 尚无站点时，新建工单表单会说明无法提交以及在哪里添加站点。
 - 问题的“解决全部事件”需要关闭代码；服务器会预先检查，而不是逐个静默拒绝事件。
 - 回复框带有无障碍标签；在工单卡片中“我的工单”菜单项保持高亮。
 
@@ -146,6 +155,9 @@ automatically.
 - 邮件：可删除已保存的 SMTP 密码（无需登录的服务器）。
 - 撤销注册令牌、向代理推送更新、停用电脑、删除审批规则和重新运行设置向导前需要确认。
 - 补充词典中缺失的五个设置栏目说明。
+- 邮件和 AD 同步日志以文字显示状态（“排队中”“完成”），而不是内部代码。
+- 在“消息”中搜索联系人无结果时，会说明只能给登录过门户的员工发消息。
+- 从书签打开 `/login` 登录后进入首页，而不是“页面未找到”。
 
 ## 0.2.0 — оборудование, проблемы и изменения, хранилище секретов, помощник, мониторинг, вход через домен · hardware, problems and changes, secrets vault, assistant, monitoring, domain sign-in · 设备、问题与变更、密钥库、助手、监控、域登录
 

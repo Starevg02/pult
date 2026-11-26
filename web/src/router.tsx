@@ -1,4 +1,4 @@
-import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
+import { createRootRoute, createRoute, createRouter, redirect } from "@tanstack/react-router";
 import { AssetsPage, MyAssetsPage, ObjectPage } from "./pages/assets/AssetPages";
 import { LicensesPage } from "./pages/assets/CmdbParts";
 import { KbArticlePage, KbEditPage, KbNewPage, KbPage } from "./pages/kb/KbPages";
@@ -91,6 +91,14 @@ const ticketsNew = createRoute({
 
 const routeTree = rootRoute.addChildren([
   page("/", HomePage),
+  // Форма входа показывается на любом адресе, своей страницы у неё нет: /login из закладки ведёт на главную.
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/login",
+    beforeLoad: () => {
+      throw redirect({ to: "/", replace: true });
+    },
+  }),
   page("/phonebook", only("phonebook", PhonebookPage)),
   page("/tickets", only("helpdesk", MyTicketsPage)),
   ticketsNew,

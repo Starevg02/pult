@@ -309,7 +309,8 @@ function Form({ cats, sites, ctx, onBehalf, initialCategory, onAgain }: { cats: 
               }}
             />
           </div>
-          <Field label={t("helpdesk.site")}>
+          {/* Без площадок заявку не принять (у заявки всегда есть площадка): говорим, кто это исправит. */}
+          <Field label={t("helpdesk.site")} hint={sites.some((s) => s.is_active) ? undefined : t("helpdesk.noSites")}>
             <Select required value={site} onChange={(e) => setSite(e.target.value)}>
               <option value="">{t("helpdesk.choose")}</option>
               {sites.filter((s) => s.is_active).map((s) => (

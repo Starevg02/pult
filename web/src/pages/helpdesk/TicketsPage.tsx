@@ -160,7 +160,7 @@ function BulkBar({ numbers, onDone }: { numbers: number[]; onDone: () => void })
           onClick={() => {
             // Решение и объединение уходят заявителям письмами и не отменяются одной кнопкой.
             const risky = action === "resolve" || action === "merge";
-            if (!risky || window.confirm(t("bulk.confirm", { n: numbers.length, action: dyn(t, `bulk.actions.${action}`) }))) run.mutate();
+            if (!risky || window.confirm(t("bulk.confirm", { count: numbers.length, action: dyn(t, `bulk.actions.${action}`) }))) run.mutate();
           }}
         >
           {t("bulk.apply")}

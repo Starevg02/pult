@@ -146,7 +146,7 @@
     "assignedToMe": "分配给我",
     "unassigned": "未分配",
     "breached": "已逾期",
-    "openDesk": "打开工作台"
+    "openDesk": "打开工单队列"
   },
   "phonebook": {
     "title": "通讯录",
@@ -363,6 +363,11 @@
       "runKind": "类型",
       "runCounts": "+新增 / ~更改 / −禁用",
       "runStatus": "结果",
+      "runState": {
+        "running": "进行中",
+        "ok": "完成",
+        "error": "错误"
+      },
       "confirmMassDisable": "仍要禁用这些账户吗？"
     },
     "users": {
@@ -503,6 +508,12 @@
       }
     },
     "mail": {
+      "status": {
+        "queued": "排队中",
+        "sending": "发送中",
+        "sent": "已发送",
+        "failed": "发送失败"
+      },
       "dropPassword": "删除已保存的密码（无需登录的服务器）",
       "title": "邮件",
       "enabled": "发送邮件",
@@ -770,6 +781,7 @@
     "codeDocker": "Docker："
   },
   "helpdesk": {
+    "noSites": "尚无站点，无法提交工单。管理员可在“设置”→“站点”中添加。",
     "createAnother": "再创建一个",
     "resume": "恢复处理",
     "answerYes": "是",
@@ -1080,7 +1092,7 @@
     }
   },
   "bulk": {
-    "confirm": "对 {{n}} 个工单执行“{{action}}”？申请人将收到邮件。",
+    "confirm_other": "对 {{count}} 个工单执行“{{action}}”？申请人将收到邮件。",
     "selected": "已选择：{{n}}",
     "action": "操作",
     "apply": "应用",
@@ -1507,7 +1519,7 @@
     "confirmText": "对账户 {{login}} 执行“{{action}}”。此更改将写入 AD 并记入审计。",
     "resetHint": "将设置一个临时密码，用户登录时必须更改。该密码只向您显示一次。",
     "groupDn": "AD 组（DN）",
-    "groupDnHint": "仅限“AD 目录 → 写入”中允许列表内的组。",
+    "groupDnHint": "仅限“Active Directory：变更”中允许列表内的组。",
     "basis": "依据",
     "sure": "我已确认这是正确的账户",
     "login": "账户登录名",
@@ -1745,7 +1757,7 @@
       "chat": "消息"
     },
     "moduleAbout": {
-      "helpdesk": "员工工单、工程师工作台、知识库、设备、报表。",
+      "helpdesk": "员工工单、工程师工单队列、知识库、设备、报表。",
       "phonebook": "来自 AD 的员工通讯录，含电话、部门和站点。",
       "directory": "在门户中启用账户、管理组和重置密码，需审批并记录审计。",
       "remote": "电脑上的代理程序：电脑列表和连接用户会话。",
@@ -2104,7 +2116,7 @@
     "newDirect": "私人对话",
     "newGroup": "群聊",
     "searchPeople": "查找员工：姓名或登录名",
-    "nobody": "未找到任何人。",
+    "nobody": "未找到。只能给至少登录过一次门户的员工发消息。",
     "title": "名称",
     "members": "成员",
     "membersN": "成员：{{n}}",

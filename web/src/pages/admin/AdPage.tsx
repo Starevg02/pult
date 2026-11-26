@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { api, ApiError, ok, type AdOverview, type DcCheckView, type DomainInput, type Summary } from "../../api/client";
 import { Badge, Button, Card, ErrorBox, Field, Input, PageHeader, Select, Spinner } from "../../ui";
+import { dyn } from "../helpdesk/helpdeskUtil";
 import { formatDate } from "../../format";
 
 const DEFAULT_FILTER = "(&(objectCategory=person)(objectClass=user))";
@@ -214,13 +215,13 @@ function AdView({ data }: { data: AdOverview }) {
                 {q.data.runs.map((r) => (
                   <tr key={r.id} className="border-t border-line">
                     <td className="py-1.5 pr-3 whitespace-nowrap">{formatDate(r.started_at, i18n.language)}</td>
-                    <td className="py-1.5 pr-3">{r.kind}</td>
+                    <td className="py-1.5 pr-3">{t(r.kind === "full" ? "admin.ad.syncFull" : "admin.ad.syncIncremental")}</td>
                     <td className="py-1.5 pr-3 font-mono text-xs">{r.controller}</td>
                     <td className="py-1.5 pr-3 tabular-nums">
                       +{r.added} / ~{r.updated} / −{r.disabled}
                     </td>
                     <td className="py-1.5">
-                      <Badge tone={r.status === "ok" ? "ok" : r.status === "error" ? "bad" : "muted"}>{r.status}</Badge>
+                      <Badge tone={r.status === "ok" ? "ok" : r.status === "error" ? "bad" : "muted"}>{dyn(t, `admin.ad.runState.${r.status}`)}</Badge>
                       {r.error && <span className="ml-2 text-xs text-bad">{r.error}</span>}
                     </td>
                   </tr>
