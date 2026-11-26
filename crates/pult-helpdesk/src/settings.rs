@@ -79,7 +79,7 @@ impl Default for HelpdeskSettings {
             work_days: vec![1, 2, 3, 4, 5],
             timezone: "Europe/Moscow".into(),
             auto_close_days: 3,
-            max_file_mb: 25,
+            max_file_mb: pult_core::files::DEFAULT_MAX_FILE_MB,
             login_help_subnets: ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.0/8", "::1/128", "fc00::/7"]
                 .map(String::from)
                 .to_vec(),

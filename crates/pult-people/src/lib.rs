@@ -87,7 +87,12 @@ where
             .routes(routes!(social::put_my_status))
             .routes(routes!(social::put_my_about))
             .routes(routes!(social::heartbeat))
-            .routes(routes!(social::put_my_avatar, social::delete_my_avatar))
+            // GIF приходит целиком (до 15 МБ в base64) и уменьшается на сервере.
+            .merge(
+                OpenApiRouter::new()
+                    .routes(routes!(social::put_my_avatar, social::delete_my_avatar))
+                    .layer(axum::extract::DefaultBodyLimit::max(social::AVATAR_BODY_LIMIT)),
+            )
             .routes(routes!(social::get_avatar, social::moderate_avatar))
             .routes(routes!(social::presence_lookup))
             .routes(routes!(social::get_user_card))

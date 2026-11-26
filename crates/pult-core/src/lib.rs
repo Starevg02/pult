@@ -10,6 +10,7 @@ pub mod audit;
 pub mod crypto;
 pub mod error;
 pub mod events;
+pub mod files;
 pub mod l10n;
 pub mod mail;
 pub mod notify;

@@ -32,19 +32,22 @@ export const PRIORITIES = ["low", "normal", "high", "critical"] as const;
 
 export type Uploaded = { id: string; name: string; is_image: boolean };
 
-export async function uploadFile(file: File): Promise<Uploaded> {
+/** Отправить файл формой (multipart) с CSRF-токеном; ответ — JSON. */
+export async function postFile<T>(url: string, file: File): Promise<T> {
   const form = new FormData();
   form.append("file", file, file.name || "image.png");
   const headers: Record<string, string> = {};
   const t = csrfToken();
   if (t) headers["X-CSRF-Token"] = t;
-  const r = await fetch("/api/helpdesk/files", { method: "POST", body: form, headers, credentials: "same-origin" });
+  const r = await fetch(url, { method: "POST", body: form, headers, credentials: "same-origin" });
   if (!r.ok) {
     const b = (await r.json().catch(() => ({}))) as { error?: string; message?: string };
     throw new ApiError(r.status, b.error ?? "upload", b.message ?? r.statusText);
   }
-  return (await r.json()) as Uploaded;
+  return (await r.json()) as T;
 }
+
+export const uploadFile = (file: File) => postFile<Uploaded>("/api/helpdesk/files", file);
 
 export const fileUrl = (id: string) => `/api/helpdesk/files/${id}`;
 

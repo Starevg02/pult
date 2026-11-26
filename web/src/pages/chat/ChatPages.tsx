@@ -5,17 +5,20 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, ok, type ChatDetail, type ChatItem, type ChatMessage, type ChatPerson, type ChatMemberEvent, type ChatMessageVersion, type PresenceEntry } from "../../api/client";
+import { ApiError, api, ok, type ChatDetail, type ChatFile, type ChatItem, type ChatMessage, type ChatPerson, type ChatMemberEvent, type ChatMessageVersion, type PresenceEntry } from "../../api/client";
 import { UserAvatar } from "../people/presence";
 import { usePresence } from "../people/profileHooks";
 import { formatDate } from "../../format";
-import { IconArrowLeft, IconPlus, IconStar } from "../../icons";
+import { IconArrowLeft, IconFileText, IconPaperclip, IconPlus, IconStar, IconX } from "../../icons";
 import { useMe } from "../../session";
 import { Badge, Button, Card, Dialog, Empty, ErrorBox, Field, Input, MenuButton, Spinner } from "../../ui";
-import { dyn } from "../helpdesk/helpdeskUtil";
+import { dyn, formatSize, postFile } from "../helpdesk/helpdeskUtil";
 import { useChats } from "./chatUtil";
 
 const area = "w-full resize-none rounded-lg border border-control bg-paper px-3 py-2 text-sm focus:border-accent";
+/** Вложений в одном сообщении (как на сервере). */
+const MAX_FILES = 10;
+const fileUrl = (id: string) => `/api/chat/files/${id}`;
 
 /** Поиск сотрудника (действующие учётки). */
 export function UserPicker({ onPick, exclude = [] }: { onPick: (p: ChatPerson) => void; exclude?: string[] }) {
@@ -135,7 +138,7 @@ function ChatRow({ c, active, peer }: { c: ChatItem; active: boolean; peer?: Pre
             )}
             <span className={`truncate ${c.unread > 0 ? "font-semibold" : "font-medium"}`}>{c.title}</span>
           </div>
-          <div className="truncate text-xs text-muted">{c.locked ? t("chat.locked") : (c.preview ?? (c.kind === "group" ? t("chat.group") : t("chat.direct")))}</div>
+          <div className="truncate text-xs text-muted">{c.locked ? t("chat.locked") : (c.preview ?? (c.preview_files > 0 ? `📎 ${t("chat.files", { count: c.preview_files })}` : c.kind === "group" ? t("chat.group") : t("chat.direct")))}</div>
           {!c.active && (
             <div className="mt-0.5">
               <Badge>{t("chat.readOnly")}</Badge>
@@ -358,7 +361,8 @@ function Bubble({ m, mine, group, canVersions, onEdit, onVersions }: { m: ChatMe
     <li className={`flex ${mine ? "justify-end" : "justify-start"}`}>
       <div className={`max-w-[85%] rounded-2xl px-3 py-1.5 text-sm sm:max-w-[70%] ${mine ? "bg-accent/15" : "bg-hover"}`}>
         {group && !mine && <div className="text-xs font-medium text-accent">{m.author_name}</div>}
-        <p className="break-words whitespace-pre-wrap">{m.body}</p>
+        {m.body && <p className="break-words whitespace-pre-wrap">{m.body}</p>}
+        {m.files.length > 0 && <Attachments files={m.files} />}
         <div className="mt-0.5 flex items-center justify-end gap-2 text-[11px] text-muted">
           {m.version > 1 &&
             (canVersions ? (
@@ -368,7 +372,7 @@ function Bubble({ m, mine, group, canVersions, onEdit, onVersions }: { m: ChatMe
             ) : (
               <span>{t("chat.edited")}</span>
             ))}
-          {m.editable && (
+          {m.editable && m.body && (
             <button type="button" className="underline" onClick={onEdit}>
               {t("common.edit")}
             </button>
@@ -380,8 +384,35 @@ function Bubble({ m, mine, group, canVersions, onEdit, onVersions }: { m: ChatMe
   );
 }
 
-/** Неотправленные сообщения по чатам: не теряются, когда открывают правку другого сообщения или другой чат. */
+/** Вложения сообщения: картинки — превью (открываются в новой вкладке), остальное — скачивание. */
+function Attachments({ files }: { files: ChatFile[] }) {
+  const images = files.filter((f) => f.image);
+  const other = files.filter((f) => !f.image);
+  return (
+    <div className="mt-1 space-y-1">
+      {images.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {images.map((f) => (
+            <a key={f.id} href={fileUrl(f.id)} target="_blank" rel="noopener" className="block">
+              <img src={fileUrl(f.id)} alt={f.name} loading="lazy" className="max-h-60 max-w-full rounded-lg border border-line object-contain" />
+            </a>
+          ))}
+        </div>
+      )}
+      {other.map((f) => (
+        <a key={f.id} href={fileUrl(f.id)} download={f.name} className="flex items-center gap-2 rounded-lg border border-line bg-paper px-2 py-1.5 hover:bg-hover">
+          <IconFileText size={18} className="shrink-0 text-muted" />
+          <span className="min-w-0 flex-1 truncate">{f.name}</span>
+          <span className="shrink-0 text-xs text-muted tabular-nums">{formatSize(f.size)}</span>
+        </a>
+      ))}
+    </div>
+  );
+}
+
+/** Неотправленные сообщения и вложения по чатам: не теряются, когда открывают правку другого сообщения или другой чат. */
 const drafts = new Map<string, string>();
+const draftFiles = new Map<string, ChatFile[]>();
 
 function Composer({ chat, editing, onDone }: { chat: string; editing: ChatMessage | null; onDone: () => void }) {
   const { t } = useTranslation();
@@ -394,27 +425,67 @@ function Composer({ chat, editing, onDone }: { chat: string; editing: ChatMessag
       else drafts.delete(chat);
     }
   };
+  const [files, setFilesState] = useState<ChatFile[]>(editing ? [] : (draftFiles.get(chat) ?? []));
+  const filesRef = useRef(files);
+  const setFiles = (v: ChatFile[]) => {
+    filesRef.current = v;
+    setFilesState(v);
+    if (v.length) draftFiles.set(chat, v);
+    else draftFiles.delete(chat);
+  };
+  const [uploading, setUploading] = useState(0);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const picker = useRef<HTMLInputElement>(null);
   const box = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     box.current?.focus();
   }, [editing]);
+  const add = async (list: File[]) => {
+    if (editing || list.length === 0) return;
+    setUploadError(null);
+    const room = MAX_FILES - filesRef.current.length;
+    if (list.length > room) setUploadError(t("chat.tooManyFiles", { count: MAX_FILES }));
+    for (const f of list.slice(0, Math.max(room, 0))) {
+      setUploading((n) => n + 1);
+      try {
+        const u = await postFile<ChatFile>(`/api/chat/${chat}/files`, f);
+        setFiles([...filesRef.current, u]);
+      } catch (e) {
+        setUploadError(e instanceof ApiError ? `${f.name}: ${e.message}` : t("common.error"));
+      } finally {
+        setUploading((n) => n - 1);
+      }
+    }
+  };
   const send = useMutation({
     mutationFn: (body: string) =>
       editing
         ? ok(api.PUT("/api/chat/{id}/messages/{message}", { params: { path: { id: chat, message: editing.id } }, body: { body } }))
-        : ok(api.POST("/api/chat/{id}/messages", { params: { path: { id: chat } }, body: { body } })),
+        : ok(api.POST("/api/chat/{id}/messages", { params: { path: { id: chat } }, body: { body, files: filesRef.current.map((f) => f.id) } })),
     onSuccess: () => {
       setText("");
+      if (!editing) setFiles([]);
       onDone();
       void qc.invalidateQueries({ queryKey: ["chat-messages", chat] });
       void qc.invalidateQueries({ queryKey: ["chats"] });
     },
   });
+  const ready = (text.trim() !== "" || (!editing && files.length > 0)) && uploading === 0 && !send.isPending;
   const submit = () => {
-    if (text.trim() && !send.isPending) send.mutate(text);
+    if (ready) send.mutate(text);
   };
   return (
-    <div className="border-t border-line p-2">
+    <div
+      className="border-t border-line p-2"
+      onDragOver={(e) => {
+        if (!editing) e.preventDefault();
+      }}
+      onDrop={(e) => {
+        if (editing) return;
+        e.preventDefault();
+        void add([...e.dataTransfer.files]);
+      }}
+    >
       {editing && (
         <div className="mb-1 flex items-center justify-between text-xs text-muted">
           <span>{t("chat.editing")}</span>
@@ -424,7 +495,59 @@ function Composer({ chat, editing, onDone }: { chat: string; editing: ChatMessag
         </div>
       )}
       {send.error && <ErrorBox error={send.error} />}
+      {(files.length > 0 || uploading > 0 || uploadError) && (
+        <div className="mb-1 flex flex-wrap items-center gap-1.5 text-xs">
+          {files.map((f) => (
+            <span key={f.id} className="inline-flex max-w-full items-center gap-1 rounded-lg bg-sunken px-2 py-1">
+              <IconFileText size={14} className="shrink-0 text-muted" />
+              <span className="max-w-48 truncate">{f.name}</span>
+              <span className="text-muted tabular-nums">{formatSize(f.size)}</span>
+              <button
+                type="button"
+                className="rounded p-0.5 text-muted hover:bg-hover"
+                aria-label={t("chat.removeFile", { name: f.name })}
+                onClick={() => setFiles(filesRef.current.filter((x) => x.id !== f.id))}
+              >
+                <IconX size={12} />
+              </button>
+            </span>
+          ))}
+          {uploading > 0 && (
+            <span role="status" className="text-muted">
+              {t("chat.uploading")}
+            </span>
+          )}
+          {uploadError && (
+            <span role="alert" className="text-bad">
+              {uploadError}
+            </span>
+          )}
+        </div>
+      )}
       <div className="flex items-end gap-2">
+        {!editing && (
+          <>
+            <Button
+              variant="ghost"
+              aria-label={t("chat.attach")}
+              title={t("chat.attachHint")}
+              disabled={files.length >= MAX_FILES}
+              onClick={() => picker.current?.click()}
+            >
+              <IconPaperclip size={18} />
+            </Button>
+            <input
+              ref={picker}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                void add([...(e.target.files ?? [])]);
+                e.target.value = "";
+              }}
+            />
+          </>
+        )}
         <textarea
           ref={box}
           rows={2}
@@ -434,6 +557,13 @@ function Composer({ chat, editing, onDone }: { chat: string; editing: ChatMessag
           placeholder={t("chat.placeholder")}
           className={area}
           onChange={(e) => setText(e.target.value)}
+          onPaste={(e) => {
+            const pasted = [...e.clipboardData.files];
+            if (pasted.length > 0 && !editing) {
+              e.preventDefault();
+              void add(pasted);
+            }
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
@@ -442,7 +572,7 @@ function Composer({ chat, editing, onDone }: { chat: string; editing: ChatMessag
             if (e.key === "Escape" && editing) onDone();
           }}
         />
-        <Button variant="primary" disabled={!text.trim() || send.isPending} onClick={submit}>
+        <Button variant="primary" disabled={!ready} onClick={submit}>
           {editing ? t("common.save") : t("chat.send")}
         </Button>
       </div>

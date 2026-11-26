@@ -148,6 +148,7 @@ export type InstalledExtension = components["schemas"]["InstalledExtension"];
 export type ManifestPreview = components["schemas"]["ManifestPreview"];
 export type ManifestSource = components["schemas"]["ManifestSource"];
 export type ExtensionLink = components["schemas"]["ExtensionLink"];
+export type ChatFile = components["schemas"]["ChatFile"];
 export type ChatItem = components["schemas"]["ChatItem"];
 export type ChatDetail = components["schemas"]["ChatDetail"];
 export type ChatMember = components["schemas"]["ChatMember"];

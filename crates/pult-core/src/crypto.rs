@@ -60,9 +60,14 @@ impl SecretBox {
     }
 
     pub fn encrypt(&self, plain: &Secret) -> Result<Vec<u8>, CryptoError> {
+        self.encrypt_bytes(plain.expose().as_bytes())
+    }
+
+    /// Зашифровать произвольные байты (вложения сообщений) тем же ключом и в том же формате.
+    pub fn encrypt_bytes(&self, plain: &[u8]) -> Result<Vec<u8>, CryptoError> {
         let mut nonce = [0u8; NONCE_LEN];
         self.rng.fill(&mut nonce).map_err(|_| CryptoError::Rng)?;
-        let mut data = plain.expose().as_bytes().to_vec();
+        let mut data = plain.to_vec();
         self.key
             .seal_in_place_append_tag(Nonce::assume_unique_for_key(nonce), Aad::from([FORMAT_V1]), &mut data)
             .map_err(|_| CryptoError::Rng)?;
@@ -74,6 +79,14 @@ impl SecretBox {
     }
 
     pub fn decrypt(&self, blob: &[u8]) -> Result<Secret, CryptoError> {
+        let mut data = self.decrypt_bytes(blob)?;
+        let s = String::from_utf8(data.clone()).map_err(|_| CryptoError::Decrypt);
+        zeroize::Zeroize::zeroize(&mut data);
+        s.map(Secret::new)
+    }
+
+    /// Расшифровать байты, зашифрованные [`Self::encrypt_bytes`] (или текст из [`Self::encrypt`]).
+    pub fn decrypt_bytes(&self, blob: &[u8]) -> Result<Vec<u8>, CryptoError> {
         let (&ver, rest) = blob.split_first().ok_or(CryptoError::Format)?;
         if ver != FORMAT_V1 || rest.len() < NONCE_LEN {
             return Err(CryptoError::Format);
@@ -81,11 +94,10 @@ impl SecretBox {
         let (nonce, ct) = rest.split_at(NONCE_LEN);
         let nonce = Nonce::try_assume_unique_for_key(nonce).map_err(|_| CryptoError::Format)?;
         let mut data = ct.to_vec();
-        let plain =
-            self.key.open_in_place(nonce, Aad::from([FORMAT_V1]), &mut data).map_err(|_| CryptoError::Decrypt)?;
-        let s = String::from_utf8(plain.to_vec()).map_err(|_| CryptoError::Decrypt);
-        zeroize::Zeroize::zeroize(&mut data);
-        s.map(Secret::new)
+        let len =
+            self.key.open_in_place(nonce, Aad::from([FORMAT_V1]), &mut data).map_err(|_| CryptoError::Decrypt)?.len();
+        data.truncate(len);
+        Ok(data)
     }
 }
 

@@ -13,6 +13,8 @@ import { useMyCard } from "./profileHooks";
 /** Сторона квадрата аватара: в списках он мельче, на странице сотрудника — 96 точек (×2 для чётких экранов). */
 const SIDE = 256;
 const MAX_BYTES = 1024 * 1024;
+/** GIF уходит как есть, уменьшает его сервер. */
+const GIF_MAX_BYTES = 15 * 1024 * 1024;
 const WALL_MODES: WallMode[] = ["everyone", "me", "off"];
 
 /** Картинку — в квадрат по центру и уменьшить; WebP, если браузер умеет, иначе JPEG. */
@@ -99,8 +101,8 @@ function Editor({ me, card }: { me: Me; card: MyCard }) {
     mutationFn: async (f: File) => {
       let blob: Blob;
       if (await isGif(f)) {
-        // GIF — как есть: перерисовка на canvas оставила бы один кадр анимации.
-        if (f.size > MAX_BYTES) throw new Error(t("people.profile.gifTooLarge"));
+        // GIF — как есть: перерисовка на canvas оставила бы один кадр анимации; уменьшит сервер.
+        if (f.size > GIF_MAX_BYTES) throw new Error(t("people.profile.gifTooLarge"));
         blob = f;
       } else {
         try {

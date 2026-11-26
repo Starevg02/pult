@@ -1133,7 +1133,7 @@ async fn social(admin: &mut Browser, emp: &mut Browser, pool: &PgPool) {
     assert_eq!((mine["is_me"].as_bool(), mine["status_text"].as_str()), (Some(true), Some("тут")), "{mine}");
     emp.put("/api/me/status", json!({"presence": "auto"})).await;
 
-    // Аватар: только JPEG/PNG/WebP/GIF по сигнатуре, до 1 МБ; SVG под видом картинки — отказ.
+    // Аватар: только JPEG/PNG/WebP/GIF по сигнатуре, до 1 МБ (GIF до 15 МБ уменьшает сервер); SVG — отказ.
     let png = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDRtest".to_vec();
     let (code, c) = emp.put("/api/me/avatar", json!({"data": b64.encode(&png)})).await;
     assert_eq!(code, StatusCode::OK, "{c}");
@@ -1149,8 +1149,15 @@ async fn social(admin: &mut Browser, emp: &mut Browser, pool: &PgPool) {
     assert_ne!(c["avatar"].as_str(), Some(ver.as_str()), "новая картинка — новая версия адреса");
     let (code, c) = emp.put("/api/me/avatar", json!({"data": b64.encode(&png)})).await;
     assert_eq!((code, c["avatar"].as_str()), (StatusCode::OK, Some(ver.as_str())));
-    let big = [b"GIF89a".as_slice(), &vec![0u8; 1100 * 1024]].concat();
+    let big = [b"\xFF\xD8\xFF".as_slice(), &vec![0u8; 1100 * 1024]].concat();
     assert_eq!(emp.put("/api/me/avatar", json!({"data": b64.encode(&big)})).await.1["error"], "avatar_too_large");
+    let broken = [b"GIF89a".as_slice(), &vec![0u8; 3 * 1024 * 1024]].concat();
+    let (code, e) = emp.put("/api/me/avatar", json!({"data": b64.encode(&broken)})).await;
+    assert_eq!(
+        (code, e["error"].as_str()),
+        (StatusCode::BAD_REQUEST, Some("invalid_image")),
+        "GIF 3 МБ проходит предел тела, но не читается: {e}"
+    );
     assert_eq!(emp.put("/api/me/avatar", json!({"data": "не base64"})).await.1["error"], "invalid_image");
     assert_eq!(admin.get(&format!("/api/users/{emp_id}/avatar?v={ver}")).await.0, StatusCode::OK, "виден коллегам");
     assert_eq!(admin.get(&format!("/api/users/{admin_id}/avatar")).await.0, StatusCode::NOT_FOUND);

@@ -4,8 +4,9 @@
 use crate::kind;
 use axum::{
     Json,
-    extract::{FromRef, Path, Query, State},
-    http::StatusCode,
+    extract::{DefaultBodyLimit, FromRef, Multipart, Path, Query, State},
+    http::{StatusCode, header},
+    response::{IntoResponse, Response},
 };
 use pult_core::{
     ApiError, ApiResult, Core, CurrentUser, Secret,
@@ -30,6 +31,15 @@ const MAX_TITLE: usize = 200;
 const MAX_ADD: usize = 500;
 /// Сообщений за один запрос.
 const PAGE: i64 = 100;
+/// Вложений в одном сообщении.
+pub const MAX_FILES: usize = 10;
+/// Неприкреплённые вложения пользователя за сутки: без квоты один сотрудник заполнил бы базу.
+const PENDING_MAX_FILES: i64 = 30;
+const PENDING_MAX_MB: i64 = 300;
+/// Тело загрузки: предел настройки (до 100 МБ) и запас на заголовки формы.
+const UPLOAD_BODY_LIMIT: usize = 105 * 1024 * 1024;
+/// Файл держится в памяти, пока шифруется и пишется: одновременно — не больше стольких загрузок.
+static UPLOADS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(4);
 /// Обезличенная статистика: меньшие числа не показываются, чтобы по ним нельзя было узнать переписку.
 const MIN_COUNT: i64 = 5;
 
@@ -54,6 +64,8 @@ where
         .routes(routes!(chat_set_prefs))
         .routes(routes!(chat_mark_read))
         .routes(routes!(chat_list_messages, chat_send_message))
+        .merge(OpenApiRouter::new().routes(routes!(chat_upload_file)).layer(DefaultBodyLimit::max(UPLOAD_BODY_LIMIT)))
+        .routes(routes!(chat_get_file))
         .routes(routes!(chat_edit_message))
         .routes(routes!(chat_message_versions))
         .routes(routes!(chat_add_members))
@@ -94,6 +106,8 @@ pub struct ChatItem {
     /// Начало последнего доступного мне сообщения.
     #[sqlx(skip)]
     pub preview: Option<String>,
+    /// Вложений в последнем сообщении (у сообщения только из файлов текста нет).
+    pub preview_files: i64,
     #[serde(skip)]
     #[schema(ignore)]
     pub preview_body: Option<Vec<u8>>,
@@ -136,6 +150,26 @@ pub struct ChatMessage {
     pub version: i32,
     /// Я могу его править сейчас.
     pub editable: bool,
+    #[sqlx(skip)]
+    pub files: Vec<ChatFile>,
+}
+
+/// Вложение сообщения (или загруженное, но ещё не отправленное).
+#[derive(Serialize, ToSchema)]
+pub struct ChatFile {
+    pub id: Uuid,
+    pub name: String,
+    pub mime: String,
+    pub size: i64,
+    /// Картинка: показывается в переписке, остальное скачивается.
+    pub image: bool,
+}
+
+#[derive(ToSchema)]
+#[allow(dead_code)]
+pub struct ChatUploadForm {
+    #[schema(format = Binary, value_type = String)]
+    file: Vec<u8>,
 }
 
 #[derive(Serialize, sqlx::FromRow, ToSchema)]
@@ -231,7 +265,12 @@ pub struct ChatPrefsInput {
 
 #[derive(Deserialize, ToSchema)]
 pub struct ChatMessageInput {
+    /// Текст; может быть пустым, если есть вложения.
+    #[serde(default)]
     pub body: String,
+    /// Загруженные заранее вложения (до 10), только при отправке.
+    #[serde(default)]
+    pub files: Vec<Uuid>,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -406,10 +445,12 @@ async fn chat_items(core: &Core, me: Uuid, hidden: Option<bool>, chat: Option<Uu
                     AND x.created_at > coalesce(m.last_read_at, '-infinity')
                     AND x.created_at <= coalesce(m.left_at, 'infinity')) AS unread,
                 last.created_at AS last_message_at,
-                CASE WHEN c.locked THEN NULL ELSE last.body END AS preview_body
+                CASE WHEN c.locked THEN NULL ELSE last.body END AS preview_body,
+                CASE WHEN c.locked OR last.id IS NULL THEN 0
+                     ELSE (SELECT count(*) FROM chat_files f WHERE f.message_id = last.id) END AS preview_files
            FROM chat_members m
            JOIN chats c ON c.id = m.chat_id
-           LEFT JOIN LATERAL (SELECT x.created_at, x.body FROM chat_messages x
+           LEFT JOIN LATERAL (SELECT x.id, x.created_at, x.body FROM chat_messages x
                                WHERE x.chat_id = c.id AND x.created_at <= coalesce(m.left_at, 'infinity')
                                ORDER BY x.created_at DESC, x.id DESC LIMIT 1) last ON true
           WHERE m.user_id = $1
@@ -422,7 +463,9 @@ async fn chat_items(core: &Core, me: Uuid, hidden: Option<bool>, chat: Option<Uu
         if let Some(b) = i.preview_body.take() {
             let text = decrypt(core, &b)?;
             let line = text.lines().next().unwrap_or_default();
-            i.preview = Some(line.chars().take(120).collect());
+            if !line.is_empty() {
+                i.preview = Some(line.chars().take(120).collect());
+            }
         }
     }
     Ok(items)
@@ -676,9 +719,23 @@ fn message_sql(filter: &str) -> String {
     )
 }
 
-fn open(core: &Core, mut v: Vec<ChatMessage>) -> ApiResult<Vec<ChatMessage>> {
+async fn open(core: &Core, mut v: Vec<ChatMessage>) -> ApiResult<Vec<ChatMessage>> {
     for m in &mut v {
         m.body = decrypt(core, &m.enc)?;
+    }
+    let ids: Vec<Uuid> = v.iter().map(|m| m.id).collect();
+    let rows: Vec<(Uuid, Uuid, Vec<u8>, String, i64)> = sqlx::query_as(
+        "SELECT message_id, id, name, mime, size FROM chat_files WHERE message_id = ANY($1) ORDER BY id",
+    )
+    .bind(&ids)
+    .fetch_all(&core.db)
+    .await?;
+    for (message, id, name, mime, size) in rows {
+        let f =
+            ChatFile { id, name: decrypt(core, &name)?, image: pult_core::files::is_inline_image(&mime), mime, size };
+        if let Some(m) = v.iter_mut().find(|m| m.id == message) {
+            m.files.push(f);
+        }
     }
     Ok(v)
 }
@@ -708,13 +765,13 @@ async fn chat_list_messages(
         .fetch_all(&core.db)
         .await?;
     v.reverse();
-    Ok(Json(open(&core, v)?))
+    Ok(Json(open(&core, v).await?))
 }
 
 async fn one_message(core: &Core, chat: Uuid, id: Uuid, me: Uuid, active: bool) -> ApiResult<ChatMessage> {
     let sql = message_sql("AND x.id = $4");
     let m: ChatMessage = sqlx::query_as(&sql).bind(chat).bind(me).bind(active).bind(id).fetch_one(&core.db).await?;
-    Ok(open(core, vec![m])?.remove(0))
+    Ok(open(core, vec![m]).await?.remove(0))
 }
 
 #[utoipa::path(post, path = "/api/chat/{id}/messages", tag = "chat", params(("id" = Uuid, Path)), request_body = ChatMessageInput,
@@ -733,7 +790,14 @@ async fn chat_send_message(
         });
     }
     m.require_unlocked()?;
-    let body = clean_body(&b.body)?;
+    if b.files.len() > MAX_FILES {
+        return Err(ApiError::bad_request("too_many_files", "Не больше 10 вложений в одном сообщении."));
+    }
+    let mut files = b.files.clone();
+    files.sort();
+    files.dedup();
+    // Только файлы: текст не обязателен.
+    let body = if files.is_empty() || !b.body.trim().is_empty() { clean_body(&b.body)? } else { String::new() };
     let enc = encrypt(&core, &body)?;
     let mut tx = core.db.begin().await?;
     let mid: Uuid =
@@ -743,6 +807,22 @@ async fn chat_send_message(
             .bind(enc)
             .fetch_one(&mut *tx)
             .await?;
+    if !files.is_empty() {
+        let n = sqlx::query(
+            "UPDATE chat_files SET message_id = $1
+              WHERE id = ANY($2) AND chat_id = $3 AND uploaded_by = $4 AND message_id IS NULL",
+        )
+        .bind(mid)
+        .bind(&files)
+        .bind(id)
+        .bind(user.user_id)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected();
+        if n != files.len() as u64 {
+            return Err(ApiError::bad_request("invalid_files", "Вложение не найдено — загрузите его снова."));
+        }
+    }
     sqlx::query("UPDATE chats SET last_message_at = now() WHERE id = $1").bind(id).execute(&mut *tx).await?;
     // Своё сообщение прочитано.
     sqlx::query("UPDATE chat_members SET last_read_at = now() WHERE chat_id = $1 AND user_id = $2")
@@ -753,6 +833,125 @@ async fn chat_send_message(
     changed(&mut tx, id, &[]).await?;
     tx.commit().await?;
     Ok((StatusCode::CREATED, Json(one_message(&core, id, mid, user.user_id, true).await?)))
+}
+
+/// Загрузить вложение в чат. Прикрепляется к сообщению при отправке; типы и предел размера — как у
+/// вложений заявок (настройка Helpdesk). Имя и содержимое шифруются ключом портала.
+#[utoipa::path(post, path = "/api/chat/{id}/files", tag = "chat", params(("id" = Uuid, Path)),
+    request_body(content_type = "multipart/form-data", content = inline(ChatUploadForm)),
+    responses((status = 200, body = ChatFile), (status = 400, body = pult_core::error::ErrorBody)))]
+async fn chat_upload_file(
+    State(core): State<Core>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+    mut form: Multipart,
+) -> ApiResult<Json<ChatFile>> {
+    let m = membership(&core.db, id, user.user_id).await?;
+    if !m.active() {
+        return Err(ApiError::Refused {
+            code: "read_only",
+            message: "Вы вышли из чата — история доступна только для чтения.".into(),
+        });
+    }
+    m.require_unlocked()?;
+    let (count, bytes): (i64, i64) = sqlx::query_as(
+        "SELECT count(*), coalesce(sum(size), 0)::bigint FROM chat_files
+          WHERE uploaded_by = $1 AND message_id IS NULL AND created_at > now() - interval '1 day'",
+    )
+    .bind(user.user_id)
+    .fetch_one(&core.db)
+    .await?;
+    if count >= PENDING_MAX_FILES || bytes >= PENDING_MAX_MB * 1024 * 1024 {
+        return Err(ApiError::TooManyRequests {
+            message: "Слишком много файлов загружено и не отправлено. Отправьте их или повторите завтра.".into(),
+            retry_after_secs: 3600,
+        });
+    }
+    let _slot = UPLOADS.try_acquire().map_err(|_| ApiError::TooManyRequests {
+        message: "Сервер сейчас принимает много файлов. Повторите через минуту.".into(),
+        retry_after_secs: 60,
+    })?;
+    let max_mb = pult_core::files::max_file_mb(&core.db).await?;
+    let limit = usize::try_from(max_mb).unwrap_or(usize::MAX).saturating_mul(1024 * 1024);
+    let bad = |m: &str| ApiError::bad_request("invalid_file", m);
+    let mut field =
+        form.next_field().await.map_err(|_| bad("Файл не получен."))?.ok_or_else(|| bad("Файл не получен."))?;
+    let name = pult_core::files::clean_name(field.file_name().unwrap_or("file"));
+    let mut data = Vec::new();
+    while let Some(chunk) = field.chunk().await.map_err(|_| bad("Загрузка оборвалась."))? {
+        if data.len() + chunk.len() > limit {
+            return Err(ApiError::bad_request("file_too_large", format!("Файл больше {max_mb} МБ.")));
+        }
+        data.extend_from_slice(&chunk);
+    }
+    if data.is_empty() {
+        return Err(bad("Файл пустой."));
+    }
+    let mime = pult_core::files::check_type(&name, &data).map_err(|m| ApiError::bad_request("invalid_file", m))?;
+    let size = data.len() as i64;
+    let enc = core.secrets.encrypt_bytes(&data).map_err(ApiError::internal)?;
+    drop(data);
+    let fid: Uuid = sqlx::query_scalar(
+        "INSERT INTO chat_files (chat_id, uploaded_by, name, mime, size, data) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+    )
+    .bind(id)
+    .bind(user.user_id)
+    .bind(encrypt(&core, &name)?)
+    .bind(mime)
+    .bind(size)
+    .bind(enc)
+    .fetch_one(&core.db)
+    .await?;
+    Ok(Json(ChatFile { id: fid, name, mime: mime.to_string(), size, image: pult_core::files::is_inline_image(mime) }))
+}
+
+/// Скачать вложение. Видят участники, которым видно сообщение (бывший участник — до выхода), а
+/// неотправленное — только тот, кто загрузил.
+#[utoipa::path(get, path = "/api/chat/files/{file}", tag = "chat", params(("file" = Uuid, Path)),
+    responses((status = 200, description = "Содержимое файла"), (status = 404, body = pult_core::error::ErrorBody)))]
+async fn chat_get_file(State(core): State<Core>, user: CurrentUser, Path(file): Path<Uuid>) -> ApiResult<Response> {
+    #[derive(sqlx::FromRow)]
+    struct FileRow {
+        chat_id: Uuid,
+        sent_at: Option<OffsetDateTime>,
+        uploaded_by: Uuid,
+        name: Vec<u8>,
+        mime: String,
+    }
+    let row: Option<FileRow> = sqlx::query_as(
+        "SELECT f.chat_id, x.created_at AS sent_at, f.uploaded_by, f.name, f.mime
+           FROM chat_files f LEFT JOIN chat_messages x ON x.id = f.message_id
+          WHERE f.id = $1",
+    )
+    .bind(file)
+    .fetch_optional(&core.db)
+    .await?;
+    let FileRow { chat_id: chat, sent_at, uploaded_by: uploader, name, mime } = row.ok_or(ApiError::NotFound)?;
+    let m = membership(&core.db, chat, user.user_id).await?;
+    m.require_unlocked()?;
+    let visible = match (sent_at, m.left_at) {
+        (None, _) => uploader == user.user_id,
+        (Some(_), None) => true,
+        (Some(sent), Some(left)) => sent <= left,
+    };
+    if !visible {
+        return Err(ApiError::NotFound);
+    }
+    let enc: Vec<u8> =
+        sqlx::query_scalar("SELECT data FROM chat_files WHERE id = $1").bind(file).fetch_one(&core.db).await?;
+    let data = core.secrets.decrypt_bytes(&enc).map_err(ApiError::internal)?;
+    let name = decrypt(&core, &name)?;
+    let kind = if pult_core::files::is_inline_image(&mime) { "inline" } else { "attachment" };
+    Ok((
+        [
+            (header::CONTENT_TYPE, mime),
+            (header::CONTENT_DISPOSITION, pult_core::files::content_disposition(kind, &name)),
+            // Переписка не остаётся в кэше браузера на общем компьютере.
+            (header::CACHE_CONTROL, "no-store".to_string()),
+        ],
+        data,
+    )
+        .into_response())
 }
 
 /// Правка своего сообщения в течение 15 минут; прежний текст остаётся в версиях.

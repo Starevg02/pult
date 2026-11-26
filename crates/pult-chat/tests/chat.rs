@@ -4,7 +4,8 @@
 //! Личный диалог (закрыт даже от суперадминистратора, текст в базе зашифрован, правка 15 минут с версиями),
 //! групповой чат (состав ведут владелец и администраторы, уведомления о добавлении и исключении, история
 //! для бывших участников только для чтения, скрытие и закрепление), отключение учёток в AD (передача
-//! владения, блокировка чата, назначение владельца суперадминистратором) и обезличенная статистика.
+//! владения, блокировка чата, назначение владельца суперадминистратором), вложения (типы, шифрование,
+//! доступ только участникам) и обезличенная статистика.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
@@ -91,6 +92,40 @@ impl Browser {
             b.send(Method::POST, "/api/auth/login", Some(json!({"login": login, "password": USER_PASS}))).await;
         assert_eq!(code, StatusCode::NO_CONTENT, "вход {login}");
         b
+    }
+    /// Запрос с готовым телом: (код, байты ответа, заголовки).
+    async fn raw(
+        &mut self,
+        method: Method,
+        uri: &str,
+        ctype: &str,
+        body: Vec<u8>,
+    ) -> (StatusCode, Vec<u8>, header::HeaderMap) {
+        let mut req = Request::builder().method(method.clone()).uri(uri);
+        let c = self.cookies.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join("; ");
+        req = req.header(header::COOKIE, c);
+        if method != Method::GET
+            && let Some(t) = self.cookies.get("__Host-pult_csrf")
+        {
+            req = req.header("x-csrf-token", t.clone());
+        }
+        let mut req = req.header(header::CONTENT_TYPE, ctype).body(Body::from(body)).unwrap();
+        req.extensions_mut().insert(ConnectInfo("10.1.1.1:5000".parse::<SocketAddr>().unwrap()));
+        let resp = self.app.clone().oneshot(req).await.unwrap();
+        let (status, headers) = (resp.status(), resp.headers().clone());
+        (status, resp.into_body().collect().await.unwrap().to_bytes().to_vec(), headers)
+    }
+    async fn upload(&mut self, chat: &str, name: &str, data: &[u8]) -> (StatusCode, Value) {
+        let b = "XBOUNDARYX";
+        let mut body = format!("--{b}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{name}\"\r\nContent-Type: application/octet-stream\r\n\r\n").into_bytes();
+        body.extend_from_slice(data);
+        body.extend_from_slice(format!("\r\n--{b}--\r\n").as_bytes());
+        let ctype = format!("multipart/form-data; boundary={b}");
+        let (code, bytes, _) = self.raw(Method::POST, &format!("/api/chat/{chat}/files"), &ctype, body).await;
+        (code, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+    }
+    async fn download(&mut self, file: &str) -> (StatusCode, Vec<u8>, header::HeaderMap) {
+        self.raw(Method::GET, &format!("/api/chat/files/{file}"), "application/json", Vec::new()).await
     }
     async fn me(&mut self) -> String {
         self.get("/api/me").await.1["user_id"].as_str().unwrap().to_string()
@@ -239,6 +274,71 @@ async fn chat_acceptance() {
     assert_eq!(iv.put(&format!("/api/chat/{direct}/prefs"), json!({"hidden": true})).await.0, StatusCode::BAD_REQUEST);
     assert_eq!(iv.put(&format!("/api/chat/{direct}/prefs"), json!({"pinned": true})).await.0, StatusCode::NO_CONTENT);
 
+    // Вложения: те же типы, что у заявок; содержимое и имя в базе зашифрованы; видят только участники.
+    const PDF: &[u8] = "%PDF-1.4 секретный отчёт".as_bytes();
+    const PNG: &[u8] = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR";
+    let (code, e) = iv.upload(&direct, "вирус.exe", b"MZ\x90").await;
+    assert_eq!((code, e["error"].as_str()), (StatusCode::BAD_REQUEST, Some("invalid_file")), "{e}");
+    assert_eq!(iv.upload(&direct, "поддельный.png", b"<html>").await.0, StatusCode::BAD_REQUEST);
+    assert_eq!(admin.upload(&direct, "a.pdf", PDF).await.0, StatusCode::NOT_FOUND, "чужой чат");
+    let (code, pdf) = iv.upload(&direct, "Отчёт за ноябрь.pdf", PDF).await;
+    assert_eq!(
+        (code, pdf["image"].as_bool(), pdf["size"].as_i64()),
+        (StatusCode::OK, Some(false), Some(PDF.len() as i64)),
+        "{pdf}"
+    );
+    let (_, png) = iv.upload(&direct, "скрин.png", PNG).await;
+    assert_eq!(png["image"], true);
+    let raw: Vec<(Vec<u8>, Vec<u8>)> =
+        sqlx::query_as("SELECT name, data FROM chat_files").fetch_all(&pool).await.unwrap();
+    assert!(
+        raw.iter()
+            .all(|(n, d)| !String::from_utf8_lossy(n).contains("Отчёт") && !String::from_utf8_lossy(d).contains("PDF"))
+    );
+    // Неотправленное видит только загрузивший.
+    assert_eq!(pe.download(&id(&pdf)).await.0, StatusCode::NOT_FOUND);
+    assert_eq!(iv.download(&id(&pdf)).await.0, StatusCode::OK);
+    // Сообщение только из файлов: текст не нужен.
+    let (code, fm) =
+        iv.post(&format!("/api/chat/{direct}/messages"), json!({"body": "", "files": [id(&pdf), id(&png)]})).await;
+    assert_eq!(
+        (code, fm["body"].as_str(), fm["files"].as_array().map(Vec::len)),
+        (StatusCode::CREATED, Some(""), Some(2)),
+        "{fm}"
+    );
+    assert_eq!(fm["files"][0]["name"], "Отчёт за ноябрь.pdf");
+    let (code, e) = iv.post(&format!("/api/chat/{direct}/messages"), json!({"body": "ещё", "files": [id(&pdf)]})).await;
+    assert_eq!(
+        (code, e["error"].as_str()),
+        (StatusCode::BAD_REQUEST, Some("invalid_files")),
+        "второй раз не прикрепить"
+    );
+    let (code, data, h) = pe.download(&id(&pdf)).await;
+    assert_eq!((code, data.as_slice()), (StatusCode::OK, PDF));
+    assert_eq!(h[header::CONTENT_TYPE], "application/pdf");
+    assert!(h[header::CONTENT_DISPOSITION].to_str().unwrap().starts_with("attachment;"));
+    assert_eq!(h[header::CACHE_CONTROL], "no-store");
+    assert!(pe.download(&id(&png)).await.2[header::CONTENT_DISPOSITION].to_str().unwrap().starts_with("inline;"));
+    assert_eq!(admin.download(&id(&pdf)).await.0, StatusCode::NOT_FOUND, "суперадминистратор не читает");
+    let (_, msgs) = pe.get(&format!("/api/chat/{direct}/messages")).await;
+    assert_eq!(msgs.as_array().unwrap().last().unwrap()["files"].as_array().unwrap().len(), 2);
+    let list = pe.chats(false).await;
+    assert_eq!((list[0]["preview"].is_null(), list[0]["preview_files"].as_i64()), (true, Some(2)), "{list:?}");
+    let many: Vec<String> = (0..11).map(|_| uuid::Uuid::now_v7().to_string()).collect();
+    let (code, e) = iv.post(&format!("/api/chat/{direct}/messages"), json!({"body": "x", "files": many})).await;
+    assert_eq!((code, e["error"].as_str()), (StatusCode::BAD_REQUEST, Some("too_many_files")));
+    // Неотправленное за сутки убирает фоновая задача.
+    let (_, stale) = iv.upload(&direct, "забытый.txt", "черновик".as_bytes()).await;
+    sqlx::query("UPDATE chat_files SET created_at = now() - interval '2 days' WHERE id = $1::uuid")
+        .bind(id(&stale))
+        .execute(&pool)
+        .await
+        .unwrap();
+    pult_chat::sweep_blocked(&pool).await.unwrap();
+    assert_eq!(iv.download(&id(&stale)).await.0, StatusCode::NOT_FOUND);
+    let left: i64 = sqlx::query_scalar("SELECT count(*) FROM chat_files").fetch_one(&pool).await.unwrap();
+    assert_eq!(left, 2, "отправленные остаются");
+
     // 3. Групповой чат: создатель — владелец, добавленные получают уведомление.
     let (code, g) = iv.post("/api/chat/groups", json!({"title": "  Отдел ИТ ", "members": [pe_id, si_id]})).await;
     assert_eq!(code, StatusCode::CREATED, "{g}");
@@ -271,7 +371,12 @@ async fn chat_acceptance() {
     // Исключение: уведомление, история до исключения — только для чтения.
     assert_eq!(pe.delete(&format!("/api/chat/{group}/members/{ko_id}")).await.0, StatusCode::NO_CONTENT);
     assert!(ko.kinds().await.contains(&"chat.removed".to_string()));
-    iv.post(&format!("/api/chat/{group}/messages"), json!({"body": "Без Козлова"})).await;
+    let (_, late) = iv.upload(&group, "после.txt", "после исключения".as_bytes()).await;
+    let (code, _) =
+        iv.post(&format!("/api/chat/{group}/messages"), json!({"body": "Без Козлова", "files": [id(&late)]})).await;
+    assert_eq!(code, StatusCode::CREATED);
+    assert_eq!(ko.download(&id(&late)).await.0, StatusCode::NOT_FOUND, "вложение после исключения не видно");
+    assert_eq!(ko.upload(&group, "a.txt", b"x").await.0, StatusCode::FORBIDDEN, "бывший участник не загружает");
     let former = ko.chats(false).await.into_iter().find(|c| c["id"] == group.as_str()).unwrap();
     assert_eq!(
         (former["active"].as_bool(), former["preview"].as_str()),
@@ -318,7 +423,11 @@ async fn chat_acceptance() {
     assert_eq!(detail["members"][0]["user_id"], pe_id.as_str());
     assert!(pe.kinds().await.contains(&"chat.owner".to_string()));
     assert!(!si.kinds().await.contains(&"chat.owner".to_string()));
-    assert_eq!(pe.bodies(&direct).await, ["Привет!"], "переписка с отключённым сохраняется");
+    assert_eq!(
+        pe.bodies(&direct).await,
+        ["Привет!", ""],
+        "переписка с отключённым сохраняется (второе — только файлы)"
+    );
     // Отключён и новый владелец, администраторов нет — чат заблокирован, суперадминистратору — уведомление.
     sqlx::query("UPDATE users SET is_active = false WHERE id = $1::uuid").bind(&pe_id).execute(&pool).await.unwrap();
     pult_chat::sweep_blocked(&pool).await.unwrap();

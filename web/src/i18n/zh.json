@@ -2180,7 +2180,13 @@
       "unlocked": "聊天已重新开放"
     },
     "leave": "退出聊天",
-    "ownerHint": "所有者不能退出：由超级管理员转让所有权。"
+    "ownerHint": "所有者不能退出：由超级管理员转让所有权。",
+    "attach": "添加附件",
+    "attachHint": "添加附件。也可以粘贴图片或将文件拖到这里。",
+    "uploading": "正在上传…",
+    "removeFile": "移除 {{name}}",
+    "tooManyFiles": "每条消息最多 {{count}} 个文件",
+    "files_other": "{{count}} 个文件"
   },
   "people": {
     "presence": {
@@ -2243,8 +2249,8 @@
       "avatarSaved": "头像已保存",
       "badImage": "无法读取图片。支持 JPEG、PNG、WebP 或 GIF。",
       "tooLarge": "图片压缩后仍然过大。",
-      "gifTooLarge": "GIF 大于 1 MB：请缩小尺寸或减少帧数。",
-      "avatarHint": "头像会裁成正方形；GIF 保留动画并缩放到圆形中。"
+      "gifTooLarge": "GIF 大于 15 MB。",
+      "avatarHint": "照片会裁成正方形并缩小。15 MB 以内的 GIF 保留动画，由服务器缩小。"
     },
     "wall": {
       "title": "留言墙",

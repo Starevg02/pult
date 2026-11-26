@@ -27,6 +27,8 @@ base64.workspace = true
 reqwest = { workspace = true, features = ["rustls-tls-native-roots"] }
 ring.workspace = true
 dns-lookup = "2"
+# Только GIF: уменьшить анимированный аватар, не потеряв кадры.
+image = { version = "0.25", default-features = false, features = ["gif"] }
 
 [dev-dependencies]
 pult-testkit.workspace = true

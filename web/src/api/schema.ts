@@ -1830,6 +1830,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/chat/files/{file}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Скачать вложение. Видят участники, которым видно сообщение (бывший участник — до выхода), а
+         *     неотправленное — только тот, кто загрузил.
+         */
+        get: operations["chat_get_file"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/chat/groups": {
         parameters: {
             query?: never;
@@ -1874,6 +1894,26 @@ export interface paths {
         get: operations["chat_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/chat/{id}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Загрузить вложение в чат. Прикрепляется к сообщению при отправке; типы и предел размера — как у
+         *     вложений заявок (настройка Helpdesk). Имя и содержимое шифруются ключом портала.
+         */
+        post: operations["chat_upload_file"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4033,8 +4073,8 @@ export interface paths {
         };
         get?: never;
         /**
-         * Поставить аватар. Браузер заранее обрезает картинку до квадрата и уменьшает её; GIF приходит как есть,
-         *     чтобы не потерять анимацию (в кружок его вписывает интерфейс).
+         * Поставить аватар. Браузер заранее обрезает картинку до квадрата и уменьшает её; GIF приходит как есть
+         *     (перерисовка в браузере оставила бы один кадр) и уменьшается здесь же.
          */
         put: operations["put_my_avatar"];
         post?: never;
@@ -5762,7 +5802,10 @@ export interface components {
             external: boolean;
         };
         AvatarInput: {
-            /** @description Картинка в base64: JPEG, PNG, WebP или GIF (в том числе анимированный), до 1 МБ. */
+            /**
+             * @description Картинка в base64: JPEG, PNG или WebP до 1 МБ (браузер уже уменьшил её) либо GIF до 15 МБ —
+             *     его уменьшает сервер, анимация сохраняется.
+             */
             data: string;
         };
         /** @description Политика копий: сколько хранить и проверять ли каждую. */
@@ -5961,6 +6004,17 @@ export interface components {
             /** Format: uuid */
             user_id: string;
         };
+        /** @description Вложение сообщения (или загруженное, но ещё не отправленное). */
+        ChatFile: {
+            /** Format: uuid */
+            id: string;
+            /** @description Картинка: показывается в переписке, остальное скачивается. */
+            image: boolean;
+            mime: string;
+            name: string;
+            /** Format: int64 */
+            size: number;
+        };
         ChatGroupInput: {
             members?: string[];
             title: string;
@@ -5987,6 +6041,11 @@ export interface components {
             pinned: boolean;
             /** @description Начало последнего доступного мне сообщения. */
             preview?: string | null;
+            /**
+             * Format: int64
+             * @description Вложений в последнем сообщении (у сообщения только из файлов текста нет).
+             */
+            preview_files: number;
             /** @description Моя роль: `owner`, `admin`, `member`. */
             role: string;
             /** @description Название группового чата или имя собеседника. */
@@ -6022,13 +6081,17 @@ export interface components {
             editable: boolean;
             /** Format: date-time */
             edited_at?: string | null;
+            files: components["schemas"]["ChatFile"][];
             /** Format: uuid */
             id: string;
             /** Format: int32 */
             version: number;
         };
         ChatMessageInput: {
-            body: string;
+            /** @description Текст; может быть пустым, если есть вложения. */
+            body?: string;
+            /** @description Загруженные заранее вложения (до 10), только при отправке. */
+            files?: string[];
         };
         ChatMessageVersion: {
             body: string;
@@ -12720,6 +12783,34 @@ export interface operations {
             };
         };
     };
+    chat_get_file: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                file: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Содержимое файла */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     chat_create_group: {
         parameters: {
             query?: never;
@@ -12781,6 +12872,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChatDetail"];
+                };
+            };
+        };
+    };
+    chat_upload_file: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatFile"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };

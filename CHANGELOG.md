@@ -10,6 +10,41 @@ automatically.
 格式：[Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号：[SemVer](https://semver.org/lang/zh-CN/)。
 1.0 版本之前，设置和 API 可能出现不兼容的变更；数据库迁移始终自动执行。
 
+## 0.3.1 — вложения в сообщениях · attachments in Messages · 消息附件
+
+### Русский
+
+- В «Сообщениях» можно прикреплять файлы: кнопка со скрепкой, вставка картинки из буфера или перетаскивание.
+  До 10 файлов в сообщении; разрешены те же типы и тот же предел размера, что у вложений заявок
+  (настройка Helpdesk «Размер вложения», по умолчанию 25 МБ). Сообщение может состоять только из файлов.
+- Картинки показываются прямо в переписке, остальные файлы скачиваются. Имя и содержимое файла хранятся
+  зашифрованными ключом портала, как и текст; открыть вложение могут только участники чата (вышедший — только
+  отправленные до выхода). Загруженный, но не отправленный файл удаляется через сутки.
+- В списке переписок сообщение без текста подписано числом вложений.
+- Анимированный GIF-аватар теперь можно загрузить до 15 МБ: сервер обрезает его в квадрат 256 точек и
+  сохраняет все кадры (раньше — только до 1 МБ как есть).
+
+### English
+
+- Messages now take attachments: the paperclip button, pasting an image or dropping files. Up to 10 files per
+  message; the same file types and size limit as ticket attachments (the Helpdesk "Attachment size" setting,
+  25 MB by default). A message may consist of files only.
+- Images are shown right in the conversation, other files download. The file name and content are stored
+  encrypted with the portal key, like the text; only chat members can open an attachment (a former member, only
+  those sent before they left). An uploaded file that is never sent is deleted after a day.
+- In the chat list a message without text shows the number of attachments.
+- An animated GIF avatar can now be up to 15 MB: the server crops it to a 256-pixel square and keeps all frames
+  (before, only up to 1 MB as is).
+
+### 中文
+
+- “消息”支持附件：回形针按钮、粘贴图片或拖入文件。每条消息最多 10 个文件；文件类型和大小限制与工单附件相同
+  （Helpdesk 设置“附件大小”，默认 25 MB）。消息可以只包含文件。
+- 图片直接显示在对话中，其他文件可下载。文件名和内容与文本一样使用门户密钥加密存储；只有聊天成员可以打开附件
+  （已退出的成员只能打开退出前发送的附件）。上传后未发送的文件一天后删除。
+- 在会话列表中，没有文字的消息显示附件数量。
+- 动态 GIF 头像现在最大可达 15 MB：服务器将其裁成 256 像素正方形并保留所有帧（此前只能原样上传 1 MB 以内的文件）。
+
 ## 0.3.0 — профиль сотрудника: статус, аватар, стена · employee profile: status, avatar, wall · 员工主页：状态、头像、留言墙
 
 ### Русский

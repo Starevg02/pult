@@ -41,8 +41,18 @@ pub mod kind {
 
 /// Без сигнала вкладки дольше этого — «не в сети».
 pub const ONLINE_SECS: i64 = 150;
-/// Предел аватара: неподвижная картинка после сжатия в браузере — десятки КБ, анимированный GIF — больше.
+/// Предел хранимого аватара: неподвижная картинка после сжатия в браузере — десятки КБ, уменьшенный GIF — больше.
 pub const AVATAR_MAX_BYTES: usize = 1024 * 1024;
+/// Сторона квадрата аватара (так же уменьшает браузер).
+pub const AVATAR_SIDE: u32 = 256;
+/// Исходный GIF: до 15 МБ, до 2048 точек по стороне, до 300 кадров — дальше уменьшение слишком дорого.
+pub const GIF_INPUT_MAX_BYTES: usize = 15 * 1024 * 1024;
+const GIF_MAX_SIDE: u32 = 2048;
+const GIF_MAX_FRAMES: usize = 300;
+/// Тело запроса с GIF в base64 (на треть длиннее данных) и запасом на JSON.
+pub const AVATAR_BODY_LIMIT: usize = GIF_INPUT_MAX_BYTES / 3 * 4 + 64 * 1024;
+/// Одновременно уменьшается не больше двух GIF: работа для процессора, а не для очереди запросов.
+static GIF_SLOTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
 pub const ABOUT_MAX: usize = 1000;
 pub const STATUS_TEXT_MAX: usize = 100;
 pub const STATUS_EMOJI_MAX: usize = 16;
@@ -151,6 +161,61 @@ pub fn sniff_image(data: &[u8]) -> Option<&'static str> {
     } else {
         None
     }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum GifError {
+    /// Не читается или больше [`GIF_MAX_SIDE`] по стороне.
+    Unreadable,
+    TooManyFrames,
+    /// После уменьшения всё ещё больше [`AVATAR_MAX_BYTES`].
+    TooLarge,
+}
+
+/// Уменьшить GIF до квадрата [`AVATAR_SIDE`]: центр кадра, все кадры и их задержки, бесконечный повтор.
+/// Маленький GIF (не больше квадрата и предела) остаётся как есть.
+pub fn shrink_gif(data: &[u8]) -> Result<Vec<u8>, GifError> {
+    use image::{AnimationDecoder, Frame, ImageDecoder, Limits, codecs::gif, imageops};
+    let mut dec = gif::GifDecoder::new(std::io::Cursor::new(data)).map_err(|_| GifError::Unreadable)?;
+    let mut limits = Limits::default();
+    limits.max_image_width = Some(GIF_MAX_SIDE);
+    limits.max_image_height = Some(GIF_MAX_SIDE);
+    limits.max_alloc = Some(64 * 1024 * 1024);
+    dec.set_limits(limits).map_err(|_| GifError::Unreadable)?;
+    let (w, h) = dec.dimensions();
+    if w == 0 || h == 0 {
+        return Err(GifError::Unreadable);
+    }
+    if w <= AVATAR_SIDE && h <= AVATAR_SIDE && data.len() <= AVATAR_MAX_BYTES {
+        return Ok(data.to_vec());
+    }
+    let side = w.min(h);
+    let (x, y) = ((w - side) / 2, (h - side) / 2);
+    let out_side = side.min(AVATAR_SIDE);
+    let mut out = Vec::new();
+    {
+        let mut enc = gif::GifEncoder::new_with_speed(&mut out, 10);
+        enc.set_repeat(gif::Repeat::Infinite).map_err(|_| GifError::Unreadable)?;
+        for (i, frame) in dec.into_frames().enumerate() {
+            if i >= GIF_MAX_FRAMES {
+                return Err(GifError::TooManyFrames);
+            }
+            let frame = frame.map_err(|_| GifError::Unreadable)?;
+            let delay = frame.delay();
+            let full = frame.into_buffer();
+            let square = imageops::crop_imm(&full, x, y, side, side).to_image();
+            let small = if out_side < side {
+                imageops::resize(&square, out_side, out_side, imageops::FilterType::Triangle)
+            } else {
+                square
+            };
+            enc.encode_frame(Frame::from_parts(small, 0, 0, delay)).map_err(|_| GifError::Unreadable)?;
+        }
+    }
+    if out.len() > AVATAR_MAX_BYTES {
+        return Err(GifError::TooLarge);
+    }
+    Ok(out)
 }
 
 /// Убрать управляющие символы (кроме перевода строки в многострочных полях) и пробелы по краям.
@@ -326,12 +391,13 @@ pub(crate) async fn heartbeat(
 
 #[derive(Deserialize, ToSchema)]
 pub struct AvatarInput {
-    /// Картинка в base64: JPEG, PNG, WebP или GIF (в том числе анимированный), до 1 МБ.
+    /// Картинка в base64: JPEG, PNG или WebP до 1 МБ (браузер уже уменьшил её) либо GIF до 15 МБ —
+    /// его уменьшает сервер, анимация сохраняется.
     pub data: String,
 }
 
-/// Поставить аватар. Браузер заранее обрезает картинку до квадрата и уменьшает её; GIF приходит как есть,
-/// чтобы не потерять анимацию (в кружок его вписывает интерфейс).
+/// Поставить аватар. Браузер заранее обрезает картинку до квадрата и уменьшает её; GIF приходит как есть
+/// (перерисовка в браузере оставила бы один кадр) и уменьшается здесь же.
 #[utoipa::path(put, path = "/api/me/avatar", tag = "profile", request_body = AvatarInput,
     responses((status = 200, body = MyCard), (status = 400, body = pult_core::error::ErrorBody)))]
 pub(crate) async fn put_my_avatar(
@@ -340,17 +406,34 @@ pub(crate) async fn put_my_avatar(
     Json(req): Json<AvatarInput>,
 ) -> ApiResult<Json<MyCard>> {
     // base64 длиннее данных на треть: слишком длинную строку не декодируем вовсе.
-    if req.data.len() > AVATAR_MAX_BYTES / 3 * 4 + 8 {
-        return Err(ApiError::bad_request("avatar_too_large", "Картинка больше 1 МБ."));
+    if req.data.len() > GIF_INPUT_MAX_BYTES / 3 * 4 + 8 {
+        return Err(ApiError::bad_request("avatar_too_large", "GIF больше 15 МБ."));
     }
     let data = base64::engine::general_purpose::STANDARD
         .decode(req.data.trim())
         .map_err(|_| ApiError::bad_request("invalid_image", "Картинка не прочиталась."))?;
+    let mime = sniff_image(&data)
+        .ok_or_else(|| ApiError::bad_request("invalid_image", "Подходят только JPEG, PNG, WebP и GIF."))?;
+    let data = if mime == "image/gif" {
+        let _slot = GIF_SLOTS.acquire().await.map_err(|e| ApiError::Internal(e.to_string()))?;
+        tokio::task::spawn_blocking(move || shrink_gif(&data))
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?
+            .map_err(|e| match e {
+                GifError::Unreadable => {
+                    ApiError::bad_request("invalid_image", "GIF не прочитался или больше 2048 точек по стороне.")
+                }
+                GifError::TooManyFrames => ApiError::bad_request("avatar_too_large", "В GIF больше 300 кадров."),
+                GifError::TooLarge => {
+                    ApiError::bad_request("avatar_too_large", "GIF слишком длинный: даже уменьшенный он больше 1 МБ.")
+                }
+            })?
+    } else {
+        data
+    };
     if data.len() > AVATAR_MAX_BYTES {
         return Err(ApiError::bad_request("avatar_too_large", "Картинка больше 1 МБ."));
     }
-    let mime = sniff_image(&data)
-        .ok_or_else(|| ApiError::bad_request("invalid_image", "Подходят только JPEG, PNG, WebP и GIF."))?;
     let sha: String = sha256(&data).iter().map(|b| format!("{b:02x}")).collect();
     sqlx::query(
         "INSERT INTO user_avatars (user_id, mime, data, sha256) VALUES ($1, $2, $3, $4)
@@ -958,6 +1041,47 @@ mod tests {
         assert_eq!(sniff_image(b"<svg xmlns=\"http://www.w3.org/2000/svg\"/>"), None);
         assert_eq!(sniff_image(b"<html><script>"), None);
         assert_eq!(sniff_image(b"RIFF\0\0\0\0WAVE"), None);
+    }
+
+    /// GIF из кадров заданного размера: каждый кадр своего цвета.
+    fn gif_of(w: u32, h: u32, frames: u8) -> Vec<u8> {
+        use image::{Delay, Frame, RgbaImage, codecs::gif::GifEncoder};
+        let mut out = Vec::new();
+        {
+            let mut enc = GifEncoder::new(&mut out);
+            for i in 0..frames {
+                let img = RgbaImage::from_pixel(w, h, image::Rgba([i.wrapping_mul(60), 100, 200, 255]));
+                enc.encode_frame(Frame::from_parts(img, 0, 0, Delay::from_numer_denom_ms(100, 1))).unwrap();
+            }
+        }
+        out
+    }
+
+    fn frames_of(data: &[u8]) -> (u32, u32, usize) {
+        use image::{AnimationDecoder, ImageDecoder, codecs::gif::GifDecoder};
+        let dec = GifDecoder::new(std::io::Cursor::new(data)).unwrap();
+        let (w, h) = dec.dimensions();
+        (w, h, dec.into_frames().count())
+    }
+
+    #[test]
+    fn gif_is_shrunk_to_square_with_all_frames() {
+        let big = gif_of(600, 400, 3);
+        let small = shrink_gif(&big).unwrap();
+        assert_eq!(frames_of(&small), (256, 256, 3), "квадрат 256, все кадры на месте");
+        assert_eq!(sniff_image(&small), Some("image/gif"));
+        // Маленький GIF не перекодируется.
+        let tiny = gif_of(64, 64, 2);
+        assert_eq!(shrink_gif(&tiny).unwrap(), tiny);
+        // Узкий, но меньше квадрата по одной стороне: обрезается до квадрата по меньшей стороне.
+        assert_eq!(frames_of(&shrink_gif(&gif_of(300, 100, 1)).unwrap()), (100, 100, 1));
+    }
+
+    #[test]
+    fn bad_gifs_are_refused() {
+        assert_eq!(shrink_gif(b"GIF89a\0\0garbage"), Err(GifError::Unreadable));
+        assert_eq!(shrink_gif(&gif_of(2100, 10, 1)), Err(GifError::Unreadable), "больше 2048 по стороне");
+        assert_eq!(shrink_gif(&gif_of(300, 300, 31)).map(|_| ()), Ok(()));
     }
 
     #[test]

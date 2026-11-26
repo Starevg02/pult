@@ -1346,16 +1346,6 @@ struct FileAccess {
     watcher: bool,
 }
 
-fn content_disposition(kind: &str, name: &str) -> String {
-    let encoded: String = name
-        .bytes()
-        .map(|b| {
-            if b.is_ascii_alphanumeric() || b"._-".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }
-        })
-        .collect();
-    format!("{kind}; filename*=UTF-8''{encoded}")
-}
-
 /// Скачать вложение. Права — как на заявку; вложение внутренней заметки сотруднику недоступно.
 #[utoipa::path(get, path = "/api/helpdesk/files/{id}", tag = "helpdesk", params(("id" = Uuid, Path)),
     responses((status = 200, description = "Содержимое файла"), (status = 404, body = pult_core::error::ErrorBody)))]
@@ -1407,7 +1397,7 @@ async fn download_file(
     Ok((
         [
             (header::CONTENT_TYPE, f.mime),
-            (header::CONTENT_DISPOSITION, content_disposition(kind, &f.original_name)),
+            (header::CONTENT_DISPOSITION, pult_core::files::content_disposition(kind, &f.original_name)),
             // Браузер не хранит вложение: на общем компьютере следующий пользователь открыл бы его из кэша.
             (header::CACHE_CONTROL, "no-store".to_string()),
         ],
@@ -1439,7 +1429,7 @@ mod tests {
 
     #[test]
     fn file_names_cannot_break_headers() {
-        let h = content_disposition("attachment", "скрин\r\nX: y.png");
+        let h = pult_core::files::content_disposition("attachment", "скрин\r\nX: y.png");
         assert!(!h.contains('\r') && !h.contains('\n') && h.starts_with("attachment; filename*=UTF-8''"));
     }
 }

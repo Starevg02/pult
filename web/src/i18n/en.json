@@ -2187,7 +2187,14 @@
       "unlocked": "chat available again"
     },
     "leave": "Leave the chat",
-    "ownerHint": "The owner cannot leave: a superadministrator transfers ownership."
+    "ownerHint": "The owner cannot leave: a superadministrator transfers ownership.",
+    "attach": "Attach a file",
+    "attachHint": "Attach a file. You can also paste an image or drop files here.",
+    "uploading": "Uploading…",
+    "removeFile": "Remove {{name}}",
+    "tooManyFiles": "No more than {{count}} files per message",
+    "files_one": "{{count}} file",
+    "files_other": "{{count}} files"
   },
   "people": {
     "presence": {
@@ -2250,8 +2257,8 @@
       "avatarSaved": "Avatar saved",
       "badImage": "Couldn't read the image. JPEG, PNG, WebP or GIF will do.",
       "tooLarge": "The image is too large even after compression.",
-      "gifTooLarge": "The GIF is larger than 1 MB: reduce its size or number of frames.",
-      "avatarHint": "The avatar is cropped to a square; a GIF keeps its animation and is fitted into the circle."
+      "gifTooLarge": "The GIF is larger than 15 MB.",
+      "avatarHint": "Photos are cropped to a square and shrunk. A GIF up to 15 MB keeps its animation — the server shrinks it."
     },
     "wall": {
       "title": "Wall",

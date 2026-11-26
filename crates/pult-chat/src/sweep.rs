@@ -16,8 +16,15 @@ use uuid::Uuid;
 /// Фоновая задача: проверка раз в 5 минут (и сразу после синхронизации AD по расписанию).
 pub const SWEEP_JOB: &str = "chat.blocked_sweep";
 
-/// Сколько участий закрыто.
+/// Сколько участий закрыто. Заодно убираются вложения, загруженные, но не отправленные за сутки.
 pub async fn sweep_blocked(db: &PgPool) -> Result<u64, sqlx::Error> {
+    let gone = sqlx::query("DELETE FROM chat_files WHERE message_id IS NULL AND created_at < now() - interval '1 day'")
+        .execute(db)
+        .await?
+        .rows_affected();
+    if gone > 0 {
+        tracing::info!(count = gone, "удалены неотправленные вложения сообщений");
+    }
     let rows: Vec<(Uuid, Uuid, String)> = sqlx::query_as(
         "SELECT m.chat_id, m.user_id, m.role
            FROM chat_members m
