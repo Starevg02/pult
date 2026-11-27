@@ -2128,7 +2128,7 @@ version = "0.4.0"
 dependencies = [
  "serde",
  "serde_json",
- "utoipa",
+ "utoipa 6.0.0",
 ]
 
 [[package]]
@@ -2147,7 +2147,7 @@ dependencies = [
  "tokio",
  "tower",
  "tracing",
- "utoipa",
+ "utoipa 6.0.0",
  "utoipa-axum",
  "uuid",
 ]
@@ -2168,7 +2168,7 @@ dependencies = [
  "time",
  "tokio",
  "tracing",
- "utoipa",
+ "utoipa 6.0.0",
  "utoipa-axum",
  "uuid",
  "zeroize",
@@ -2189,7 +2189,7 @@ dependencies = [
  "sqlx",
  "time",
  "tracing",
- "utoipa",
+ "utoipa 6.0.0",
  "utoipa-axum",
  "uuid",
 ]
@@ -2215,7 +2215,7 @@ dependencies = [
  "tokio",
  "tower",
  "tracing",
- "utoipa",
+ "utoipa 6.0.0",
  "utoipa-axum",
  "uuid",
 ]
@@ -2274,7 +2274,7 @@ dependencies = [
  "tower",
  "tracing",
  "url",
- "utoipa",
+ "utoipa 6.0.0",
  "utoipa-axum",
  "uuid",
 ]
@@ -2297,7 +2297,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
- "utoipa",
+ "utoipa 6.0.0",
  "utoipa-axum",
  "uuid",
 ]
@@ -2323,7 +2323,7 @@ dependencies = [
  "tokio",
  "tower",
  "tracing",
- "utoipa",
+ "utoipa 6.0.0",
  "utoipa-axum",
  "uuid",
 ]
@@ -2370,7 +2370,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "url",
- "utoipa",
+ "utoipa 6.0.0",
  "utoipa-axum",
  "x509-parser",
 ]
@@ -3918,7 +3918,19 @@ dependencies = [
  "indexmap",
  "serde",
  "serde_json",
- "utoipa-gen",
+ "utoipa-gen 5.5.0",
+]
+
+[[package]]
+name = "utoipa"
+version = "6.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8765fe27aeff71012a3f90fa474cf1df863a7d0dd81ed25de4e63fff2544994f"
+dependencies = [
+ "indexmap",
+ "serde",
+ "serde_json",
+ "utoipa-gen 6.0.1",
 ]
 
 [[package]]
@@ -3931,7 +3943,7 @@ dependencies = [
  "paste",
  "tower-layer",
  "tower-service",
- "utoipa",
+ "utoipa 5.5.0",
 ]
 
 [[package]]
@@ -3942,8 +3954,19 @@ checksum = "6ba0b99ee52df3028635d93840c797102da61f8a7bb3cf751032455895b52ef8"
 dependencies = [
  "proc-macro2",
  "quote",
- "regex",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "utoipa-gen"
+version = "6.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d935f1c83fdf8b88f09bbe050d0cea78ea4afee6d7b0317403228c1200b2c8ab"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "regex",
+ "syn 3.0.9",
  "uuid",
 ]
 
