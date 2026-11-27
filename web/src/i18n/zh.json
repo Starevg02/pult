@@ -2315,7 +2315,10 @@
     "gifRemove": "从我的 GIF 中移除",
     "gifEmpty": "这里会显示你的 GIF。可以添加文件，或通过消息菜单保存聊天中的 GIF。",
     "gifSave": "保存到我的 GIF",
-    "gifSaved": "GIF 已保存到“我的 GIF”"
+    "gifSaved": "GIF 已保存到“我的 GIF”",
+    "klipyError": "KLIPY 暂时没有响应。如果刚刚开启搜索，请刷新页面。",
+    "klipyEmpty": "没有找到。",
+    "klipyGone": "GIF 已不可用"
   },
   "people": {
     "presence": {
@@ -2442,7 +2445,15 @@
     "database": "整个数据库",
     "expiredFiles_other": "{{count}} 个文件已过期",
     "retention": "附件保留天数",
-    "retentionHint": "0 表示永久保留。到期后文件被删除，消息中保留文件名和“已过期”标记。"
+    "retentionHint": "0 表示永久保留。到期后文件被删除，消息中保留文件名和“已过期”标记。",
+    "klipy": "GIF 搜索（KLIPY）",
+    "klipyOn": "已开启",
+    "klipyOff": "已关闭",
+    "klipyHint": "填写密钥后，输入框的 GIF 面板会出现 KLIPY 图库搜索。应用密钥可在 partner.klipy.com 的 Partner Panel 免费获取；没有密钥时搜索关闭。",
+    "klipyKey": "KLIPY 应用密钥",
+    "klipyRemove": "关闭",
+    "klipyRemoved": "KLIPY 搜索已关闭",
+    "klipyPrivacy": "搜索开启期间，员工的浏览器直接访问 KLIPY：KLIPY 能看到搜索词、匿名员工编号和电脑地址。密钥在浏览器请求中可见——KLIPY 就是这样设计的。门户不保存动画本身：消息中只保留链接。"
   },
   "extensions": {
     "hint": "扩展是带有 pult-extension.json 清单的外部服务。门户为其发放仅限读取、权限来自清单的 API 令牌、工单事件的签名 Webhook 以及菜单链接。扩展代码不会在门户内运行。",

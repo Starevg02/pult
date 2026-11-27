@@ -5,7 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "../../toast";
-import { api, ok, type ChatMessage } from "../../api/client";
+import { api, ok, type ChatKlipyGif, type ChatMessage } from "../../api/client";
 import { IconFileText, IconPaperclip, IconReply, IconSend, IconSmile, IconX } from "../../icons";
 import { ErrorBox } from "../../ui";
 import { formatSize } from "../helpdesk/helpdeskUtil";
@@ -75,6 +75,17 @@ export function Composer({ chat, editing, reply, onAddFiles, onEditLast, onJump,
   });
   const sendGif = useMutation({
     mutationFn: (gif: string) => ok(api.POST("/api/chat/{id}/gifs/{gif}", { params: { path: { id: chat, gif } }, body: { reply_to: reply?.id } })),
+    onSuccess: () => {
+      setEmoji(false);
+      onDone();
+      void qc.invalidateQueries({ queryKey: ["chat-messages", chat] });
+      void qc.invalidateQueries({ queryKey: ["chats"] });
+      void qc.invalidateQueries({ queryKey: ["chat-files", chat] });
+    },
+    onError: (e) => toast((e instanceof Error && e.message) || t("common.error"), "bad"),
+  });
+  const sendKlipy = useMutation({
+    mutationFn: (gif: ChatKlipyGif) => ok(api.POST("/api/chat/{id}/klipy", { params: { path: { id: chat } }, body: { ...gif, reply_to: reply?.id } })),
     onSuccess: () => {
       setEmoji(false);
       onDone();
@@ -216,7 +227,16 @@ export function Composer({ chat, editing, reply, onAddFiles, onEditLast, onJump,
               </>
             )}
           </div>
-          {emoji && <EmojiPanel toggle={smile} onClose={closeEmoji} onPick={(e) => insert(e)} onGif={editing ? undefined : (g) => !sendGif.isPending && sendGif.mutate(g)} gifBusy={sendGif.isPending} />}
+          {emoji && (
+            <EmojiPanel
+              toggle={smile}
+              onClose={closeEmoji}
+              onPick={(e) => insert(e)}
+              onGif={editing ? undefined : (g) => !sendGif.isPending && sendGif.mutate(g)}
+              onKlipy={editing ? undefined : (g) => !sendKlipy.isPending && sendKlipy.mutate(g)}
+              gifBusy={sendGif.isPending || sendKlipy.isPending}
+            />
+          )}
         </div>
         <button
           type="button"

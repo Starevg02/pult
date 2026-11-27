@@ -113,21 +113,32 @@ function Stats() {
 }
 
 /** Сколько места занимают переписки и сколько хранить вложения. Сообщения не удаляются никогда. */
-function Storage() {
-  const { t } = useTranslation();
+/** Настройки «Сообщений» целиком: сохранение отправляет все поля, иначе пропущенные сбросятся. */
+function useChatSettings() {
   const qc = useQueryClient();
-  const q = useQuery({ queryKey: ["admin-chat-storage"], queryFn: () => ok<ChatStorage>(api.GET("/api/admin/chats/storage")) });
-  const [days, setDays] = useState<string | null>(null);
+  const q = useQuery({ queryKey: ["admin-chat-settings"], queryFn: () => ok<ChatSettings>(api.GET("/api/admin/chats/settings")) });
   const save = useMutation({
-    mutationFn: (body: ChatSettings) => ok(api.PUT("/api/admin/chats/settings", { body })),
+    mutationFn: (patch: Partial<ChatSettings>) => {
+      if (!q.data) throw new Error("settings not loaded");
+      return ok(api.PUT("/api/admin/chats/settings", { body: { ...q.data, ...patch } }));
+    },
     onSuccess: () => {
-      setDays(null);
-      toast(t("common.saved"));
+      void qc.invalidateQueries({ queryKey: ["admin-chat-settings"] });
       void qc.invalidateQueries({ queryKey: ["admin-chat-storage"] });
+      void qc.invalidateQueries({ queryKey: ["chat-klipy"] });
     },
   });
-  if (q.error) return <ErrorBox error={q.error} />;
-  if (q.isPending) return <Spinner />;
+  return { q, save };
+}
+
+function Storage() {
+  const { t } = useTranslation();
+  const q = useQuery({ queryKey: ["admin-chat-storage"], queryFn: () => ok<ChatStorage>(api.GET("/api/admin/chats/storage")) });
+  const { q: cfg, save } = useChatSettings();
+  const [days, setDays] = useState<string | null>(null);
+  const error = q.error ?? cfg.error;
+  if (error) return <ErrorBox error={error} />;
+  if (q.isPending || cfg.isPending || !q.data) return <Spinner />;
   const s = q.data;
   const value = days ?? String(s.file_retention_days);
   const parsed = Number(value);
@@ -153,7 +164,16 @@ function Storage() {
         className="mt-4 flex flex-wrap items-end gap-2"
         onSubmit={(e) => {
           e.preventDefault();
-          if (valid) save.mutate({ file_retention_days: parsed });
+          if (valid)
+            save.mutate(
+              { file_retention_days: parsed },
+              {
+                onSuccess: () => {
+                  setDays(null);
+                  toast(t("common.saved"));
+                },
+              },
+            );
         }}
       >
         <div className="w-56">
@@ -166,6 +186,55 @@ function Storage() {
         </Button>
       </form>
       <p className="mt-1 text-xs text-muted">{t("chatAdmin.retentionHint")}</p>
+      {save.error && <ErrorBox error={save.error} />}
+    </Card>
+  );
+}
+
+/** Поиск GIF в KLIPY: ключ приложения из Partner Panel KLIPY; пусто — поиск выключен. */
+function Klipy() {
+  const { t } = useTranslation();
+  const { q, save } = useChatSettings();
+  const [key, setKey] = useState<string | null>(null);
+  if (q.error) return <ErrorBox error={q.error} />;
+  if (q.isPending) return <Spinner />;
+  const current = q.data.klipy_key ?? "";
+  const value = key ?? current;
+  const done = (msg: string) => ({
+    onSuccess: () => {
+      setKey(null);
+      toast(msg);
+    },
+  });
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <h2 className="font-semibold">{t("chatAdmin.klipy")}</h2>
+        <Badge tone={current ? "ok" : "muted"}>{current ? t("chatAdmin.klipyOn") : t("chatAdmin.klipyOff")}</Badge>
+      </div>
+      <p className="mt-1 text-xs text-muted">{t("chatAdmin.klipyHint")}</p>
+      <form
+        className="mt-3 flex flex-wrap items-end gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (key !== null && value.trim()) save.mutate({ klipy_key: value.trim() }, done(t("common.saved")));
+        }}
+      >
+        <div className="w-full max-w-md">
+          <Field label={t("chatAdmin.klipyKey")}>
+            <Input value={value} onChange={(e) => setKey(e.target.value)} autoComplete="off" spellCheck={false} maxLength={128} />
+          </Field>
+        </div>
+        <Button type="submit" variant="primary" disabled={key === null || !value.trim() || value.trim() === current || save.isPending}>
+          {t("common.save")}
+        </Button>
+        {current && (
+          <Button type="button" disabled={save.isPending} onClick={() => save.mutate({ klipy_key: "" }, done(t("chatAdmin.klipyRemoved")))}>
+            {t("chatAdmin.klipyRemove")}
+          </Button>
+        )}
+      </form>
+      <p className="mt-2 text-xs text-muted">{t("chatAdmin.klipyPrivacy")}</p>
       {save.error && <ErrorBox error={save.error} />}
     </Card>
   );
@@ -205,6 +274,7 @@ export function ChatAdminPage() {
         )}
       </Card>
       <Storage />
+      <Klipy />
       <Stats />
       {assign && <OwnerDialog chat={assign} onClose={() => setAssign(null)} />}
     </div>

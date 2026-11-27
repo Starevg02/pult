@@ -43,8 +43,33 @@ pub struct AppState {
     pub trusted_proxies: Arc<Vec<IpNetwork>>,
 }
 
+/// Политика CSP без внешних адресов.
+const CSP: &str = "default-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+
+/// Политика CSP с поиском GIF в KLIPY: картинки с серверов KLIPY, запросы к их API (только браузером).
+fn csp_with_klipy() -> String {
+    format!(
+        "{CSP}; img-src 'self' {}; connect-src 'self' {}",
+        pult_chat::api::KLIPY_MEDIA.map(|u| u.trim_end_matches('/')).join(" "),
+        pult_chat::api::KLIPY_API
+    )
+}
+
+/// CSP на каждом ответе: адреса KLIPY пропускаются, только пока в настройках «Сообщений» есть ключ.
+async fn content_security_policy(State(core): State<Option<pult_core::Core>>, req: Request, next: Next) -> Response {
+    let mut resp = next.run(req).await;
+    let klipy = match &core {
+        Some(core) => pult_chat::api::klipy_enabled(core).await,
+        None => false,
+    };
+    let value = if klipy { HeaderValue::from_str(&csp_with_klipy()).ok() } else { None };
+    resp.headers_mut().insert(header::CONTENT_SECURITY_POLICY, value.unwrap_or(HeaderValue::from_static(CSP)));
+    resp
+}
+
 pub fn router(state: AppState, api: Option<crate::api::ApiState>) -> Router {
     let trusted = state.trusted_proxies.clone();
+    let csp_core = api.as_ref().map(|a| a.core.clone());
     let modules = match api {
         // Выключенные в мастере модули отвечают 404 (`pult_core::org::gate`).
         Some(api) => crate::api::modules()
@@ -73,12 +98,7 @@ pub fn router(state: AppState, api: Option<crate::api::ApiState>) -> Router {
         }))
         .layer(SetResponseHeaderLayer::overriding(header::X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff")))
         .layer(SetResponseHeaderLayer::overriding(header::REFERRER_POLICY, HeaderValue::from_static("no-referrer")))
-        .layer(SetResponseHeaderLayer::overriding(
-            header::CONTENT_SECURITY_POLICY,
-            HeaderValue::from_static(
-                "default-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
-            ),
-        ))
+        .layer(middleware::from_fn_with_state(csp_core, content_security_policy))
         .layer(SetResponseHeaderLayer::overriding(
             axum::http::HeaderName::from_static("permissions-policy"),
             HeaderValue::from_static("camera=(), microphone=(), geolocation=(), payment=(), usb=()"),

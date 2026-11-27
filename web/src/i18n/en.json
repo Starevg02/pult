@@ -2329,7 +2329,10 @@
     "gifRemove": "Remove from my GIFs",
     "gifEmpty": "Your GIFs will be here. Add a file or save a GIF from a chat via the message menu.",
     "gifSave": "Save to my GIFs",
-    "gifSaved": "GIF saved to My GIFs"
+    "gifSaved": "GIF saved to My GIFs",
+    "klipyError": "KLIPY is not responding. If search was just turned on, reload the page.",
+    "klipyEmpty": "Nothing found.",
+    "klipyGone": "GIF is no longer available"
   },
   "people": {
     "presence": {
@@ -2458,7 +2461,15 @@
     "expiredFiles_one": "{{count}} file expired",
     "expiredFiles_other": "{{count}} files expired",
     "retention": "Keep attachments, days",
-    "retentionHint": "0 — keep forever. After the period the file is deleted; the message keeps its name and an “expired” mark."
+    "retentionHint": "0 — keep forever. After the period the file is deleted; the message keeps its name and an “expired” mark.",
+    "klipy": "GIF search (KLIPY)",
+    "klipyOn": "On",
+    "klipyOff": "Off",
+    "klipyHint": "With a key, the composer's GIF panel gets a search of the KLIPY library. Get an app key in the Partner Panel at partner.klipy.com (free); without a key the search is off.",
+    "klipyKey": "KLIPY app key",
+    "klipyRemove": "Turn off",
+    "klipyRemoved": "KLIPY search is off",
+    "klipyPrivacy": "While search is on, employees' browsers talk to KLIPY directly: KLIPY sees search queries, an anonymous employee number and the computer's address. The key is visible in browser requests — that is how KLIPY works. The portal does not store the animations: messages keep a link."
   },
   "extensions": {
     "hint": "An extension is an external service with a pult-extension.json manifest. The portal gives it a read-only API token with the rights from the manifest, a signed webhook for ticket events and menu links. Extension code never runs inside the portal.",

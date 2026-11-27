@@ -550,6 +550,72 @@ async fn chat_acceptance() {
     assert_eq!(pe.delete(&pe_gif).await.0, StatusCode::NOT_FOUND);
     assert_eq!(si.get("/api/chat/gifs").await.1.as_array().map(Vec::len), Some(1), "у отправителя подборка на месте");
     assert_eq!(pe.download(&sent_file).await.0, StatusCode::OK, "отправленная копия остаётся");
+    // KLIPY: поиск GIF включается ключом; в переписке — ссылка на анимацию KLIPY, копии в портале нет.
+    let settings_url = "/api/admin/chats/settings";
+    assert_eq!(si.get("/api/chat/klipy").await.0, StatusCode::NOT_FOUND, "без ключа поиска нет");
+    let klipy_gif = json!({"slug": "hello-hi-662", "title": "Hello", "width": 498, "height": 498,
+        "url": "https://static.klipy.com/ii/935d7ab9/14/af/JUYsGsrc.webp"});
+    let klipy = format!("/api/chat/{news}/klipy");
+    assert_eq!(si.post(&klipy, klipy_gif.clone()).await.0, StatusCode::NOT_FOUND, "без ключа не отправить");
+    assert_eq!(admin.put(settings_url, json!({"klipy_key": "bad key"})).await.0, StatusCode::BAD_REQUEST);
+    assert_eq!(si.put(settings_url, json!({"klipy_key": "test_KEY-123"})).await.0, StatusCode::FORBIDDEN);
+    assert_eq!(admin.put(settings_url, json!({"klipy_key": " test_KEY-123 "})).await.0, StatusCode::NO_CONTENT);
+    assert_eq!(admin.get(settings_url).await.1["klipy_key"], "test_KEY-123", "ключ без пробелов");
+    assert_eq!(admin.put(settings_url, json!({"file_retention_days": 0})).await.0, StatusCode::NO_CONTENT);
+    assert_eq!(admin.get(settings_url).await.1["klipy_key"], "test_KEY-123", "только срок — ключ остаётся");
+    let (code, cfg) = si.get("/api/chat/klipy").await;
+    assert_eq!((code, cfg["app_key"].as_str()), (StatusCode::OK, Some("test_KEY-123")), "{cfg}");
+    let customer = cfg["customer_id"].as_str().unwrap().to_string();
+    assert_eq!(customer.len(), 32, "{customer}");
+    assert!(!customer.contains(&si_id), "номер для KLIPY не раскрывает учётку");
+    assert_eq!(si.get("/api/chat/klipy").await.1["customer_id"], customer.as_str(), "номер постоянный");
+    assert_ne!(pe.get("/api/chat/klipy").await.1["customer_id"], customer.as_str(), "у каждого свой");
+    for (bad, why) in [
+        ("https://evil.example/a.gif", "чужой сервер"),
+        ("https://static.klipy.com.evil.example/a.gif", "похожий адрес"),
+        ("https://static.klipy.com/a\".gif", "кавычка"),
+        ("javascript:alert(1)", "не https"),
+    ] {
+        let mut g = klipy_gif.clone();
+        g["url"] = json!(bad);
+        assert_eq!(si.post(&klipy, g).await.0, StatusCode::BAD_REQUEST, "{why}");
+    }
+    let mut huge = klipy_gif.clone();
+    huge["width"] = json!(100_000);
+    assert_eq!(si.post(&klipy, huge).await.0, StatusCode::BAD_REQUEST, "размеры");
+    assert_eq!(
+        si.post(&format!("/api/chat/{direct}/klipy"), klipy_gif.clone()).await.0,
+        StatusCode::NOT_FOUND,
+        "не участник"
+    );
+    let mut with_reply = klipy_gif.clone();
+    with_reply["reply_to"] = json!(id(&q1));
+    let (code, kg) = si.post(&klipy, with_reply).await;
+    assert_eq!(
+        (code, kg["gif"]["url"].as_str(), kg["body"].as_str(), kg["files"].as_array().map(Vec::len)),
+        (StatusCode::CREATED, klipy_gif["url"].as_str(), Some(""), Some(0)),
+        "{kg}"
+    );
+    assert_eq!((kg["editable"].as_bool(), kg["reply"]["id"].as_str()), (Some(false), Some(id(&q1).as_str())), "{kg}");
+    let stored: Vec<u8> = sqlx::query_scalar("SELECT gif FROM chat_messages WHERE id = $1::uuid")
+        .bind(id(&kg))
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(!String::from_utf8_lossy(&stored).contains("klipy.com"), "ссылка хранится зашифрованной");
+    let row = pe.chats(false).await.into_iter().find(|c| c["id"] == news.as_str()).unwrap();
+    assert_eq!(row["preview_gif"].as_bool(), Some(true), "{row}");
+    let (code, e) = si.put(&format!("/api/chat/{news}/messages/{}", id(&kg)), json!({"body": "текст"})).await;
+    assert_eq!((code, e["error"].as_str()), (StatusCode::FORBIDDEN, Some("not_editable")), "{e}");
+    let (_, answer) = pe.post(&format!("/api/chat/{news}/messages"), json!({"body": "ха", "reply_to": id(&kg)})).await;
+    assert_eq!(answer["reply"]["gif"].as_bool(), Some(true), "{answer}");
+    let (code, fwd) = pe.post(&format!("/api/chat/{news}/messages/{}/forward", id(&kg)), json!({"to": news})).await;
+    assert_eq!((code, fwd["gif"]["slug"].as_str()), (StatusCode::CREATED, Some("hello-hi-662")), "{fwd}");
+    assert_eq!(admin.put(settings_url, json!({"klipy_key": ""})).await.0, StatusCode::NO_CONTENT);
+    assert_eq!(si.get("/api/chat/klipy").await.0, StatusCode::NOT_FOUND, "ключ убран — поиска нет");
+    assert_eq!(si.post(&klipy, klipy_gif.clone()).await.0, StatusCode::NOT_FOUND, "и отправки");
+    let (_, msgs) = pe.get(&format!("/api/chat/{news}/messages")).await;
+    assert!(msgs.to_string().contains("hello-hi-662"), "отправленные GIF остаются в переписке");
     // Срок хранения вложений: содержимое стирается, отметка в переписке остаётся.
     let retention = "/api/admin/chats/settings";
     assert_eq!(si.put(retention, json!({"file_retention_days": 30})).await.0, StatusCode::FORBIDDEN);

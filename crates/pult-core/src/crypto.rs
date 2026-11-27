@@ -8,13 +8,15 @@ use crate::Secret;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use ring::{
     aead::{AES_256_GCM, Aad, LessSafeKey, NONCE_LEN, Nonce, UnboundKey},
-    digest, hkdf,
+    digest, hkdf, hmac,
     rand::{SecureRandom, SystemRandom},
 };
 
 const FORMAT_V1: u8 = 1;
 /// Контекст HKDF: при появлении других ключей (например, для подписи ссылок) — свой контекст.
 const INFO_DB_SECRETS: &[u8] = b"pult/db-secrets/v1";
+/// Контекст HKDF для обезличенных номеров, которые портал передаёт внешним службам.
+const INFO_PSEUDONYM: &[u8] = b"pult/pseudonym/v1";
 const SALT: &[u8] = b"pult";
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -30,6 +32,7 @@ pub enum CryptoError {
 /// Шифрует и расшифровывает секреты, которые хранятся в БД (пароль служебной учётки AD, SMTP…).
 pub struct SecretBox {
     key: LessSafeKey,
+    mac: hmac::Key,
     rng: SystemRandom,
 }
 
@@ -55,8 +58,22 @@ impl SecretBox {
         prk.expand(&[INFO_DB_SECRETS], Len32).and_then(|okm| okm.fill(&mut bytes)).expect("HKDF: длина ключа 32");
         #[allow(clippy::expect_used)]
         let key = LessSafeKey::new(UnboundKey::new(&AES_256_GCM, &bytes).expect("AES-256: ключ 32 байта"));
+        #[allow(clippy::expect_used)]
+        prk.expand(&[INFO_PSEUDONYM], Len32).and_then(|okm| okm.fill(&mut bytes)).expect("HKDF: длина ключа 32");
+        let mac = hmac::Key::new(hmac::HMAC_SHA256, &bytes);
         bytes.fill(0);
-        Self { key, rng: SystemRandom::new() }
+        Self { key, mac, rng: SystemRandom::new() }
+    }
+
+    /// Обезличенный постоянный номер для внешней службы: 32 шестнадцатеричных знака HMAC-SHA256 на ключе,
+    /// выведенном из `PULT_SECRET_KEY`. Без ключа портала номер не вычислить и не связать с учёткой;
+    /// `purpose` разделяет службы, чтобы номера одного сотрудника в разных службах не совпадали.
+    pub fn pseudonym(&self, purpose: &str, id: &[u8]) -> String {
+        let mut ctx = hmac::Context::with_key(&self.mac);
+        ctx.update(purpose.as_bytes());
+        ctx.update(&[0]);
+        ctx.update(id);
+        ctx.sign().as_ref()[..16].iter().map(|b| format!("{b:02x}")).collect()
     }
 
     pub fn encrypt(&self, plain: &Secret) -> Result<Vec<u8>, CryptoError> {
@@ -156,5 +173,18 @@ mod tests {
         assert_eq!(t.len(), 43);
         assert_ne!(t, random_token(32).unwrap());
         assert!(constant_time_eq("abc", "abc") && !constant_time_eq("abc", "abd") && !constant_time_eq("a", "ab"));
+    }
+
+    #[test]
+    fn pseudonyms_are_stable_and_separated() {
+        let a = SecretBox::new(&Secret::new("ключ-один"));
+        let b = SecretBox::new(&Secret::new("ключ-два"));
+        let p = a.pseudonym("klipy", b"user-1");
+        assert_eq!(p.len(), 32);
+        assert!(p.bytes().all(|c| c.is_ascii_hexdigit()));
+        assert_eq!(p, a.pseudonym("klipy", b"user-1"));
+        assert_ne!(p, a.pseudonym("klipy", b"user-2"));
+        assert_ne!(p, a.pseudonym("other", b"user-1"));
+        assert_ne!(p, b.pseudonym("klipy", b"user-1"));
     }
 }

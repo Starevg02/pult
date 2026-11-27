@@ -3,12 +3,13 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
-import { api, ok, type ChatFile, type ChatGif, type ChatQuote, type ChatReaction } from "../../api/client";
+import { api, ok, type ChatFile, type ChatGif, type ChatKlipyGif, type ChatQuote, type ChatReaction } from "../../api/client";
 import { IconFileText, IconPlus, IconSearch, IconX } from "../../icons";
 import { Lightbox } from "../../lightbox";
 import { toast } from "../../toast";
 import { formatSize, postFile } from "../helpdesk/helpdeskUtil";
-import { chatFileUrl, REACTIONS, tokenize } from "./chatUtil";
+import { chatFileUrl, REACTIONS, tokenize, useKlipy } from "./chatUtil";
+import { KlipyTab } from "./klipy";
 import { EMOJI_GROUPS, recentEmoji, rememberEmoji, searchEmoji } from "./emoji";
 
 /** Текст сообщения: ссылки, `код`, блоки кода, **жирный**, _курсив_, ~~зачёркнутый~~. */
@@ -188,26 +189,36 @@ export function ReactionPicker({ onPick, onClose, toggle }: PickerProps) {
   );
 }
 
-type PanelProps = PickerProps & { onGif?: (gif: string) => void; gifBusy?: boolean };
+type PanelProps = PickerProps & { onGif?: (gif: string) => void; onKlipy?: (gif: ChatKlipyGif) => void; gifBusy?: boolean };
 
-/** Панель поля ввода: эмодзи (поиск, недавние, разделы) и «Мои GIF». */
-export function EmojiPanel({ onPick, onClose, toggle, onGif, gifBusy }: PanelProps) {
+/** Панель поля ввода: эмодзи (поиск, недавние, разделы), «Мои GIF» и поиск KLIPY (если включён). */
+export function EmojiPanel({ onPick, onClose, toggle, onGif, onKlipy, gifBusy }: PanelProps) {
   const { t } = useTranslation();
   const box = useRef<HTMLDivElement>(null);
-  const [tab, setTab] = useState<"emoji" | "gif">("emoji");
+  const [tab, setTab] = useState<"emoji" | "gif" | "klipy">("emoji");
+  const klipy = useKlipy().data;
+  // Поиск выключили, пока панель открыта, — вкладки KLIPY больше нет.
+  const shown = tab === "klipy" && !(klipy && onKlipy) ? "emoji" : tab;
   usePopover(box, toggle, onClose, false);
   const tabClass = (on: boolean) => `flex-1 rounded-full py-1.5 text-sm font-medium transition-colors ${on ? "bg-accent text-paper" : "text-muted hover:bg-hover hover:text-ink"}`;
   return (
     <div ref={box} role="dialog" aria-label={t("chat.emoji")} className="absolute bottom-full left-0 z-20 mb-2 flex h-[clamp(14rem,calc(100dvh-16rem),25rem)] w-[22rem] max-w-[calc(100vw-1.5rem)] animate-pop-in flex-col overflow-hidden rounded-2xl border border-line bg-paper shadow-2xl">
-      <div className="min-h-0 flex-1">{tab === "emoji" ? <EmojiTab onPick={onPick} /> : <GifTab onGif={onGif} busy={gifBusy} />}</div>
+      <div className="min-h-0 flex-1">
+        {shown === "klipy" && klipy ? <KlipyTab cfg={klipy} onKlipy={onKlipy} busy={gifBusy} /> : shown === "emoji" ? <EmojiTab onPick={onPick} /> : <GifTab onGif={onGif} busy={gifBusy} />}
+      </div>
       {onGif && (
         <div className="flex gap-1 border-t border-line p-1.5">
-          <button type="button" aria-pressed={tab === "emoji"} className={tabClass(tab === "emoji")} onClick={() => setTab("emoji")}>
+          <button type="button" aria-pressed={shown === "emoji"} className={tabClass(shown === "emoji")} onClick={() => setTab("emoji")}>
             {t("chat.emojiTab")}
           </button>
-          <button type="button" aria-pressed={tab === "gif"} className={tabClass(tab === "gif")} onClick={() => setTab("gif")}>
+          <button type="button" aria-pressed={shown === "gif"} className={tabClass(shown === "gif")} onClick={() => setTab("gif")}>
             GIF
           </button>
+          {klipy && onKlipy && (
+            <button type="button" aria-pressed={shown === "klipy"} className={tabClass(shown === "klipy")} onClick={() => setTab("klipy")}>
+              KLIPY
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -364,7 +375,7 @@ function GifTab({ onGif, busy: sending }: { onGif?: (gif: string) => void; busy?
 /** Цитата: автор и начало сообщения (ответ, закреплённое, черновик ответа). */
 export function Quote({ q, onClick, onClear, label, onColor = false }: { q: ChatQuote; onClick?: () => void; onClear?: () => void; label?: string; onColor?: boolean }) {
   const { t } = useTranslation();
-  const text = q.preview || (q.files > 0 ? `📎 ${t("chat.files", { count: q.files })}` : "…");
+  const text = q.preview || (q.files > 0 ? `📎 ${t("chat.files", { count: q.files })}` : q.gif ? "GIF" : "…");
   const inner = (
     <>
       <span className={`block truncate text-[13px] font-semibold ${onColor ? "text-white" : "text-accent"}`}>{label ?? q.author_name}</span>

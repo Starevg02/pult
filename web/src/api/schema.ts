@@ -1954,6 +1954,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/chat/klipy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Поиск GIF в KLIPY для браузера; 404 — поиск выключен (ключа нет). */
+        get: operations["klipy_config"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/chat/people": {
         parameters: {
             query?: never;
@@ -2019,6 +2036,26 @@ export interface paths {
         put?: never;
         /** Отправить GIF из подборки в чат: сообщение с копией GIF без текста. */
         post: operations["gif_send"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/chat/{id}/klipy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Отправить GIF из KLIPY: сообщение без текста со ссылкой на анимацию. Анимацию браузеры участников
+         *     грузят с серверов KLIPY; если её там уберут, в переписке останется подпись.
+         */
+        post: operations["klipy_send"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6321,12 +6358,43 @@ export interface components {
              * @description Вложений в последнем сообщении (у сообщения только из файлов текста нет).
              */
             preview_files: number;
+            /** @description Последнее сообщение — GIF из KLIPY. */
+            preview_gif: boolean;
             /** @description Моя роль: `owner`, `admin`, `member`. */
             role: string;
             /** @description Название группового чата или имя собеседника. */
             title: string;
             /** Format: int64 */
             unread: number;
+        };
+        /** @description Что нужно браузеру для поиска KLIPY. */
+        ChatKlipyConfig: {
+            /** @description Ключ приложения KLIPY (по их правилам он и так виден в запросах браузера). */
+            app_key: string;
+            /**
+             * @description Обезличенный постоянный номер сотрудника для KLIPY: без ключа портала его не вычислить и не связать
+             *     с учёткой.
+             */
+            customer_id: string;
+        };
+        /** @description GIF из KLIPY в сообщении. */
+        ChatKlipyGif: {
+            /** Format: int32 */
+            height: number;
+            slug: string;
+            title: string;
+            /** @description Анимация на серверах KLIPY. */
+            url: string;
+            /** Format: int32 */
+            width: number;
+        };
+        /** @description Отправить GIF из KLIPY. */
+        ChatKlipySend: components["schemas"]["ChatKlipyGif"] & {
+            /**
+             * Format: uuid
+             * @description Ответ на сообщение этого чата.
+             */
+            reply_to?: string | null;
         };
         ChatMember: {
             name: string;
@@ -6359,6 +6427,7 @@ export interface components {
             files: components["schemas"]["ChatFile"][];
             /** @description Переслано: автор исходного сообщения. */
             forwarded_from_name?: string | null;
+            gif?: null | components["schemas"]["ChatKlipyGif"];
             /** Format: uuid */
             id: string;
             reactions: components["schemas"]["ChatReaction"][];
@@ -6421,6 +6490,8 @@ export interface components {
              * @description Вложений в сообщении.
              */
             files: number;
+            /** @description Сообщение — GIF из KLIPY. */
+            gif: boolean;
             /** Format: uuid */
             id: string;
             /** @description Первая строка текста (до 100 знаков). */
@@ -6444,13 +6515,25 @@ export interface components {
             /** @description `admin` или `member`. */
             role: string;
         };
-        /** @description Настройки модуля (админка): срок хранения вложений. */
+        /** @description Настройки модуля (админка): срок хранения вложений, поиск GIF в KLIPY. */
         ChatSettings: {
             /**
              * Format: int32
              * @description Через сколько дней стирать вложения сообщений; 0 — хранить всегда.
              */
             file_retention_days?: number;
+            /**
+             * @description Ключ приложения KLIPY (Partner Panel на klipy.com): с ним во вкладке «GIF» появляется поиск;
+             *     пусто — поиск выключен.
+             */
+            klipy_key?: string;
+        };
+        /** @description Изменение настроек модуля. */
+        ChatSettingsInput: {
+            /** Format: int32 */
+            file_retention_days?: number;
+            /** @description Новый ключ KLIPY; пустая строка выключает поиск, `null` или отсутствие поля — оставить прежний. */
+            klipy_key?: string | null;
         };
         /** @description Вложение в списке «Файлы чата». */
         ChatSharedFile: {
@@ -10048,7 +10131,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ChatSettings"];
+                "application/json": components["schemas"]["ChatSettingsInput"];
             };
         };
         responses: {
@@ -13420,6 +13503,33 @@ export interface operations {
             };
         };
     };
+    klipy_config: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatKlipyConfig"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     chat_people: {
         parameters: {
             query?: {
@@ -13541,6 +13651,47 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChatMessage"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    klipy_send: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatKlipySend"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatMessage"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             404: {

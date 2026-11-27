@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "@tanstack/react-router";
 import { useEffect, useRef, useSyncExternalStore } from "react";
-import { ApiError, api, ok, type ChatFile, type ChatItem, type ChatQuote } from "../../api/client";
+import { ApiError, api, ok, type ChatFile, type ChatItem, type ChatKlipyConfig, type ChatQuote } from "../../api/client";
 import { csrfToken } from "../../api/client";
 import { postFile } from "../helpdesk/helpdeskUtil";
 import { useOrg } from "../../session";
@@ -24,6 +24,21 @@ function useMainChats() {
     queryFn: () => ok<ChatItem[]>(api.GET("/api/chat", { params: { query: { hidden: false } } })),
     enabled: on,
     refetchInterval: 120_000,
+  });
+}
+
+/** Поиск GIF в KLIPY: ключ и номер сотрудника; `null` — поиск выключен (ключа нет в настройках). */
+export function useKlipy() {
+  return useQuery({
+    queryKey: ["chat-klipy"],
+    staleTime: 10 * 60_000,
+    retry: false,
+    queryFn: async (): Promise<ChatKlipyConfig | null> => {
+      const r = await api.GET("/api/chat/klipy");
+      if (r.response.status === 404) return null;
+      if (!r.response.ok || !r.data) throw new Error(r.response.statusText);
+      return r.data;
+    },
   });
 }
 
@@ -222,7 +237,7 @@ export function useChatAlerts(onOpen: (chat: string) => void) {
     if (prefs.sound) beep();
     if (prefs.desktop && "Notification" in window && Notification.permission === "granted" && document.visibilityState !== "visible") {
       for (const c of alerts.slice(0, 3)) {
-        const n = new Notification(c.title, { body: c.preview ?? "📎", tag: `chat-${c.id}` });
+        const n = new Notification(c.title, { body: c.preview || (c.preview_gif ? "GIF" : "📎"), tag: `chat-${c.id}` });
         n.onclick = () => {
           window.focus();
           onOpen(c.id);
@@ -296,7 +311,7 @@ export function onlyEmoji(body: string): boolean {
 export const dayKey = (iso: string) => new Date(iso).toDateString();
 
 /** Цитата из своего же сообщения (черновик ответа): первая строка, как её покажет сервер. */
-export function quoteOf(m: { id: string; author_name: string; body: string; files: unknown[] }): ChatQuote {
+export function quoteOf(m: { id: string; author_name: string; body: string; files: unknown[]; gif?: unknown }): ChatQuote {
   const line = m.body.split("\n").find((l) => l.trim()) ?? "";
-  return { id: m.id, author_name: m.author_name, preview: [...line].slice(0, 100).join(""), files: m.files.length };
+  return { id: m.id, author_name: m.author_name, preview: [...line].slice(0, 100).join(""), files: m.files.length, gif: !!m.gif };
 }

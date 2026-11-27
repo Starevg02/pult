@@ -64,6 +64,27 @@ fn too_big() -> ApiError {
     ApiError::bad_request("file_too_large", format!("GIF больше {GIF_MAX_MB} МБ."))
 }
 
+/// Ответ — на сообщение этого же чата.
+pub(super) async fn check_reply(core: &Core, chat: Uuid, reply_to: Option<Uuid>) -> ApiResult<()> {
+    if let Some(r) = reply_to {
+        let found: bool =
+            sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM chat_messages WHERE id = $1 AND chat_id = $2)")
+                .bind(r)
+                .bind(chat)
+                .fetch_one(&core.db)
+                .await?;
+        if !found {
+            return Err(ApiError::bad_request("invalid_reply", "Сообщение, на которое вы отвечаете, не найдено."));
+        }
+    }
+    Ok(())
+}
+
+/// Частота отправки GIF (из подборки и из KLIPY вместе).
+pub(super) fn send_allowed(user: Uuid) -> ApiResult<()> {
+    if within_minute(&GIF_SENT, user, GIF_SENDS_PER_MINUTE) { Ok(()) } else { Err(slow_down()) }
+}
+
 /// Частота пополнения подборки: каждое — запись до 10 МБ в базу.
 fn store_allowed(user: Uuid) -> ApiResult<()> {
     if within_minute(&GIF_STORED, user, GIF_STORES_PER_MINUTE) { Ok(()) } else { Err(slow_down()) }
@@ -292,20 +313,8 @@ async fn gif_send(
         });
     }
     m.require_unlocked()?;
-    if let Some(r) = b.reply_to {
-        let found: bool =
-            sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM chat_messages WHERE id = $1 AND chat_id = $2)")
-                .bind(r)
-                .bind(id)
-                .fetch_one(&core.db)
-                .await?;
-        if !found {
-            return Err(ApiError::bad_request("invalid_reply", "Сообщение, на которое вы отвечаете, не найдено."));
-        }
-    }
-    if !within_minute(&GIF_SENT, user.user_id, GIF_SENDS_PER_MINUTE) {
-        return Err(slow_down());
-    }
+    check_reply(&core, id, b.reply_to).await?;
+    send_allowed(user.user_id)?;
     let mut tx = core.db.begin().await?;
     sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended('chat_files:' || $1::text, 0))")
         .bind(user.user_id)

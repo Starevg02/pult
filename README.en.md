@@ -4,7 +4,7 @@
 
 A self-hosted internal IT-support portal for organizations on Active Directory. Tickets, a staff directory,
 access requests and AD operations, and remote support for PCs in one window. Employees sign in with their
-Windows password. Open source, MIT License. Version 0.2.0.
+Windows password. Open source, MIT License. Version 0.3.0.
 
 ![Portal home page](docs/screenshots/home-zh.jpg)
 
@@ -83,4 +83,5 @@ Development environment, checks and building the installers: [CONTRIBUTING.md](C
 
 ## License
 
-MIT: [LICENSE](LICENSE).
+MIT: [LICENSE](LICENSE). Emoji: the [Noto Color Emoji](https://github.com/googlefonts/noto-emoji) font (Google),
+SIL Open Font License 1.1.

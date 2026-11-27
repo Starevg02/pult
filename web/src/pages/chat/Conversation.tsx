@@ -38,6 +38,7 @@ import { formatSize } from "../helpdesk/helpdeskUtil";
 import { ChatInfo, ForwardDialog, Versions } from "./ChatDialogs";
 import { Documents, Media, MessageText, Quote, ReactionPicker, Reactions } from "./ChatParts";
 import { Composer } from "./Composer";
+import { KlipyGif } from "./klipy";
 import { chatFileUrl, dayKey, onlyEmoji, uploadPending, MAX_FILES, useTyping } from "./chatUtil";
 
 /** Подряд идущие сообщения одного автора в пределах 5 минут — одной группой (имя и аватар один раз). */
@@ -606,9 +607,10 @@ function Bubble(p: BubbleProps) {
   }, [picking]);
   const images = m.files.filter((f) => f.image && !f.expired);
   const docs = m.files.filter((f) => !f.image || f.expired);
-  const big = !m.reply && !m.forwarded_from_name && m.files.length === 0 && onlyEmoji(m.body);
-  // Только картинки без подписи — без пузыря, время поверх картинки.
-  const bare = images.length > 0 && docs.length === 0 && !m.body && !m.reply && !m.forwarded_from_name;
+  const big = !m.reply && !m.forwarded_from_name && m.files.length === 0 && !m.gif && onlyEmoji(m.body);
+  // Только картинки (или GIF из KLIPY) без подписи — без пузыря, время поверх картинки.
+  const visual = images.length > 0 || !!m.gif;
+  const bare = visual && docs.length === 0 && !m.body && !m.reply && !m.forwarded_from_name;
   const showName = group && !mine && p.runStart && !big;
   const showAvatar = group && !mine;
   const tail = p.runEnd && !big && !bare;
@@ -662,7 +664,7 @@ function Bubble(p: BubbleProps) {
     </span>
   );
   const bubble = `relative min-w-0 rounded-[1.1rem] ${mine ? "chat-bubble-mine" : "chat-bubble-other"} ${tail ? (mine ? "chat-tail-out rounded-br-[4px]" : "chat-tail-in rounded-bl-[4px]") : ""}`;
-  const width = images.length > 0 ? "w-[min(22rem,100%)]" : "";
+  const width = images.length > 0 ? "w-[min(22rem,100%)]" : m.gif ? "w-[min(18rem,100%)]" : "";
 
   let content: ReactNode;
   if (big) {
@@ -678,7 +680,7 @@ function Bubble(p: BubbleProps) {
     content = (
       <div className={width}>
         <div className="overflow-hidden rounded-[1.1rem] shadow-[0_1px_2px_rgb(16_24_40/0.15)]">
-          <Media files={images} overlay={meta(true)} />
+          {m.gif ? <KlipyGif gif={m.gif} overlay={meta(true)} /> : <Media files={images} overlay={meta(true)} />}
         </div>
       </div>
     );
@@ -708,6 +710,13 @@ function Bubble(p: BubbleProps) {
             </div>
           </div>
         )}
+        {m.gif && (
+          <div className={`p-[3px] ${head ? "pt-1.5" : ""}`}>
+            <div className="overflow-hidden rounded-[0.9rem]">
+              <KlipyGif gif={m.gif} overlay={!m.body ? meta(true) : undefined} />
+            </div>
+          </div>
+        )}
         {docs.length > 0 && (
           <div className="px-3 pt-1.5">
             <Documents files={docs} mine={mine} />
@@ -719,7 +728,7 @@ function Bubble(p: BubbleProps) {
             <span className="absolute right-3 bottom-1.5">{meta(false)}</span>
           </div>
         ) : (
-          (docs.length > 0 || images.length === 0) && <div className="flex justify-end px-2.5 pb-1">{meta(false)}</div>
+          (docs.length > 0 || !visual) && <div className="flex justify-end px-2.5 pb-1">{meta(false)}</div>
         )}
         {m.reactions.length > 0 && (
           <div className="px-2.5 pb-2">

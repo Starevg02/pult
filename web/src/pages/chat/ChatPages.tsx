@@ -15,7 +15,7 @@ import { alertPrefs, saveAlertPrefs, useChats, type AlertPrefs } from "./chatUti
 
 function ChatRow({ c, active, peer }: { c: ChatItem; active: boolean; peer?: PresenceEntry }) {
   const { t, i18n } = useTranslation();
-  const preview = c.locked ? t("chat.locked") : c.preview || (c.preview_files > 0 ? `📎 ${t("chat.files", { count: c.preview_files })}` : c.kind === "group" ? t("chat.group") : t("chat.direct"));
+  const preview = c.locked ? t("chat.locked") : c.preview || (c.preview_files > 0 ? `📎 ${t("chat.files", { count: c.preview_files })}` : c.preview_gif ? "GIF" : c.kind === "group" ? t("chat.group") : t("chat.direct"));
   return (
     <li>
       <Link

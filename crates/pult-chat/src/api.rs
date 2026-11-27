@@ -29,7 +29,9 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use uuid::Uuid;
 
 mod gifs;
+mod klipy;
 pub use gifs::{ChatGif, ChatGifFromFile, ChatGifSend, GIF_MAX_MB, GIFS_MAX};
+pub use klipy::{ChatKlipyConfig, ChatKlipyGif, ChatKlipySend, KLIPY_API, KLIPY_MEDIA, klipy_enabled};
 
 /// Сколько минут автор может править сообщение.
 pub const EDIT_MINUTES: i64 = 15;
@@ -99,12 +101,26 @@ fn slow_down() -> ApiError {
     }
 }
 
-/// Настройки модуля (админка): срок хранения вложений.
+/// Настройки модуля (админка): срок хранения вложений, поиск GIF в KLIPY.
 #[derive(Serialize, Deserialize, Default, ToSchema)]
 pub struct ChatSettings {
     /// Через сколько дней стирать вложения сообщений; 0 — хранить всегда.
     #[serde(default)]
     pub file_retention_days: u32,
+    /// Ключ приложения KLIPY (Partner Panel на klipy.com): с ним во вкладке «GIF» появляется поиск;
+    /// пусто — поиск выключен.
+    #[serde(default)]
+    pub klipy_key: String,
+}
+
+/// Изменение настроек модуля.
+#[derive(Deserialize, ToSchema)]
+pub struct ChatSettingsInput {
+    #[serde(default)]
+    pub file_retention_days: u32,
+    /// Новый ключ KLIPY; пустая строка выключает поиск, `null` или отсутствие поля — оставить прежний.
+    #[serde(default)]
+    pub klipy_key: Option<String>,
 }
 
 impl SettingsGroup for ChatSettings {
@@ -156,6 +172,7 @@ where
         .routes(routes!(chat_admin_storage))
         .routes(routes!(chat_admin_get_settings, chat_admin_put_settings))
         .merge(gifs::routes())
+        .merge(klipy::routes())
 }
 
 // ------------------------------------------------------------------ Типы
@@ -190,6 +207,8 @@ pub struct ChatItem {
     pub preview: Option<String>,
     /// Вложений в последнем сообщении (у сообщения только из файлов текста нет).
     pub preview_files: i64,
+    /// Последнее сообщение — GIF из KLIPY.
+    pub preview_gif: bool,
     #[serde(skip)]
     #[schema(ignore)]
     pub preview_body: Option<Vec<u8>>,
@@ -231,6 +250,8 @@ pub struct ChatQuote {
     pub preview: String,
     /// Вложений в сообщении.
     pub files: i64,
+    /// Сообщение — GIF из KLIPY.
+    pub gif: bool,
     #[serde(skip)]
     #[schema(ignore)]
     pub enc: Vec<u8>,
@@ -276,6 +297,12 @@ pub struct ChatMessage {
     pub forwarded_from_name: Option<String>,
     #[sqlx(skip)]
     pub reactions: Vec<ChatReaction>,
+    /// GIF из KLIPY (сообщение без текста): анимацию браузер грузит с серверов KLIPY.
+    #[sqlx(skip)]
+    pub gif: Option<ChatKlipyGif>,
+    #[serde(skip)]
+    #[schema(ignore)]
+    pub gif_enc: Option<Vec<u8>>,
 }
 
 /// Вложение сообщения (или загруженное, но ещё не отправленное).
@@ -642,10 +669,11 @@ async fn chat_items(core: &Core, me: Uuid, hidden: Option<bool>, chat: Option<Uu
                 last.created_at AS last_message_at,
                 CASE WHEN c.locked THEN NULL ELSE last.body END AS preview_body,
                 CASE WHEN c.locked OR last.id IS NULL THEN 0
-                     ELSE (SELECT count(*) FROM chat_files f WHERE f.message_id = last.id) END AS preview_files
+                     ELSE (SELECT count(*) FROM chat_files f WHERE f.message_id = last.id) END AS preview_files,
+                coalesce(NOT c.locked AND last.has_gif, false) AS preview_gif
            FROM chat_members m
            JOIN chats c ON c.id = m.chat_id
-           LEFT JOIN LATERAL (SELECT x.id, x.created_at, x.body FROM chat_messages x
+           LEFT JOIN LATERAL (SELECT x.id, x.created_at, x.body, x.gif IS NOT NULL AS has_gif FROM chat_messages x
                                WHERE x.chat_id = c.id AND x.created_at <= coalesce(m.left_at, 'infinity')
                                ORDER BY x.created_at DESC, x.id DESC LIMIT 1) last ON true
           WHERE m.user_id = $1
@@ -1015,7 +1043,7 @@ async fn chat_pin(
 
 // ------------------------------------------------------------------ Сообщения
 
-const MESSAGE_COLS: &str = "x.id, x.author_id, x.body AS enc, x.created_at, x.edited_at, x.version, x.reply_to,
+const MESSAGE_COLS: &str = "x.id, x.author_id, x.body AS enc, x.gif AS gif_enc, x.created_at, x.edited_at, x.version, x.reply_to,
     (SELECT coalesce(nullif(trim(concat_ws(' ', fp.last_name, fp.first_name)), ''), fa.display_name, fa.sam_account_name)
        FROM users fu JOIN ad_accounts fa ON fa.id = fu.ad_account_id LEFT JOIN persons fp ON fp.id = fu.person_id
       WHERE fu.id = x.forwarded_from) AS forwarded_from_name";
@@ -1032,7 +1060,7 @@ async fn quotes(core: &Core, chat: Uuid, ids: &[Uuid], upto: Option<OffsetDateTi
     }
     let sql = format!(
         "SELECT x.id, {NAME} AS author_name, x.body AS enc,
-                (SELECT count(*) FROM chat_files f WHERE f.message_id = x.id) AS files
+                (SELECT count(*) FROM chat_files f WHERE f.message_id = x.id) AS files, x.gif IS NOT NULL AS gif
            FROM chat_messages x JOIN users u ON u.id = x.author_id {PEOPLE}
           WHERE x.chat_id = $1 AND x.id = ANY($2) AND x.created_at <= coalesce($3, 'infinity')"
     );
@@ -1046,7 +1074,8 @@ async fn quotes(core: &Core, chat: Uuid, ids: &[Uuid], upto: Option<OffsetDateTi
 fn message_sql(filter: &str) -> String {
     format!(
         "SELECT {MESSAGE_COLS}, {NAME} AS author_name,
-                (x.author_id = $2 AND $3 AND x.created_at > now() - make_interval(mins => {EDIT_MINUTES}::int)) AS editable
+                (x.author_id = $2 AND $3 AND x.gif IS NULL
+                 AND x.created_at > now() - make_interval(mins => {EDIT_MINUTES}::int)) AS editable
            FROM chat_messages x JOIN users u ON u.id = x.author_id {PEOPLE}
           WHERE x.chat_id = $1 {filter}"
     )
@@ -1063,6 +1092,9 @@ async fn open(
 ) -> ApiResult<Vec<ChatMessage>> {
     for m in &mut v {
         m.body = decrypt(core, &m.enc)?;
+        if let Some(g) = m.gif_enc.take() {
+            m.gif = serde_json::from_str(&decrypt(core, &g)?).ok().and_then(klipy::shown_gif);
+        }
     }
     let ids: Vec<Uuid> = v.iter().map(|m| m.id).collect();
     let rows: Vec<(Uuid, Uuid, Vec<u8>, String, i64, bool)> = sqlx::query_as(
@@ -1094,6 +1126,7 @@ async fn open(
                 author_name: q.author_name.clone(),
                 preview: q.preview.clone(),
                 files: q.files,
+                gif: q.gif,
                 enc: Vec::new(),
             });
         }
@@ -1411,9 +1444,9 @@ async fn chat_edit_message(
     m.require_unlocked()?;
     let body = clean_body(&b.body)?;
     let mut tx = core.db.begin().await?;
-    let row: Option<(Uuid, Vec<u8>, i32, OffsetDateTime, bool)> = sqlx::query_as(
+    let row: Option<(Uuid, Vec<u8>, i32, OffsetDateTime, bool, bool)> = sqlx::query_as(
         "SELECT author_id, body, version, coalesce(edited_at, created_at),
-                created_at > now() - make_interval(mins => $3::int)
+                created_at > now() - make_interval(mins => $3::int), gif IS NOT NULL
            FROM chat_messages WHERE id = $1 AND chat_id = $2 FOR UPDATE",
     )
     .bind(message)
@@ -1421,9 +1454,12 @@ async fn chat_edit_message(
     .bind(EDIT_MINUTES as i32)
     .fetch_optional(&mut *tx)
     .await?;
-    let (author, old, version, since, fresh) = row.ok_or(ApiError::NotFound)?;
+    let (author, old, version, since, fresh, gif) = row.ok_or(ApiError::NotFound)?;
     if author != user.user_id {
         return Err(ApiError::Forbidden);
+    }
+    if gif {
+        return Err(ApiError::Refused { code: "not_editable", message: "GIF не правится.".into() });
     }
     if !fresh {
         return Err(ApiError::Refused {
@@ -1487,15 +1523,18 @@ async fn chat_message_versions(
     Ok(Json(v))
 }
 
-/// Сообщение этого чата, видимое мне: автор, исходный автор пересылки, зашифрованный текст.
+/// Автор, исходный автор пересылки, зашифрованные текст и GIF из KLIPY.
+type VisibleRow = (Uuid, Option<Uuid>, Vec<u8>, Option<Vec<u8>>);
+
+/// Сообщение этого чата, видимое мне: автор, исходный автор пересылки, зашифрованные текст и GIF.
 async fn visible_message(
     db: impl PgExecutor<'_>,
     chat: Uuid,
     message: Uuid,
     upto: Option<OffsetDateTime>,
-) -> ApiResult<(Uuid, Option<Uuid>, Vec<u8>)> {
-    let row: Option<(Uuid, Option<Uuid>, Vec<u8>)> = sqlx::query_as(
-        "SELECT author_id, forwarded_from, body FROM chat_messages
+) -> ApiResult<VisibleRow> {
+    let row: Option<VisibleRow> = sqlx::query_as(
+        "SELECT author_id, forwarded_from, body, gif FROM chat_messages
           WHERE id = $1 AND chat_id = $2 AND created_at <= coalesce($3, 'infinity')",
     )
     .bind(message)
@@ -1567,7 +1606,7 @@ async fn chat_forward(
 ) -> ApiResult<(StatusCode, Json<ChatMessage>)> {
     let src = membership(&core.db, id, user.user_id).await?;
     src.require_unlocked()?;
-    let (author, origin, enc) = visible_message(&core.db, id, message, src.left_at).await?;
+    let (author, origin, enc, gif) = visible_message(&core.db, id, message, src.left_at).await?;
     let dst = membership(&core.db, b.to, user.user_id).await?;
     if !dst.active() {
         return Err(ApiError::Refused {
@@ -1591,12 +1630,13 @@ async fn chat_forward(
         upload_quota(&mut *tx, user.user_id, bytes, true).await?;
     }
     let mid: Uuid = sqlx::query_scalar(
-        "INSERT INTO chat_messages (chat_id, author_id, body, forwarded_from) VALUES ($1, $2, $3, $4) RETURNING id",
+        "INSERT INTO chat_messages (chat_id, author_id, body, forwarded_from, gif) VALUES ($1, $2, $3, $4, $5) RETURNING id",
     )
     .bind(b.to)
     .bind(user.user_id)
     .bind(enc)
     .bind(origin.unwrap_or(author))
+    .bind(gif)
     .fetch_one(&mut *tx)
     .await?;
     sqlx::query(
@@ -2048,26 +2088,41 @@ async fn chat_admin_get_settings(State(core): State<Core>, user: CurrentUser) ->
 }
 
 /// Срок хранения вложений. Стирается только содержимое: в переписке остаётся имя файла с отметкой.
-#[utoipa::path(put, path = "/api/admin/chats/settings", tag = "chat", request_body = ChatSettings,
+#[utoipa::path(put, path = "/api/admin/chats/settings", tag = "chat", request_body = ChatSettingsInput,
     responses((status = 204)))]
 async fn chat_admin_put_settings(
     State(core): State<Core>,
     user: CurrentUser,
-    Json(b): Json<ChatSettings>,
+    Json(input): Json<ChatSettingsInput>,
 ) -> ApiResult<StatusCode> {
     user.require_superadmin()?;
-    if b.file_retention_days > MAX_RETENTION_DAYS {
+    if input.file_retention_days > MAX_RETENTION_DAYS {
         return Err(ApiError::bad_request("invalid_retention", "Срок хранения — не больше 3650 дней."));
+    }
+    // Ключ не передан — остаётся прежний: клиент или скрипт, задающий только срок, его не сотрёт.
+    let klipy_key = match input.klipy_key {
+        Some(k) => k.trim().to_string(),
+        None => settings::load::<ChatSettings>(&core.db).await?.klipy_key,
+    };
+    let b = ChatSettings { file_retention_days: input.file_retention_days, klipy_key };
+    if !b.klipy_key.is_empty() && !klipy::valid_key(&b.klipy_key) {
+        return Err(ApiError::bad_request(
+            "invalid_klipy_key",
+            "Ключ KLIPY — от 8 до 128 латинских букв, цифр, «-» и «_».",
+        ));
     }
     let mut tx = core.db.begin().await?;
     settings::save(&mut *tx, &b, Some(user.user_id)).await?;
+    // Сам ключ в журнал не пишется — только включён ли поиск.
     audit::record(
         &mut *tx,
         &user.actor,
-        Entry::new("chat.settings", Source::Portal).details(json!({"file_retention_days": b.file_retention_days})),
+        Entry::new("chat.settings", Source::Portal)
+            .details(json!({"file_retention_days": b.file_retention_days, "klipy": !b.klipy_key.is_empty()})),
     )
     .await?;
     tx.commit().await?;
+    klipy::remember(!b.klipy_key.is_empty());
     Ok(StatusCode::NO_CONTENT)
 }
 

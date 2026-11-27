@@ -10,211 +10,7 @@ automatically.
 格式：[Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号：[SemVer](https://semver.org/lang/zh-CN/)。
 1.0 版本之前，设置和 API 可能出现不兼容的变更；数据库迁移始终自动执行。
 
-## 0.4.1 — оформление сообщений, GIF и письма · messages look, GIFs and emails · 消息外观、GIF 与邮件
-
-### Русский
-
-- «Сообщения» в новом оформлении: фон с узором, цветные пузыри с «хвостиком», время в правом нижнем углу
-  пузыря, картинки мозаикой без рамки, цветные аватары и имена в группах, крупные эмодзи. Лента больше не
-  прыгает, пока догружаются картинки, а на телефоне переписка открывается на весь экран.
-- GIF в переписке: личная подборка «Мои GIF» (до 200 GIF, до 10 МБ каждый) — загрузить с компьютера или
-  сохранить из чата, отправить одним нажатием.
-- Новая панель эмодзи: разделы, поиск по словам на русском и английском, недавние. Эмодзи теперь одного вида на
-  всех компьютерах (набор Noto, на Mac и iPhone — родные Apple), а не угловатые системные Windows 10.
-- База знаний: таблицы, зачёркнутый текст, списки задач; кнопка «Таблица» в редакторе.
-- Письма оформлены карточкой: название организации, номер заявки, цветная полоса по смыслу письма, текст в
-  рамке, кнопки. Служебные письма администраторам — в том же оформлении.
-- Интерфейс: живее главная, страница «404» и понятная страница ошибки вместо английского «Something went
-  wrong!», цветные значки в пустых списках.
-- Надёжность: реакция на телефоне — из меню сообщения; поиск и файлы на телефоне закрываются после перехода к
-  сообщению; кнопка «Назад», если чат не открылся; GIF не уходит дважды; удаление GIF — с подтверждением;
-  подборка GIF ограничена по объёму и частоте пополнения, файл GIF проверяется по полной сигнатуре.
-- Исправлено: меню «…» и «+» больше не обрезаются рамкой списка или переписки (у нижнего края открываются
-  вверх); у поля ввода нет второй прямоугольной рамки при фокусе; выбор реакции не прячется за краем ленты;
-  меню профиля не уходит под карточку справочника; всплывающие сообщения видны поверх открытых окон; ошибки
-  подборки GIF переведены на английский и китайский; «Мои GIF» не перекачиваются при каждом открытии.
-
-### English
-
-- Messages have a new look: a patterned background, colored bubbles with tails, the time in the bubble's
-  bottom-right corner, borderless image mosaics, colored avatars and names in groups, large emoji. The view no
-  longer jumps while images load, and on a phone the chat opens full screen.
-- GIFs in chats: a personal "My GIFs" collection (up to 200 GIFs, up to 10 MB each) — upload from your computer
-  or save from a chat, send with one tap.
-- A new emoji panel: categories, search by Russian and English words, recently used. Emoji look the same on every
-  computer (the Noto set; native Apple emoji on a Mac or iPhone) instead of the Windows 10 system ones.
-- Knowledge base: tables, strikethrough, task lists; a "Table" button in the editor.
-- Emails are styled as a card: organization name, request number, a color strip by message meaning, the text in
-  a frame, buttons. Service emails to administrators use the same design.
-- Interface: a livelier home page, a "404" page and a clear error page instead of "Something went wrong!",
-  colored icons in empty lists.
-- Reliability: react on a phone from the message menu; search and files on a phone close after jumping to a
-  message; a Back button if a chat fails to open; a GIF is never sent twice; removing a GIF asks for
-  confirmation; the GIF collection is limited in total size and how often it can grow, and a GIF file is
-  checked by its full signature.
-- Fixed: the "…" and "+" menus are no longer cut off by the list or chat frame (near the bottom they open
-  upwards); the message box no longer shows a second rectangular focus frame; the reaction picker is not hidden
-  behind the edge of the chat; the account menu no longer goes under the phonebook card; toasts show above open
-  dialogs; GIF collection errors are translated; "My GIFs" are not downloaded again on every open.
-
-### 中文
-
-- “消息”采用新外观：带图案的背景、带尾巴的彩色气泡、时间位于气泡右下角、无边框的图片拼贴、群组中彩色的头像和名字、
-  大号表情。图片加载时视图不再跳动，在手机上会话全屏打开。
-- 会话中的 GIF：个人“我的 GIF”收藏（最多 200 个，每个不超过 10 MB）——可从电脑上传或从会话保存，一键发送。
-- 新的表情面板：分类、按俄文和英文关键词搜索、最近使用。表情在所有电脑上外观一致（Noto 表情集，Mac 和 iPhone 上为 Apple 原生表情），
-  不再使用 Windows 10 的系统表情。
-- 知识库：表格、删除线、任务列表；编辑器中新增“表格”按钮。
-- 邮件采用卡片样式：组织名称、工单号、按含义区分颜色的色条、带边框的正文、按钮。发给管理员的服务邮件使用同样的样式。
-- 界面：首页更生动，新增“404”页面，并以清晰的错误页面取代 “Something went wrong!”，空列表显示彩色图标。
-- 可靠性：在手机上可从消息菜单添加回应；在手机上跳转到消息后搜索和文件面板会关闭；会话打开失败时显示“返回”按钮；
-  GIF 不会重复发送；移除 GIF 需要确认；GIF 收藏限制总大小和添加频率，并按完整签名校验 GIF 文件。
-- 修复：“…”和“+”菜单不再被列表或会话边框截断（靠近底部时向上展开）；输入框获得焦点时不再出现第二个矩形边框；
-  回应选择器不再被会话边缘遮挡；账户菜单不再被通讯录卡片遮住；提示消息显示在打开的对话框之上；GIF 收藏的错误信息已翻译；
-  “我的 GIF”不会在每次打开时重新下载。
-
-## 0.4.0 — мессенджер и база знаний · messenger and knowledge base · 消息与知识库
-
-### Русский
-
-- «Сообщения» стали похожи на привычный мессенджер: пузыри, разделители по дням, «Новые сообщения» при входе,
-  аватары в группах, крупные эмодзи. Ответ на сообщение с цитатой, пересылка в другой чат (вместе с файлами),
-  реакции, закреплённое сообщение сверху, «печатает…», ✓ — отправлено и ✓✓ — прочитано. Лента не прыгает
-  вниз, пока читаете старое: внизу кнопка со счётчиком новых.
-- Поиск по переписке (последние 5000 сообщений) и все её файлы — фото сеткой и документы, с переходом к
-  сообщению. Картинки открываются во весь экран с листанием.
-- Поле ввода растёт вместе с текстом, есть выбор эмодзи, ↑ — правка последнего своего сообщения, файлы можно
-  бросить на всю переписку. Разметка в сообщениях: **жирный**, _курсив_, ~~зачёркнутый~~, `код` и блоки кода.
-- Список переписок: поиск, «Непрочитанные», время последнего сообщения, беззвучные чаты. Звук и уведомления на
-  рабочем столе о новых сообщениях (настраиваются в браузере), непрочитанное — в заголовке вкладки.
-- Суперадминистратор видит, сколько места занимают переписки, и может задать срок хранения вложений (по
-  умолчанию — всегда). Сообщения по-прежнему не удаляются никогда.
-- База знаний: статьи оформлены «как в Telegraph» — крупный заголовок, шрифт с засечками, картинки на всю
-  ширину с подписью, содержание для длинных статей, время чтения, печать. У статей появились вложения: файлы
-  и картинки добавляются вставкой, перетаскиванием или скрепкой. Черновик из заявки забирает её открытые
-  вложения.
-- Новый редактор статьи: панель оформления (заголовки, списки, цитата, код, ссылка), просмотр рядом с текстом,
-  Ctrl+B/I/K/S, предупреждение о несохранённых изменениях. В списке статей — обложка и начало текста.
-
-### English
-
-- Messages now feel like a familiar messenger: bubbles, day separators, a "New messages" marker on entry, avatars
-  in groups, large emoji. Reply with a quote, forward to another chat (with files), reactions, a pinned message
-  on top, "typing…", ✓ sent and ✓✓ read. The view no longer jumps down while you read older messages: a button
-  at the bottom counts new ones.
-- Search in a chat (the last 5,000 messages) and all of its files — photos in a grid and documents, with a jump to
-  the message. Images open full screen and can be browsed.
-- The message box grows with the text, has an emoji picker, ↑ edits your last message, and files can be dropped
-  anywhere on the chat. Message formatting: **bold**, _italic_, ~~strikethrough~~, `code` and code blocks.
-- Chat list: search, "Unread", last message time, muted chats. Sound and desktop notifications for new messages
-  (set per browser); the unread count is in the tab title.
-- The superadministrator sees how much space chats take and can set an attachment retention period (default:
-  forever). Messages are still never deleted.
-- Knowledge base: articles look like Telegraph — a large title, a serif font, full-width images with captions,
-  contents for long articles, reading time, print. Articles now have attachments: add files and images by
-  pasting, dragging or the paperclip. A draft made from a ticket takes its public attachments.
-- New article editor: a formatting toolbar (headings, lists, quote, code, link), side-by-side preview,
-  Ctrl+B/I/K/S, a warning about unsaved changes. The article list shows a cover and the start of the text.
-
-### 中文
-
-- “消息”现在像常用的即时通讯工具：气泡、按日期分隔、进入时的“新消息”标记、群组中的头像、大号表情。可引用回复、
-  转发到其他会话（含文件）、添加回应、置顶消息、“正在输入…”，✓ 表示已发送，✓✓ 表示已读。阅读旧消息时视图不再跳到底部：
-  底部按钮会显示新消息数量。
-- 会话内搜索（最近 5000 条消息）以及会话中的所有文件——图片网格和文档，可跳转到对应消息。图片可全屏查看并翻页。
-- 输入框随文字增高，带表情选择器，↑ 编辑自己的上一条消息，文件可拖放到整个会话区域。消息格式：**粗体**、_斜体_、
-  ~~删除线~~、`代码` 和代码块。
-- 会话列表：搜索、“未读”、最后消息时间、静音会话。新消息提示音和桌面通知（按浏览器设置）；未读数显示在标签页标题中。
-- 超级管理员可以查看会话占用的空间，并设置附件保留期限（默认永久）。消息仍然永不删除。
-- 知识库：文章采用 Telegraph 风格——大标题、衬线字体、带说明的全宽图片、长文目录、阅读时间、打印。文章支持附件：
-  可通过粘贴、拖放或回形针添加文件和图片。由工单生成的草稿会带上工单的公开附件。
-- 新的文章编辑器：格式工具栏（标题、列表、引用、代码、链接）、并排预览、Ctrl+B/I/K/S、未保存更改提醒。
-  文章列表显示封面和正文开头。
-
-## 0.3.2 — лента записей · post feed · 动态
-
-### Русский
-
-- «Лента» в меню: записи со стен всех коллег, новые сверху, с ответами и «Нравится». Новые записи появляются
-  сами, без обновления страницы. Свою запись можно опубликовать прямо из ленты. Выключенные стены в ленту не
-  попадают.
-- Анимированный GIF-аватар уменьшается без ошибки «даже уменьшенный он больше 1 МБ»: в каждый кадр пишется
-  только то, что изменилось, одинаковые кадры склеиваются. Если и так больше 1 МБ, сервер пропускает часть
-  кадров и уменьшает сторону.
-- «Сообщения»: файл, загружающийся при переключении чата или во время правки, больше не теряется; во время
-  отправки можно продолжать прикреплять файлы; файл, брошенный мимо поля, не открывается вместо портала; при
-  вставке текста из Word вместе с ним не прикрепляется картинка.
-- Безопасность и надёжность: загрузка вложений и аватара получает тот же долгий срок, что вложения заявок;
-  суточная квота вложений на сотрудника (1 ГБ) и проверка квоты под блокировкой; ограничено число одновременных
-  скачиваний; символы смены направления текста убираются из имён файлов, сообщений, статуса и записей;
-  уменьшение GIF не обходит предел одновременной работы при оборванном запросе.
-- Профиль: смена статуса не сбрасывает его срок; прозрачная картинка аватара — на белом фоне; справочник не
-  мигает аватарами при поиске; ответы на стене ограничены для каждой записи, а не для всей страницы.
-
-### English
-
-- Feed in the menu: posts from all colleagues' walls, newest first, with replies and likes. New posts appear on
-  their own without reloading. You can post from the feed. Walls that are turned off are not in the feed.
-- An animated GIF avatar no longer fails with "even shrunk it is larger than 1 MB": each frame stores only what
-  changed and identical frames are merged. If it is still larger than 1 MB, the server drops frames and reduces
-  the size.
-- Messages: a file still uploading when you switch chats or start editing is no longer lost; you can keep
-  attaching files while a message is being sent; a file dropped outside the box no longer replaces the portal
-  page; pasting text from Word no longer attaches its preview image.
-- Security and reliability: attachment and avatar uploads get the long upload deadline; a daily attachment quota
-  per employee (1 GB), checked under a lock; concurrent downloads are limited; text direction override characters
-  are removed from file names, messages, statuses and posts; GIF shrinking keeps its concurrency limit when a
-  request is aborted.
-- Profile: changing the status keeps its expiry; a transparent avatar picture gets a white background; the
-  phonebook no longer flickers avatars while searching; wall replies are limited per post, not per page.
-
-### 中文
-
-- 菜单中的“动态”：所有同事留言墙上的帖子，最新的在上方，含回复和点赞。新帖子无需刷新即可自动出现。可以直接在动态中发帖。
-  已关闭的留言墙不会出现在动态中。
-- 动态 GIF 头像不再出现“缩小后仍大于 1 MB”的错误：每帧只保存变化的部分，相同的帧会合并。若仍大于 1 MB，服务器会丢弃部分帧并缩小尺寸。
-- 消息：切换聊天或开始编辑时仍在上传的文件不再丢失；发送过程中可以继续添加附件；拖到输入框外的文件不再替换门户页面；
-  从 Word 粘贴文本时不再附带其预览图片。
-- 安全与可靠性：附件和头像上传使用较长的上传时限；每位员工每日附件配额（1 GB），在锁内检查；限制同时下载数；
-  文件名、消息、状态和帖子中的文字方向控制字符会被移除；请求中断时 GIF 缩小仍遵守并发限制。
-- 个人资料：修改状态不会重置其期限；透明头像图片使用白色背景；在通讯录中搜索时头像不再闪烁；留言墙回复按每条帖子限制，而非按整页。
-
-## 0.3.1 — вложения в сообщениях · attachments in Messages · 消息附件
-
-### Русский
-
-- В «Сообщениях» можно прикреплять файлы: кнопка со скрепкой, вставка картинки из буфера или перетаскивание.
-  До 10 файлов в сообщении; разрешены те же типы и тот же предел размера, что у вложений заявок
-  (настройка Helpdesk «Размер вложения», по умолчанию 25 МБ). Сообщение может состоять только из файлов.
-- Картинки показываются прямо в переписке, остальные файлы скачиваются. Имя и содержимое файла хранятся
-  зашифрованными ключом портала, как и текст; открыть вложение могут только участники чата (вышедший — только
-  отправленные до выхода). Загруженный, но не отправленный файл удаляется через сутки.
-- В списке переписок сообщение без текста подписано числом вложений.
-- Анимированный GIF-аватар теперь можно загрузить до 15 МБ: сервер обрезает его в квадрат 256 точек и
-  сохраняет все кадры (раньше — только до 1 МБ как есть).
-
-### English
-
-- Messages now take attachments: the paperclip button, pasting an image or dropping files. Up to 10 files per
-  message; the same file types and size limit as ticket attachments (the Helpdesk "Attachment size" setting,
-  25 MB by default). A message may consist of files only.
-- Images are shown right in the conversation, other files download. The file name and content are stored
-  encrypted with the portal key, like the text; only chat members can open an attachment (a former member, only
-  those sent before they left). An uploaded file that is never sent is deleted after a day.
-- In the chat list a message without text shows the number of attachments.
-- An animated GIF avatar can now be up to 15 MB: the server crops it to a 256-pixel square and keeps all frames
-  (before, only up to 1 MB as is).
-
-### 中文
-
-- “消息”支持附件：回形针按钮、粘贴图片或拖入文件。每条消息最多 10 个文件；文件类型和大小限制与工单附件相同
-  （Helpdesk 设置“附件大小”，默认 25 MB）。消息可以只包含文件。
-- 图片直接显示在对话中，其他文件可下载。文件名和内容与文本一样使用门户密钥加密存储；只有聊天成员可以打开附件
-  （已退出的成员只能打开退出前发送的附件）。上传后未发送的文件一天后删除。
-- 在会话列表中，没有文字的消息显示附件数量。
-- 动态 GIF 头像现在最大可达 15 MB：服务器将其裁成 256 像素正方形并保留所有帧（此前只能原样上传 1 MB 以内的文件）。
-
-## 0.3.0 — профиль сотрудника: статус, аватар, стена · employee profile: status, avatar, wall · 员工主页：状态、头像、留言墙
+## 0.3.0 — люди и общение: профиль, стена, лента, мессенджер, GIF, база знаний · people and communication: profile, wall, feed, messenger, GIFs, knowledge base · 人与沟通：个人主页、留言墙、动态、即时消息、GIF、知识库
 
 ### Русский
 
@@ -227,27 +23,102 @@ automatically.
 - Свой статус — значок и текст («В отпуске», «На совещании», «Работаю удалённо» или свой) со сроком: 30 минут,
   час, 4 часа, сегодня, неделя или без срока.
 
-**Аватар и страница сотрудника**
+**Аватар, страница сотрудника, стена и лента**
 
 - Аватар загружается в «Мой профиль» → «Профиль для коллег»: картинка обрезается в квадрат и сжимается в
-  браузере, анимированный GIF загружается как есть и сохраняет анимацию; сервер принимает только JPEG, PNG,
-  WebP и GIF до 1 МБ и проверяет содержимое файла, а не расширение.
+  браузере; анимированный GIF до 15 МБ сервер обрезает в квадрат 256 точек с сохранением всех кадров (если и
+  так больше 1 МБ — пропускает часть кадров и уменьшает сторону). Принимаются только JPEG, PNG, WebP и GIF,
+  проверяется содержимое файла, а не расширение; прозрачная картинка ложится на белый фон.
 - Страница сотрудника (`/people/<id>`): аватар, присутствие, статус, должность, отдел, площадка, контакты из
-  справочника, «О себе» и кнопка «Написать».
-- Аватары и присутствие — в справочнике, в меню учётной записи, в «Сообщениях» (список, шапка личной
-  переписки, участники группы).
-
-**Стена**
-
-- На странице сотрудника — стена: записи коллег, ответы, «Нравится». Владелец выбирает, кто пишет: все
-  коллеги, только он сам (коллеги отвечают) или стена выключена.
-- Владелец стены получает уведомление о новой записи, автор — об ответе. Не больше 30 записей за 10 минут.
+  справочника, «О себе» и кнопка «Написать». Аватары и присутствие — в справочнике, в меню учётной записи и
+  в «Сообщениях».
+- Стена на странице сотрудника: записи коллег, ответы, «Нравится». Владелец выбирает, кто пишет: все коллеги,
+  только он сам (коллеги отвечают) или стена выключена. Владелец получает уведомление о новой записи, автор —
+  об ответе; не больше 30 записей за 10 минут.
+- «Лента» в меню: записи со стен всех коллег, новые сверху, с ответами и «Нравится»; новые записи появляются
+  сами, свою можно опубликовать прямо из ленты. Выключенные стены в ленту не попадают.
 - Новое право «Модерация профилей и стен» (по умолчанию — у суперадминистратора): убрать чужой аватар или
   запись. Действие попадает в журнал аудита.
 
+**Сообщения**
+
+- Оформление привычного мессенджера: фон с узором, цветные пузыри с «хвостиком», время в правом нижнем углу,
+  разделители по дням, «Новые сообщения» при входе, цветные аватары и имена в группах, крупные эмодзи. Лента
+  не прыгает, пока догружаются картинки и пока вы читаете старое (внизу — кнопка со счётчиком новых); на
+  телефоне переписка открывается на весь экран.
+- Ответ с цитатой, пересылка в другой чат (вместе с файлами), реакции, закреплённое сообщение, «печатает…»,
+  ✓ — отправлено, ✓✓ — прочитано. Разметка: **жирный**, _курсив_, ~~зачёркнутый~~, `код` и блоки кода.
+  Поле ввода растёт вместе с текстом, ↑ — правка последнего своего сообщения.
+- Вложения: скрепка, вставка из буфера или перетаскивание на всю переписку; до 10 файлов в сообщении, те же
+  типы и предел размера, что у вложений заявок (по умолчанию 25 МБ). Картинки — мозаикой прямо в переписке и
+  во весь экран с листанием, остальные файлы скачиваются. Имя и содержимое файла хранятся зашифрованными
+  ключом портала, как и текст; открыть вложение могут только участники чата (вышедший — только отправленные
+  до выхода). Загруженный, но не отправленный файл удаляется через сутки.
+- Поиск по переписке (последние 5000 сообщений) и все её файлы — фото сеткой и документы, с переходом к
+  сообщению.
+- Новая панель эмодзи: разделы, поиск по словам на русском и английском, недавние. Эмодзи одного вида на всех
+  компьютерах, в том числе на Windows 10: набор Noto, на Mac и iPhone — родные Apple.
+- GIF: личная подборка «Мои GIF» (до 200 GIF, до 10 МБ каждый) — загрузить с компьютера или сохранить из чата,
+  отправить одним нажатием.
+- Поиск GIF в KLIPY: суперадминистратор вводит ключ приложения KLIPY (бесплатно, Partner Panel на
+  partner.klipy.com) в «Настройки» → «Сообщения», и в панели появляется вкладка «KLIPY» — популярное и поиск
+  по библиотеке. По правилам KLIPY браузер обращается к KLIPY напрямую, портал анимации не хранит: в
+  переписке остаётся зашифрованная ссылка, а если анимацию уберут у KLIPY — её подпись. Пока ключа нет, к
+  KLIPY никто не обращается и политика CSP их адресов не пропускает.
+- Список переписок: поиск, «Непрочитанные», время последнего сообщения, беззвучные чаты, число вложений или
+  «GIF» вместо текста. Звук и уведомления на рабочем столе (настраиваются в браузере), непрочитанное — в
+  заголовке вкладки.
+- Суперадминистратор видит, сколько места занимают переписки, и задаёт срок хранения вложений (по умолчанию
+  — всегда). Сообщения по-прежнему не удаляются никогда.
+
+**База знаний**
+
+- Статьи оформлены «как в Telegraph»: крупный заголовок, шрифт с засечками, картинки на всю ширину с подписью,
+  содержание для длинных статей, время чтения, печать. Таблицы, зачёркнутый текст, списки задач.
+- Вложения статей: файлы и картинки добавляются вставкой, перетаскиванием или скрепкой. Черновик из заявки
+  забирает её открытые вложения.
+- Новый редактор: панель оформления (заголовки, списки, цитата, код, ссылка, таблица), просмотр рядом с
+  текстом, Ctrl+B/I/K/S, предупреждение о несохранённых изменениях. В списке статей — обложка и начало текста.
+
+**Письма и интерфейс**
+
+- Письма оформлены карточкой: название организации, номер заявки, цветная полоса по смыслу письма, текст в
+  рамке, кнопки. Служебные письма администраторам — в том же оформлении.
+- Живее главная, страница «404» и понятная страница ошибки вместо английского «Something went wrong!»,
+  цветные значки в пустых списках.
+
+**Безопасность и надёжность**
+
+- Суточная квота вложений на сотрудника (1 ГБ) с проверкой под блокировкой; ограничено число одновременных
+  скачиваний; загрузка вложений и аватара получает тот же долгий срок, что вложения заявок.
+- Символы смены направления текста убираются из имён файлов, сообщений, статуса и записей.
+- Подборка GIF ограничена по объёму и частоте пополнения, файл GIF проверяется по полной сигнатуре; GIF не
+  уходит дважды, удаление — с подтверждением. Ссылка на GIF из KLIPY принимается только с серверов KLIPY и
+  только из безопасных знаков; номер сотрудника для KLIPY обезличен; ключ не пишется в журнал аудита.
+- Уменьшение GIF-аватара не обходит предел одновременной работы при оборванном запросе.
+
+**Исправлено**
+
+- Файл, загружающийся при переключении чата или во время правки, больше не теряется; во время отправки можно
+  продолжать прикреплять файлы; файл, брошенный мимо поля, не открывается вместо портала; при вставке текста
+  из Word не прикрепляется картинка.
+- Меню «…» и «+» не обрезаются рамкой списка или переписки (у нижнего края открываются вверх); у поля ввода
+  нет второй рамки при фокусе; выбор реакции не прячется за краем ленты; реакция на телефоне — из меню
+  сообщения; поиск и файлы на телефоне закрываются после перехода к сообщению; кнопка «Назад», если чат не
+  открылся.
+- Меню профиля не уходит под карточку справочника; всплывающие сообщения видны поверх открытых окон.
+- Смена статуса не сбрасывает его срок; справочник не мигает аватарами при поиске; ответы на стене
+  ограничены для каждой записи, а не для всей страницы.
+- Ошибки подборки GIF переведены на английский и китайский; «Мои GIF» не перекачиваются при каждом открытии.
+- Сохранение срока хранения вложений не сбрасывает другие настройки «Сообщений».
+
 **Обновление**
 
-- Миграция `20261127000000_profile` добавляет таблицы профиля, аватаров и стены; данные не меняются.
+- Миграции только добавляют таблицы, столбцы и индексы, существующие данные не меняются: `20261127000000_profile` (профиль,
+  аватары, стена), `20261127000001_chat_files` (вложения сообщений), `20261127000002_feed` (лента),
+  `20261128000000_kb_messenger` (ответы, реакции, закрепление, вложения статей), `20261129000000_chat_gifs`
+  («Мои GIF»), `20261130000000_chat_klipy` (GIF из KLIPY).
+- Поиск KLIPY выключен, пока не введён ключ.
 
 ### English
 
@@ -260,27 +131,101 @@ automatically.
 - Custom status — an emoji and text ("On vacation", "In a meeting", "Working remotely" or your own) with an end
   time: 30 minutes, an hour, 4 hours, today, this week or none.
 
-**Avatar and employee page**
+**Avatar, employee page, wall and feed**
 
 - Upload an avatar in My profile → Profile for colleagues: the browser crops the picture to a square and
-  shrinks it, an animated GIF is uploaded as is and keeps its animation; the server accepts only JPEG, PNG,
-  WebP and GIF up to 1 MB and checks the file content, not the extension.
+  shrinks it; the server crops an animated GIF of up to 15 MB to a 256-pixel square and keeps every frame (if it
+  is still over 1 MB, it drops frames and reduces the size). Only JPEG, PNG, WebP and GIF are accepted, and the
+  file content is checked, not the extension; a transparent picture gets a white background.
 - Employee page (`/people/<id>`): avatar, presence, status, position, department, site, phonebook contacts,
-  About, and a Message button.
-- Avatars and presence appear in the phonebook, the account menu and Messages (list, direct chat header,
-  group members).
-
-**Wall**
-
-- The employee page has a wall: colleagues' posts, replies and likes. The owner chooses who can post: all
-  colleagues, only the owner (colleagues reply) or nobody (wall off).
-- The wall owner is notified about new posts, the author about replies. At most 30 posts per 10 minutes.
+  About, and a Message button. Avatars and presence appear in the phonebook, the account menu and Messages.
+- A wall on the employee page: colleagues' posts, replies and likes. The owner chooses who can post: all
+  colleagues, only the owner (colleagues reply) or nobody. The owner is notified about new posts, the author
+  about replies; at most 30 posts per 10 minutes.
+- Feed in the menu: posts from all colleagues' walls, newest first, with replies and likes; new posts appear on
+  their own, and you can post right from the feed. Walls that are turned off are not in the feed.
 - New permission "Moderate profiles and walls" (superadmin by default): remove someone's avatar or post. The
   action is recorded in the audit log.
 
+**Messages**
+
+- A familiar messenger look: a patterned background, colored bubbles with tails, the time in the bottom-right
+  corner, day separators, a "New messages" marker on entry, colored avatars and names in groups, large emoji.
+  The view does not jump while images load or while you read older messages (a button at the bottom counts new
+  ones); on a phone the chat opens full screen.
+- Reply with a quote, forward to another chat (with files), reactions, a pinned message, "typing…", ✓ sent and
+  ✓✓ read. Formatting: **bold**, _italic_, ~~strikethrough~~, `code` and code blocks. The message box grows
+  with the text, ↑ edits your last message.
+- Attachments: the paperclip, pasting, or dropping anywhere on the chat; up to 10 files per message, the same
+  types and size limit as ticket attachments (25 MB by default). Images show as a mosaic in the chat and full
+  screen with browsing, other files download. File names and contents are stored encrypted with the portal key,
+  like the text; only chat members can open an attachment (a former member, only those sent before they left).
+  An uploaded file that is never sent is deleted after a day.
+- Search in a chat (the last 5,000 messages) and all of its files — photos in a grid and documents, with a jump
+  to the message.
+- A new emoji panel: categories, search by Russian and English words, recently used. Emoji look the same on
+  every computer, Windows 10 included: the Noto set, native Apple emoji on a Mac or iPhone.
+- GIFs: a personal "My GIFs" collection (up to 200 GIFs, up to 10 MB each) — upload from your computer or save
+  from a chat, send with one tap.
+- GIF search with KLIPY: the superadministrator enters a KLIPY app key (free, Partner Panel at
+  partner.klipy.com) in Settings → Messages, and the panel gets a "KLIPY" tab with trending GIFs and search. As
+  KLIPY requires, the browser talks to KLIPY directly and the portal does not store the animations: the chat
+  keeps an encrypted link, and if KLIPY removes the animation, its title. Without a key nobody contacts KLIPY
+  and the CSP does not allow its addresses.
+- Chat list: search, "Unread", last message time, muted chats, the number of attachments or "GIF" instead of
+  text. Sound and desktop notifications (set per browser); the unread count is in the tab title.
+- The superadministrator sees how much space chats take and sets an attachment retention period (default:
+  forever). Messages are still never deleted.
+
+**Knowledge base**
+
+- Articles look like Telegraph: a large title, a serif font, full-width images with captions, contents for long
+  articles, reading time, print. Tables, strikethrough, task lists.
+- Article attachments: add files and images by pasting, dragging or the paperclip. A draft made from a ticket
+  takes its public attachments.
+- A new editor: a formatting toolbar (headings, lists, quote, code, link, table), side-by-side preview,
+  Ctrl+B/I/K/S, a warning about unsaved changes. The article list shows a cover and the start of the text.
+
+**Emails and interface**
+
+- Emails are styled as a card: organization name, request number, a color strip by message meaning, the text in
+  a frame, buttons. Service emails to administrators use the same design.
+- A livelier home page, a "404" page and a clear error page instead of "Something went wrong!", colored icons in
+  empty lists.
+
+**Security and reliability**
+
+- A daily attachment quota per employee (1 GB), checked under a lock; concurrent downloads are limited;
+  attachment and avatar uploads get the long upload deadline.
+- Text direction override characters are removed from file names, messages, statuses and posts.
+- The GIF collection is limited in total size and how often it can grow, and a GIF file is checked by its full
+  signature; a GIF is never sent twice, and removing one asks for confirmation. A KLIPY GIF link is accepted
+  only from KLIPY's servers and only with safe characters; the employee number sent to KLIPY is anonymous; the
+  key is never written to the audit log.
+- GIF avatar shrinking keeps its concurrency limit when a request is aborted.
+
+**Fixed**
+
+- A file still uploading when you switch chats or start editing is no longer lost; you can keep attaching files
+  while a message is being sent; a file dropped outside the box no longer replaces the portal page; pasting
+  text from Word no longer attaches its preview image.
+- The "…" and "+" menus are no longer cut off by the list or chat frame (near the bottom they open upwards); the
+  message box has no second focus frame; the reaction picker is not hidden behind the edge of the chat; on a
+  phone you react from the message menu; search and files on a phone close after jumping to a message; a Back
+  button if a chat fails to open.
+- The account menu no longer goes under the phonebook card; toasts show above open dialogs.
+- Changing the status keeps its expiry; the phonebook no longer flickers avatars while searching; wall replies
+  are limited per post, not per page.
+- GIF collection errors are translated; "My GIFs" are not downloaded again on every open.
+- Saving the attachment retention period no longer resets other Messages settings.
+
 **Upgrade**
 
-- Migration `20261127000000_profile` adds the profile, avatar and wall tables; existing data is untouched.
+- Migrations only add tables, columns and indexes; existing data is untouched: `20261127000000_profile` (profile,
+  avatars, wall), `20261127000001_chat_files` (message attachments), `20261127000002_feed` (feed),
+  `20261128000000_kb_messenger` (replies, reactions, pins, article attachments), `20261129000000_chat_gifs`
+  (My GIFs), `20261130000000_chat_klipy` (KLIPY GIFs).
+- KLIPY search stays off until a key is entered.
 
 ### 中文
 
@@ -291,22 +236,76 @@ automatically.
 - “请勿打扰”时通知不会推送到设备，只保留在铃铛中。
 - 自定义状态：图标和文字（“休假中”“开会中”“远程办公”或自定义），可设置结束时间：30 分钟、1 小时、4 小时、今天、本周或不清除。
 
-**头像与员工主页**
+**头像、员工主页、留言墙与动态**
 
-- 在“我的资料”→“同事可见的资料”中上传头像：浏览器将图片裁成正方形并压缩，动态 GIF 原样上传并保留动画；服务器只接受
-  1 MB 以内的 JPEG、PNG、WebP 和 GIF，并检查文件内容而非扩展名。
+- 在“我的资料”→“同事可见的资料”中上传头像：浏览器将图片裁成正方形并压缩；最大 15 MB 的动态 GIF 由服务器裁成 256 像素
+  正方形并保留所有帧（若仍大于 1 MB，则丢弃部分帧并缩小尺寸）。只接受 JPEG、PNG、WebP 和 GIF，并检查文件内容而非扩展名；
+  透明图片使用白色背景。
 - 员工主页（`/people/<id>`）：头像、在线状态、个人状态、职位、部门、站点、通讯录联系方式、“关于我”和“发消息”按钮。
-- 头像和在线状态显示在通讯录、账户菜单和“消息”中（列表、私聊标题、群成员）。
-
-**留言墙**
-
-- 员工主页上有留言墙：同事的留言、回复和点赞。主人可以选择谁能发帖：所有同事、仅本人（同事可回复）或关闭留言墙。
-- 有新留言时通知墙的主人，有回复时通知作者。每 10 分钟最多 30 条。
+  头像和在线状态显示在通讯录、账户菜单和“消息”中。
+- 员工主页上的留言墙：同事的留言、回复和点赞。主人可以选择谁能发帖：所有同事、仅本人（同事可回复）或关闭。有新留言时
+  通知主人，有回复时通知作者；每 10 分钟最多 30 条。
+- 菜单中的“动态”：所有同事留言墙上的帖子，最新的在上方，含回复和点赞；新帖子自动出现，也可直接在动态中发帖。
+  已关闭的留言墙不会出现在动态中。
 - 新权限“管理资料和留言墙”（默认属于超级管理员）：移除他人的头像或留言。该操作记入审计日志。
+
+**消息**
+
+- 熟悉的即时通讯外观：带图案的背景、带尾巴的彩色气泡、时间位于右下角、按日期分隔、进入时的“新消息”标记、群组中彩色的
+  头像和名字、大号表情。图片加载时或阅读旧消息时视图不再跳动（底部按钮显示新消息数量）；在手机上会话全屏打开。
+- 引用回复、转发到其他会话（含文件）、回应、置顶消息、“正在输入…”，✓ 已发送，✓✓ 已读。格式：**粗体**、_斜体_、
+  ~~删除线~~、`代码` 和代码块。输入框随文字增高，↑ 编辑自己的上一条消息。
+- 附件：回形针、粘贴或拖放到整个会话区域；每条消息最多 10 个文件，类型和大小限制与工单附件相同（默认 25 MB）。
+  图片在会话中以拼贴显示，可全屏翻页查看，其他文件可下载。文件名和内容与文本一样使用门户密钥加密存储；只有聊天成员可以
+  打开附件（已退出的成员只能打开退出前发送的附件）。上传后未发送的文件一天后删除。
+- 会话内搜索（最近 5000 条消息）以及会话中的所有文件——图片网格和文档，可跳转到对应消息。
+- 新的表情面板：分类、按俄文和英文关键词搜索、最近使用。表情在所有电脑上外观一致，包括 Windows 10：Noto 表情集，
+  Mac 和 iPhone 上为 Apple 原生表情。
+- GIF：个人“我的 GIF”收藏（最多 200 个，每个不超过 10 MB）——可从电脑上传或从会话保存，一键发送。
+- 通过 KLIPY 搜索 GIF：超级管理员在“设置”→“消息”中填写 KLIPY 应用密钥（免费，partner.klipy.com 的 Partner Panel），
+  面板中即出现“KLIPY”标签页，提供热门 GIF 和搜索。按照 KLIPY 的要求，浏览器直接访问 KLIPY，门户不保存动画：会话中保留
+  加密的链接，若 KLIPY 删除了动画则显示其标题。没有密钥时不会访问 KLIPY，CSP 也不放行其地址。
+- 会话列表：搜索、“未读”、最后消息时间、静音会话，无文字时显示附件数量或“GIF”。提示音和桌面通知（按浏览器设置）；
+  未读数显示在标签页标题中。
+- 超级管理员可以查看会话占用的空间，并设置附件保留期限（默认永久）。消息仍然永不删除。
+
+**知识库**
+
+- 文章采用 Telegraph 风格：大标题、衬线字体、带说明的全宽图片、长文目录、阅读时间、打印。支持表格、删除线、任务列表。
+- 文章附件：可通过粘贴、拖放或回形针添加文件和图片。由工单生成的草稿会带上工单的公开附件。
+- 新的编辑器：格式工具栏（标题、列表、引用、代码、链接、表格）、并排预览、Ctrl+B/I/K/S、未保存更改提醒。
+  文章列表显示封面和正文开头。
+
+**邮件与界面**
+
+- 邮件采用卡片样式：组织名称、工单号、按含义区分颜色的色条、带边框的正文、按钮。发给管理员的服务邮件使用同样的样式。
+- 首页更生动，新增“404”页面，并以清晰的错误页面取代 “Something went wrong!”，空列表显示彩色图标。
+
+**安全与可靠性**
+
+- 每位员工每日附件配额（1 GB），在锁内检查；限制同时下载数；附件和头像上传使用较长的上传时限。
+- 文件名、消息、状态和帖子中的文字方向控制字符会被移除。
+- GIF 收藏限制总大小和添加频率，并按完整签名校验 GIF 文件；GIF 不会重复发送，移除时需要确认。KLIPY GIF 链接只接受来自
+  KLIPY 服务器且只含安全字符的地址；发给 KLIPY 的员工编号是匿名的；密钥不会写入审计日志。
+- 请求中断时 GIF 头像缩小仍遵守并发限制。
+
+**修复**
+
+- 切换聊天或开始编辑时仍在上传的文件不再丢失；发送过程中可以继续添加附件；拖到输入框外的文件不再替换门户页面；
+  从 Word 粘贴文本时不再附带其预览图片。
+- “…”和“+”菜单不再被列表或会话边框截断（靠近底部时向上展开）；输入框获得焦点时不再出现第二个边框；回应选择器不再被
+  会话边缘遮挡；在手机上从消息菜单添加回应；在手机上跳转到消息后搜索和文件面板会关闭；会话打开失败时显示“返回”按钮。
+- 账户菜单不再被通讯录卡片遮住；提示消息显示在打开的对话框之上。
+- 修改状态不会重置其期限；在通讯录中搜索时头像不再闪烁；留言墙回复按每条帖子限制，而非按整页。
+- GIF 收藏的错误信息已翻译；“我的 GIF”不会在每次打开时重新下载。
+- 保存附件保留期限不再重置“消息”的其他设置。
 
 **升级**
 
-- 迁移 `20261127000000_profile` 新增资料、头像和留言墙的表；现有数据不变。
+- 迁移只新增表、列和索引，现有数据不变：`20261127000000_profile`（资料、头像、留言墙）、`20261127000001_chat_files`（消息附件）、
+  `20261127000002_feed`（动态）、`20261128000000_kb_messenger`（回复、回应、置顶、文章附件）、`20261129000000_chat_gifs`
+  （我的 GIF）、`20261130000000_chat_klipy`（KLIPY GIF）。
+- 填写密钥之前，KLIPY 搜索保持关闭。
 
 ## 0.2.1 — удобство и исправления после пилота · usability and fixes after the pilot · 试点后的易用性改进与修复
 
