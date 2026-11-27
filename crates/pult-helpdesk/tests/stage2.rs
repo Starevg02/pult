@@ -516,6 +516,37 @@ async fn stage2_acceptance() {
     let (_, aud) = admin.get("/api/admin/audit?action=ticket.file_download").await;
     assert!(!aud.as_array().unwrap().is_empty(), "скачивание инженером не своей заявки — в аудите");
 
+    // --- База знаний: вложения статьи видит тот, кому видна статья ---
+    let (code, draft) = other.get(&format!("/api/helpdesk/tickets/{n1}/kb-draft")).await;
+    assert_eq!(code, StatusCode::OK, "{draft}");
+    let copies: Vec<String> =
+        draft["files"].as_array().unwrap().iter().map(|f| f["id"].as_str().unwrap().to_string()).collect();
+    assert_eq!(copies.len(), 1, "только открытые вложения заявки: {draft}");
+    assert_ne!(copies[0], fid, "копия, а не вложение заявки");
+    let (_, doc) = other.upload("инструкция.pdf", b"%PDF-1.4 kb").await;
+    let body = format!("Шаги\n\n![скрин](/api/helpdesk/files/{})", copies[0]);
+    let article = |status: &str, files: Value| json!({"title": "Как заменить картридж", "body": body, "audience": "all", "status": status, "files": files});
+    let (code, art) = other.post("/api/kb/articles", article("draft", json!([doc["id"]]))).await;
+    assert_eq!(code, StatusCode::CREATED, "{art}");
+    let aid = art["id"].as_str().unwrap().to_string();
+    let (_, shown) = other.get(&format!("/api/kb/articles/{aid}")).await;
+    assert_eq!(shown["files"].as_array().map(Vec::len), Some(2), "файл и картинка из текста: {shown}");
+    let doc_url = format!("/api/helpdesk/files/{}", doc["id"].as_str().unwrap());
+    assert_eq!(emp2.get(&doc_url).await.0, StatusCode::NOT_FOUND, "вложение черновика сотруднику не видно");
+    let (code, _) = other.put(&format!("/api/kb/articles/{aid}"), article("published", json!([doc["id"]]))).await;
+    assert_eq!(code, StatusCode::NO_CONTENT);
+    assert_eq!(emp2.get(&doc_url).await.0, StatusCode::OK, "опубликованной статьи — видно");
+    let (_, list) = emp2.get("/api/kb/articles").await;
+    let row = list.as_array().unwrap().iter().find(|r| r["id"] == aid.as_str()).unwrap();
+    assert_eq!((row["cover"].as_str(), row["excerpt"].as_str()), (Some(copies[0].as_str()), Some("Шаги")), "{row}");
+    let (code, e) =
+        other.post(&format!("/api/helpdesk/tickets/{n1}/comments"), json!({"body": "x", "files": [doc["id"]]})).await;
+    assert_eq!(code, StatusCode::BAD_REQUEST, "вложение статьи не прикрепить к заявке: {e}");
+    let (_, theirs) = emp.upload("моё.png", PNG).await;
+    let (code, _) = other.put(&format!("/api/kb/articles/{aid}"), article("published", json!([theirs["id"]]))).await;
+    assert_eq!(code, StatusCode::BAD_REQUEST, "чужой файл к статье не прикрепить");
+    assert_eq!(emp2.get(&doc_url).await.0, StatusCode::OK, "неудачная правка ничего не сняла");
+
     // --- Решение и «Да / Нет» ---
     assert_eq!(
         owner.post(&format!("/api/helpdesk/tickets/{n1}/resolve"), json!({"comment": "  "})).await.0,

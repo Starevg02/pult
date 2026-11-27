@@ -10,6 +10,64 @@ automatically.
 格式：[Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号：[SemVer](https://semver.org/lang/zh-CN/)。
 1.0 版本之前，设置和 API 可能出现不兼容的变更；数据库迁移始终自动执行。
 
+## 0.4.0 — мессенджер и база знаний · messenger and knowledge base · 消息与知识库
+
+### Русский
+
+- «Сообщения» стали похожи на привычный мессенджер: пузыри, разделители по дням, «Новые сообщения» при входе,
+  аватары в группах, крупные эмодзи. Ответ на сообщение с цитатой, пересылка в другой чат (вместе с файлами),
+  реакции, закреплённое сообщение сверху, «печатает…», ✓ — отправлено и ✓✓ — прочитано. Лента не прыгает
+  вниз, пока читаете старое: внизу кнопка со счётчиком новых.
+- Поиск по переписке (последние 5000 сообщений) и все её файлы — фото сеткой и документы, с переходом к
+  сообщению. Картинки открываются во весь экран с листанием.
+- Поле ввода растёт вместе с текстом, есть выбор эмодзи, ↑ — правка последнего своего сообщения, файлы можно
+  бросить на всю переписку. Разметка в сообщениях: **жирный**, _курсив_, ~~зачёркнутый~~, `код` и блоки кода.
+- Список переписок: поиск, «Непрочитанные», время последнего сообщения, беззвучные чаты. Звук и уведомления на
+  рабочем столе о новых сообщениях (настраиваются в браузере), непрочитанное — в заголовке вкладки.
+- Суперадминистратор видит, сколько места занимают переписки, и может задать срок хранения вложений (по
+  умолчанию — всегда). Сообщения по-прежнему не удаляются никогда.
+- База знаний: статьи оформлены «как в Telegraph» — крупный заголовок, шрифт с засечками, картинки на всю
+  ширину с подписью, содержание для длинных статей, время чтения, печать. У статей появились вложения: файлы
+  и картинки добавляются вставкой, перетаскиванием или скрепкой. Черновик из заявки забирает её открытые
+  вложения.
+- Новый редактор статьи: панель оформления (заголовки, списки, цитата, код, ссылка), просмотр рядом с текстом,
+  Ctrl+B/I/K/S, предупреждение о несохранённых изменениях. В списке статей — обложка и начало текста.
+
+### English
+
+- Messages now feel like a familiar messenger: bubbles, day separators, a "New messages" marker on entry, avatars
+  in groups, large emoji. Reply with a quote, forward to another chat (with files), reactions, a pinned message
+  on top, "typing…", ✓ sent and ✓✓ read. The view no longer jumps down while you read older messages: a button
+  at the bottom counts new ones.
+- Search in a chat (the last 5,000 messages) and all of its files — photos in a grid and documents, with a jump to
+  the message. Images open full screen and can be browsed.
+- The message box grows with the text, has an emoji picker, ↑ edits your last message, and files can be dropped
+  anywhere on the chat. Message formatting: **bold**, _italic_, ~~strikethrough~~, `code` and code blocks.
+- Chat list: search, "Unread", last message time, muted chats. Sound and desktop notifications for new messages
+  (set per browser); the unread count is in the tab title.
+- The superadministrator sees how much space chats take and can set an attachment retention period (default:
+  forever). Messages are still never deleted.
+- Knowledge base: articles look like Telegraph — a large title, a serif font, full-width images with captions,
+  contents for long articles, reading time, print. Articles now have attachments: add files and images by
+  pasting, dragging or the paperclip. A draft made from a ticket takes its public attachments.
+- New article editor: a formatting toolbar (headings, lists, quote, code, link), side-by-side preview,
+  Ctrl+B/I/K/S, a warning about unsaved changes. The article list shows a cover and the start of the text.
+
+### 中文
+
+- “消息”现在像常用的即时通讯工具：气泡、按日期分隔、进入时的“新消息”标记、群组中的头像、大号表情。可引用回复、
+  转发到其他会话（含文件）、添加回应、置顶消息、“正在输入…”，✓ 表示已发送，✓✓ 表示已读。阅读旧消息时视图不再跳到底部：
+  底部按钮会显示新消息数量。
+- 会话内搜索（最近 5000 条消息）以及会话中的所有文件——图片网格和文档，可跳转到对应消息。图片可全屏查看并翻页。
+- 输入框随文字增高，带表情选择器，↑ 编辑自己的上一条消息，文件可拖放到整个会话区域。消息格式：**粗体**、_斜体_、
+  ~~删除线~~、`代码` 和代码块。
+- 会话列表：搜索、“未读”、最后消息时间、静音会话。新消息提示音和桌面通知（按浏览器设置）；未读数显示在标签页标题中。
+- 超级管理员可以查看会话占用的空间，并设置附件保留期限（默认永久）。消息仍然永不删除。
+- 知识库：文章采用 Telegraph 风格——大标题、衬线字体、带说明的全宽图片、长文目录、阅读时间、打印。文章支持附件：
+  可通过粘贴、拖放或回形针添加文件和图片。由工单生成的草稿会带上工单的公开附件。
+- 新的文章编辑器：格式工具栏（标题、列表、引用、代码、链接）、并排预览、Ctrl+B/I/K/S、未保存更改提醒。
+  文章列表显示封面和正文开头。
+
 ## 0.3.2 — лента записей · post feed · 动态
 
 ### Русский

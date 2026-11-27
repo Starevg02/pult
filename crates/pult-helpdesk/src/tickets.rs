@@ -179,7 +179,13 @@ pub async fn ping(tx: &mut Transaction<'_, Postgres>, t: &T) -> Result<(), sqlx:
     crate::integrations::enqueue(tx, t.id).await?;
     events::publish(
         &mut **tx,
-        &Event { kind: "ticket".into(), ticket: Some(t.id), users, permission: Some(perm::WORK.code.into()) },
+        &Event {
+            kind: "ticket".into(),
+            ticket: Some(t.id),
+            users,
+            permission: Some(perm::WORK.code.into()),
+            ..Default::default()
+        },
     )
     .await
 }
@@ -255,7 +261,8 @@ pub(crate) async fn attach(
         "INSERT INTO ticket_attachments (ticket_id, comment_id, file_id)
          SELECT $1, $2, f.id FROM files f
           WHERE f.id = ANY($3) AND f.uploaded_by IS NOT DISTINCT FROM $4
-            AND NOT EXISTS (SELECT 1 FROM ticket_attachments a WHERE a.file_id = f.id)",
+            AND NOT EXISTS (SELECT 1 FROM ticket_attachments a WHERE a.file_id = f.id)
+            AND NOT EXISTS (SELECT 1 FROM kb_attachments k WHERE k.file_id = f.id)",
     )
     .bind(ticket)
     .bind(comment)

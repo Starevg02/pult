@@ -11,11 +11,18 @@ use axum::{
 use pult_core::{
     ApiError, ApiResult, Core, CurrentUser, Secret,
     audit::{self, Entry, Source},
-    events, notify,
+    events::{self, Event},
+    notify,
+    settings::{self, SettingsGroup},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::{PgExecutor, Postgres, Transaction};
+use std::{
+    collections::HashMap,
+    sync::{LazyLock, Mutex},
+    time::{Duration, Instant},
+};
 use time::OffsetDateTime;
 use utoipa::{IntoParams, ToSchema};
 use utoipa_axum::{router::OpenApiRouter, routes};
@@ -46,6 +53,63 @@ static UPLOADS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(4);
 static DOWNLOADS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(8);
 /// Обезличенная статистика: меньшие числа не показываются, чтобы по ним нельзя было узнать переписку.
 const MIN_COUNT: i64 = 5;
+/// Реакции — только из этого списка.
+pub const REACTIONS: [&str; 12] = ["👍", "❤️", "😂", "😮", "😢", "🙏", "👎", "🔥", "🎉", "👌", "✅", "🤝"];
+/// Имён под реакцией.
+const REACTION_NAMES: i32 = 10;
+/// Поиск по переписке расшифровывает не больше стольких последних сообщений.
+const SEARCH_SCAN: i64 = 5000;
+/// Найденных сообщений.
+const SEARCH_LIMIT: usize = 50;
+/// «Печатает…» от одного сотрудника в одном чате — не чаще раза в 3 секунды.
+const TYPING_EVERY: Duration = Duration::from_secs(3);
+/// Когда последний раз ушло «печатает…» (на этой копии сервера).
+static TYPING: LazyLock<Mutex<HashMap<(Uuid, Uuid), Instant>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+/// Поиск расшифровывает тысячи сообщений: одновременно — не больше стольких поисков на сервере.
+static SEARCHES: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
+/// Поисков от одного сотрудника в минуту.
+const SEARCHES_PER_MINUTE: u32 = 20;
+static SEARCHED: LazyLock<Mutex<HashMap<Uuid, (Instant, u32)>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+/// Реакций (поставить или снять) от одного сотрудника в минуту: каждая рассылает событие участникам.
+const REACTIONS_PER_MINUTE: u32 = 30;
+static REACTED: LazyLock<Mutex<HashMap<Uuid, (Instant, u32)>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Не больше `limit` действий сотрудника за минуту (счёт на этой копии сервера).
+fn within_minute(map: &Mutex<HashMap<Uuid, (Instant, u32)>>, user: Uuid, limit: u32) -> bool {
+    const MINUTE: Duration = Duration::from_secs(60);
+    let mut seen = map.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let now = Instant::now();
+    if seen.len() > 10_000 {
+        seen.retain(|_, (at, _)| now.duration_since(*at) < MINUTE);
+    }
+    let e = seen.entry(user).or_insert((now, 0));
+    if now.duration_since(e.0) >= MINUTE {
+        *e = (now, 0);
+    }
+    e.1 += 1;
+    e.1 <= limit
+}
+
+fn slow_down() -> ApiError {
+    ApiError::TooManyRequests {
+        message: "Слишком часто. Повторите через минуту.".into(), retry_after_secs: 60
+    }
+}
+
+/// Настройки модуля (админка): срок хранения вложений.
+#[derive(Serialize, Deserialize, Default, ToSchema)]
+pub struct ChatSettings {
+    /// Через сколько дней стирать вложения сообщений; 0 — хранить всегда.
+    #[serde(default)]
+    pub file_retention_days: u32,
+}
+
+impl SettingsGroup for ChatSettings {
+    const KEY: &'static str = "chat";
+}
+
+/// Предел срока хранения вложений — 10 лет.
+const MAX_RETENTION_DAYS: u32 = 3650;
 
 /// Имя сотрудника по учётке: ФИО из справочника, иначе отображаемое имя или логин из AD.
 const NAME: &str =
@@ -67,6 +131,12 @@ where
         .routes(routes!(chat_rename))
         .routes(routes!(chat_set_prefs))
         .routes(routes!(chat_mark_read))
+        .routes(routes!(chat_typing))
+        .routes(routes!(chat_pin))
+        .routes(routes!(chat_search))
+        .routes(routes!(chat_shared_files))
+        .routes(routes!(chat_react))
+        .routes(routes!(chat_forward))
         .routes(routes!(chat_list_messages, chat_send_message))
         .merge(OpenApiRouter::new().routes(routes!(chat_upload_file)).layer(DefaultBodyLimit::max(UPLOAD_BODY_LIMIT)))
         .routes(routes!(chat_get_file))
@@ -80,6 +150,8 @@ where
         .routes(routes!(chat_admin_list))
         .routes(routes!(chat_admin_assign_owner))
         .routes(routes!(chat_admin_stats))
+        .routes(routes!(chat_admin_storage))
+        .routes(routes!(chat_admin_get_settings, chat_admin_put_settings))
 }
 
 // ------------------------------------------------------------------ Типы
@@ -103,6 +175,8 @@ pub struct ChatItem {
     /// Закреплён (только у действующих).
     pub pinned: bool,
     pub hidden: bool,
+    /// Без звука: не считается в непрочитанном меню и не всплывает уведомлением.
+    pub muted: bool,
     pub unread: i64,
     #[serde(with = "time::serde::rfc3339::option")]
     #[schema(value_type = Option<String>, format = DateTime)]
@@ -133,6 +207,40 @@ pub struct ChatDetail {
     pub can_write: bool,
     /// Могу вести состав: владелец или администратор группового чата.
     pub can_manage: bool,
+    /// До какого момента мои сообщения прочитаны собеседником (в группе — хотя бы одним участником).
+    #[serde(with = "time::serde::rfc3339::option")]
+    #[schema(value_type = Option<String>, format = DateTime)]
+    pub read_upto: Option<OffsetDateTime>,
+    /// Закреплённое сообщение.
+    pub pinned_message: Option<ChatQuote>,
+    /// Могу закреплять: участник личного диалога, владелец или администратор группового чата.
+    pub can_pin: bool,
+}
+
+/// Короткий вид сообщения: ответ, закреплённое.
+#[derive(Serialize, sqlx::FromRow, ToSchema)]
+pub struct ChatQuote {
+    pub id: Uuid,
+    pub author_name: String,
+    /// Первая строка текста (до 100 знаков).
+    #[sqlx(skip)]
+    pub preview: String,
+    /// Вложений в сообщении.
+    pub files: i64,
+    #[serde(skip)]
+    #[schema(ignore)]
+    pub enc: Vec<u8>,
+}
+
+/// Реакция под сообщением.
+#[derive(Serialize, ToSchema)]
+pub struct ChatReaction {
+    pub emoji: String,
+    pub count: i64,
+    /// Есть моя.
+    pub mine: bool,
+    /// Кто поставил (первые 10).
+    pub names: Vec<String>,
 }
 
 #[derive(Serialize, sqlx::FromRow, ToSchema)]
@@ -156,6 +264,14 @@ pub struct ChatMessage {
     pub editable: bool,
     #[sqlx(skip)]
     pub files: Vec<ChatFile>,
+    /// Ответ на сообщение этого же чата.
+    pub reply_to: Option<Uuid>,
+    #[sqlx(skip)]
+    pub reply: Option<ChatQuote>,
+    /// Переслано: автор исходного сообщения.
+    pub forwarded_from_name: Option<String>,
+    #[sqlx(skip)]
+    pub reactions: Vec<ChatReaction>,
 }
 
 /// Вложение сообщения (или загруженное, но ещё не отправленное).
@@ -167,6 +283,19 @@ pub struct ChatFile {
     pub size: i64,
     /// Картинка: показывается в переписке, остальное скачивается.
     pub image: bool,
+    /// Стёрт по сроку хранения.
+    pub expired: bool,
+}
+
+/// Вложение в списке «Файлы чата».
+#[derive(Serialize, ToSchema)]
+pub struct ChatSharedFile {
+    pub file: ChatFile,
+    pub message_id: Uuid,
+    pub author_name: String,
+    #[serde(with = "time::serde::rfc3339")]
+    #[schema(value_type = String, format = DateTime)]
+    pub created_at: OffsetDateTime,
 }
 
 #[derive(ToSchema)]
@@ -265,6 +394,45 @@ pub struct ChatTitleInput {
 pub struct ChatPrefsInput {
     pub pinned: Option<bool>,
     pub hidden: Option<bool>,
+    pub muted: Option<bool>,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct ChatPinInput {
+    /// Какое сообщение закрепить; пусто — открепить.
+    pub message: Option<Uuid>,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct ChatReactInput {
+    /// Эмодзи из списка; повторное нажатие снимает реакцию.
+    pub emoji: String,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct ChatForwardInput {
+    /// Куда переслать.
+    pub to: Uuid,
+}
+
+#[derive(Deserialize, IntoParams)]
+pub struct ChatSearchQuery {
+    pub q: String,
+}
+
+/// Объём переписки на портале (суперадминистратору), байты.
+#[derive(Serialize, ToSchema)]
+pub struct ChatStorage {
+    pub messages: i64,
+    pub message_bytes: i64,
+    pub files: i64,
+    pub file_bytes: i64,
+    pub expired_files: i64,
+    /// Таблицы переписки на диске вместе с индексами.
+    pub chat_tables_bytes: i64,
+    /// Вся база портала.
+    pub database_bytes: i64,
+    pub file_retention_days: u32,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -275,6 +443,9 @@ pub struct ChatMessageInput {
     /// Загруженные заранее вложения (до 10), только при отправке.
     #[serde(default)]
     pub files: Vec<Uuid>,
+    /// Ответ на сообщение этого чата (только при отправке).
+    #[serde(default)]
+    pub reply_to: Option<Uuid>,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -408,13 +579,28 @@ pub(crate) async fn changed(conn: &mut sqlx::PgConnection, chat: Uuid, also: &[U
     .fetch_all(&mut *conn)
     .await?;
     for part in users.chunks(NOTIFY_CHUNK) {
-        sqlx::query("SELECT pg_notify($1, json_build_object('kind', 'chat', 'users', $2::uuid[])::text)")
+        sqlx::query("SELECT pg_notify($1, json_build_object('kind', 'chat', 'users', $2::uuid[], 'chat', $3)::text)")
             .bind(events::CHANNEL)
             .bind(part)
+            .bind(chat)
             .execute(&mut *conn)
             .await?;
     }
     Ok(())
+}
+
+/// Другие действующие участники для лёгких событий («прочитано», «печатает»): в большой группе
+/// (больше одного события) такие события не рассылаются.
+async fn others_for_signal(db: impl PgExecutor<'_>, chat: Uuid, me: Uuid) -> Result<Vec<Uuid>, sqlx::Error> {
+    let v: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT user_id FROM chat_members WHERE chat_id = $1 AND left_at IS NULL AND user_id <> $2 LIMIT $3",
+    )
+    .bind(chat)
+    .bind(me)
+    .bind(NOTIFY_CHUNK as i64 + 1)
+    .fetch_all(db)
+    .await?;
+    Ok(if v.len() > NOTIFY_CHUNK { Vec::new() } else { v })
 }
 
 async fn log_member(
@@ -444,7 +630,7 @@ async fn chat_items(core: &Core, me: Uuid, hidden: Option<bool>, chat: Option<Uu
                 CASE WHEN c.kind = 'direct'
                      THEN (SELECT o.user_id FROM chat_members o WHERE o.chat_id = c.id AND o.user_id <> $1 LIMIT 1) END AS peer_id,
                 m.role, m.left_at IS NULL AS active, c.locked,
-                (m.pinned AND m.left_at IS NULL) AS pinned, m.hidden,
+                (m.pinned AND m.left_at IS NULL) AS pinned, m.hidden, m.muted,
                 (SELECT count(*) FROM chat_messages x
                   WHERE x.chat_id = c.id AND x.author_id <> $1
                     AND x.created_at > coalesce(m.last_read_at, '-infinity')
@@ -649,7 +835,33 @@ async fn chat_get(State(core): State<Core>, user: CurrentUser, Path(id): Path<Uu
     } else {
         Vec::new()
     };
-    Ok(Json(ChatDetail { chat, members, can_write: m.active() && !m.locked, can_manage: m.manager() && !m.locked }))
+    let read_upto: Option<OffsetDateTime> = if m.active() {
+        sqlx::query_scalar(
+            "SELECT max(last_read_at) FROM chat_members WHERE chat_id = $1 AND user_id <> $2 AND left_at IS NULL",
+        )
+        .bind(id)
+        .bind(user.user_id)
+        .fetch_one(&core.db)
+        .await?
+    } else {
+        None
+    };
+    let pinned_id: Option<Uuid> =
+        sqlx::query_scalar("SELECT pinned_message_id FROM chats WHERE id = $1").bind(id).fetch_one(&core.db).await?;
+    let pinned_message = match (pinned_id, chat.locked) {
+        (Some(p), false) => quotes(&core, id, &[p], m.left_at).await?.into_iter().next(),
+        _ => None,
+    };
+    let can_pin = m.active() && !m.locked && (!m.group() || m.manager());
+    Ok(Json(ChatDetail {
+        chat,
+        members,
+        can_write: m.active() && !m.locked,
+        can_manage: m.manager() && !m.locked,
+        read_upto,
+        pinned_message,
+        can_pin,
+    }))
 }
 
 #[utoipa::path(put, path = "/api/chat/{id}/title", tag = "chat", params(("id" = Uuid, Path)), request_body = ChatTitleInput,
@@ -686,13 +898,14 @@ async fn chat_set_prefs(
         return Err(ApiError::bad_request("hide_active", "Скрыть можно только групповой чат, из которого вы вышли."));
     }
     sqlx::query(
-        "UPDATE chat_members SET pinned = coalesce($3, pinned), hidden = coalesce($4, hidden)
+        "UPDATE chat_members SET pinned = coalesce($3, pinned), hidden = coalesce($4, hidden), muted = coalesce($5, muted)
           WHERE chat_id = $1 AND user_id = $2",
     )
     .bind(id)
     .bind(user.user_id)
     .bind(b.pinned)
     .bind(b.hidden)
+    .bind(b.muted)
     .execute(&core.db)
     .await?;
     Ok(StatusCode::NO_CONTENT)
@@ -708,12 +921,123 @@ async fn chat_mark_read(State(core): State<Core>, user: CurrentUser, Path(id): P
         .bind(user.user_id)
         .execute(&core.db)
         .await?;
+    // Отметки «прочитано» у собеседников обновятся сразу.
+    if m.active() {
+        let others = others_for_signal(&core.db, id, user.user_id).await?;
+        if !others.is_empty() {
+            let e = Event {
+                kind: "chat_read".into(),
+                users: others,
+                chat: Some(id),
+                from: Some(user.user_id),
+                ..Default::default()
+            };
+            events::publish(&core.db, &e).await?;
+        }
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// «Печатает…»: собеседникам на несколько секунд. Не чаще раза в 3 секунды; в большой группе не
+/// рассылается. Ничего не хранится.
+#[utoipa::path(post, path = "/api/chat/{id}/typing", tag = "chat", params(("id" = Uuid, Path)),
+    responses((status = 204)))]
+async fn chat_typing(State(core): State<Core>, user: CurrentUser, Path(id): Path<Uuid>) -> ApiResult<StatusCode> {
+    let m = membership(&core.db, id, user.user_id).await?;
+    if !m.active() || m.locked {
+        return Ok(StatusCode::NO_CONTENT);
+    }
+    {
+        let mut seen = TYPING.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let now = Instant::now();
+        if seen.get(&(id, user.user_id)).is_some_and(|at| now.duration_since(*at) < TYPING_EVERY) {
+            return Ok(StatusCode::NO_CONTENT);
+        }
+        if seen.len() > 10_000 {
+            seen.retain(|_, at| now.duration_since(*at) < TYPING_EVERY);
+        }
+        seen.insert((id, user.user_id), now);
+    }
+    let others = others_for_signal(&core.db, id, user.user_id).await?;
+    if !others.is_empty() {
+        let e = Event {
+            kind: "typing".into(),
+            users: others,
+            chat: Some(id),
+            from: Some(user.user_id),
+            ..Default::default()
+        };
+        events::publish(&core.db, &e).await?;
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Закрепить сообщение (одно на чат) или открепить. В личном диалоге — любой из двоих, в групповом —
+/// владелец и администраторы.
+#[utoipa::path(put, path = "/api/chat/{id}/pin", tag = "chat", params(("id" = Uuid, Path)), request_body = ChatPinInput,
+    responses((status = 204)))]
+async fn chat_pin(
+    State(core): State<Core>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+    Json(b): Json<ChatPinInput>,
+) -> ApiResult<StatusCode> {
+    let m = membership(&core.db, id, user.user_id).await?;
+    if !m.active() || (m.group() && !m.manager()) {
+        return Err(ApiError::Forbidden);
+    }
+    m.require_unlocked()?;
+    if let Some(msg) = b.message {
+        let found: bool =
+            sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM chat_messages WHERE id = $1 AND chat_id = $2)")
+                .bind(msg)
+                .bind(id)
+                .fetch_one(&core.db)
+                .await?;
+        if !found {
+            return Err(ApiError::NotFound);
+        }
+    }
+    let mut tx = core.db.begin().await?;
+    sqlx::query("UPDATE chats SET pinned_message_id = $2 WHERE id = $1")
+        .bind(id)
+        .bind(b.message)
+        .execute(&mut *tx)
+        .await?;
+    changed(&mut tx, id, &[]).await?;
+    tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 // ------------------------------------------------------------------ Сообщения
 
-const MESSAGE_COLS: &str = "x.id, x.author_id, x.body AS enc, x.created_at, x.edited_at, x.version";
+const MESSAGE_COLS: &str = "x.id, x.author_id, x.body AS enc, x.created_at, x.edited_at, x.version, x.reply_to,
+    (SELECT coalesce(nullif(trim(concat_ws(' ', fp.last_name, fp.first_name)), ''), fa.display_name, fa.sam_account_name)
+       FROM users fu JOIN ad_accounts fa ON fa.id = fu.ad_account_id LEFT JOIN persons fp ON fp.id = fu.person_id
+      WHERE fu.id = x.forwarded_from) AS forwarded_from_name";
+
+/// Первая строка текста до 100 знаков.
+fn first_line(text: &str) -> String {
+    text.lines().find(|l| !l.trim().is_empty()).unwrap_or_default().chars().take(100).collect()
+}
+
+/// Короткий вид сообщений этого чата (до момента выхода, если вышел).
+async fn quotes(core: &Core, chat: Uuid, ids: &[Uuid], upto: Option<OffsetDateTime>) -> ApiResult<Vec<ChatQuote>> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let sql = format!(
+        "SELECT x.id, {NAME} AS author_name, x.body AS enc,
+                (SELECT count(*) FROM chat_files f WHERE f.message_id = x.id) AS files
+           FROM chat_messages x JOIN users u ON u.id = x.author_id {PEOPLE}
+          WHERE x.chat_id = $1 AND x.id = ANY($2) AND x.created_at <= coalesce($3, 'infinity')"
+    );
+    let mut v: Vec<ChatQuote> = sqlx::query_as(&sql).bind(chat).bind(ids).bind(upto).fetch_all(&core.db).await?;
+    for q in &mut v {
+        q.preview = first_line(&decrypt(core, &q.enc)?);
+    }
+    Ok(v)
+}
 
 fn message_sql(filter: &str) -> String {
     format!(
@@ -724,22 +1048,64 @@ fn message_sql(filter: &str) -> String {
     )
 }
 
-async fn open(core: &Core, mut v: Vec<ChatMessage>) -> ApiResult<Vec<ChatMessage>> {
+/// Расшифровать текст и дополнить вложениями, ответами и реакциями.
+/// `upto` — момент выхода бывшего участника: реакции позже него не показываются.
+async fn open(
+    core: &Core,
+    chat: Uuid,
+    me: Uuid,
+    upto: Option<OffsetDateTime>,
+    mut v: Vec<ChatMessage>,
+) -> ApiResult<Vec<ChatMessage>> {
     for m in &mut v {
         m.body = decrypt(core, &m.enc)?;
     }
     let ids: Vec<Uuid> = v.iter().map(|m| m.id).collect();
-    let rows: Vec<(Uuid, Uuid, Vec<u8>, String, i64)> = sqlx::query_as(
-        "SELECT message_id, id, name, mime, size FROM chat_files WHERE message_id = ANY($1) ORDER BY id",
+    let rows: Vec<(Uuid, Uuid, Vec<u8>, String, i64, bool)> = sqlx::query_as(
+        "SELECT message_id, id, name, mime, size, expired_at IS NOT NULL
+           FROM chat_files WHERE message_id = ANY($1) ORDER BY id",
     )
     .bind(&ids)
     .fetch_all(&core.db)
     .await?;
-    for (message, id, name, mime, size) in rows {
-        let f =
-            ChatFile { id, name: decrypt(core, &name)?, image: pult_core::files::is_inline_image(&mime), mime, size };
+    for (message, id, name, mime, size, expired) in rows {
+        let f = ChatFile {
+            id,
+            name: decrypt(core, &name)?,
+            image: pult_core::files::is_inline_image(&mime) && !expired,
+            mime,
+            size,
+            expired,
+        };
         if let Some(m) = v.iter_mut().find(|m| m.id == message) {
             m.files.push(f);
+        }
+    }
+    // Ответ — на более раннее сообщение этого же чата: виден тому, кому видно само сообщение.
+    let replies: Vec<Uuid> = v.iter().filter_map(|m| m.reply_to).collect();
+    for q in quotes(core, chat, &replies, None).await? {
+        for m in v.iter_mut().filter(|m| m.reply_to == Some(q.id)) {
+            m.reply = Some(ChatQuote {
+                id: q.id,
+                author_name: q.author_name.clone(),
+                preview: q.preview.clone(),
+                files: q.files,
+                enc: Vec::new(),
+            });
+        }
+    }
+    let sql = format!(
+        "SELECT r.message_id, r.emoji, count(*), bool_or(r.user_id = $2),
+                (array_agg({NAME} ORDER BY r.created_at))[1:$3]
+           FROM chat_reactions r JOIN users u ON u.id = r.user_id {PEOPLE}
+          WHERE r.message_id = ANY($1) AND r.created_at <= coalesce($4, 'infinity')
+          GROUP BY r.message_id, r.emoji ORDER BY min(r.created_at)"
+    );
+    let rows: Vec<(Uuid, String, i64, bool, Vec<String>)> =
+        sqlx::query_as(&sql).bind(&ids).bind(me).bind(REACTION_NAMES).bind(upto).fetch_all(&core.db).await?;
+    for (message, emoji, count, mine, names) in rows {
+        if let Some(m) = v.iter_mut().find(|m| m.id == message) {
+            m.reactions.push(ChatReaction { emoji, count, mine, names });
         }
     }
     Ok(v)
@@ -770,13 +1136,13 @@ async fn chat_list_messages(
         .fetch_all(&core.db)
         .await?;
     v.reverse();
-    Ok(Json(open(&core, v).await?))
+    Ok(Json(open(&core, id, user.user_id, m.left_at, v).await?))
 }
 
 async fn one_message(core: &Core, chat: Uuid, id: Uuid, me: Uuid, active: bool) -> ApiResult<ChatMessage> {
     let sql = message_sql("AND x.id = $4");
     let m: ChatMessage = sqlx::query_as(&sql).bind(chat).bind(me).bind(active).bind(id).fetch_one(&core.db).await?;
-    Ok(open(core, vec![m]).await?.remove(0))
+    Ok(open(core, chat, me, None, vec![m]).await?.remove(0))
 }
 
 #[utoipa::path(post, path = "/api/chat/{id}/messages", tag = "chat", params(("id" = Uuid, Path)), request_body = ChatMessageInput,
@@ -803,15 +1169,28 @@ async fn chat_send_message(
     files.dedup();
     // Только файлы: текст не обязателен.
     let body = if files.is_empty() || !b.body.trim().is_empty() { clean_body(&b.body)? } else { String::new() };
+    if let Some(r) = b.reply_to {
+        let found: bool =
+            sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM chat_messages WHERE id = $1 AND chat_id = $2)")
+                .bind(r)
+                .bind(id)
+                .fetch_one(&core.db)
+                .await?;
+        if !found {
+            return Err(ApiError::bad_request("invalid_reply", "Сообщение, на которое вы отвечаете, не найдено."));
+        }
+    }
     let enc = encrypt(&core, &body)?;
     let mut tx = core.db.begin().await?;
-    let mid: Uuid =
-        sqlx::query_scalar("INSERT INTO chat_messages (chat_id, author_id, body) VALUES ($1, $2, $3) RETURNING id")
-            .bind(id)
-            .bind(user.user_id)
-            .bind(enc)
-            .fetch_one(&mut *tx)
-            .await?;
+    let mid: Uuid = sqlx::query_scalar(
+        "INSERT INTO chat_messages (chat_id, author_id, body, reply_to) VALUES ($1, $2, $3, $4) RETURNING id",
+    )
+    .bind(id)
+    .bind(user.user_id)
+    .bind(enc)
+    .bind(b.reply_to)
+    .fetch_one(&mut *tx)
+    .await?;
     if !files.is_empty() {
         let n = sqlx::query(
             "UPDATE chat_files SET message_id = $1
@@ -859,7 +1238,7 @@ async fn chat_upload_file(
         });
     }
     m.require_unlocked()?;
-    upload_quota(&core.db, user.user_id, 0).await?;
+    upload_quota(&core.db, user.user_id, 0, false).await?;
     let _slot = UPLOADS.try_acquire().map_err(|_| ApiError::TooManyRequests {
         message: "Сервер сейчас принимает много файлов. Повторите через минуту.".into(),
         retry_after_secs: 60,
@@ -899,7 +1278,7 @@ async fn chat_upload_file(
         .bind(user.user_id)
         .execute(&mut *tx)
         .await?;
-    upload_quota(&mut *tx, user.user_id, size).await?;
+    upload_quota(&mut *tx, user.user_id, size, false).await?;
     let fid: Uuid = sqlx::query_scalar(
         "INSERT INTO chat_files (chat_id, uploaded_by, name, mime, size, data) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
     )
@@ -912,11 +1291,19 @@ async fn chat_upload_file(
     .fetch_one(&mut *tx)
     .await?;
     tx.commit().await?;
-    Ok(Json(ChatFile { id: fid, name, mime: mime.to_string(), size, image: pult_core::files::is_inline_image(mime) }))
+    Ok(Json(ChatFile {
+        id: fid,
+        name,
+        mime: mime.to_string(),
+        size,
+        image: pult_core::files::is_inline_image(mime),
+        expired: false,
+    }))
 }
 
 /// Квоты загрузки за сутки: неотправленные (число и объём) и всё загруженное; `extra` — размер нового файла.
-async fn upload_quota(db: impl PgExecutor<'_>, user: Uuid, extra: i64) -> ApiResult<()> {
+/// `sent` — файлы сразу уходят в сообщение (пересылка): предел неотправленных к ним не относится.
+async fn upload_quota(db: impl PgExecutor<'_>, user: Uuid, extra: i64, sent: bool) -> ApiResult<()> {
     let (pending, pending_bytes, total): (i64, i64, i64) = sqlx::query_as(
         "SELECT count(*) FILTER (WHERE message_id IS NULL),
                 coalesce(sum(size) FILTER (WHERE message_id IS NULL), 0)::bigint,
@@ -927,7 +1314,7 @@ async fn upload_quota(db: impl PgExecutor<'_>, user: Uuid, extra: i64) -> ApiRes
     .fetch_one(db)
     .await?;
     let mb = 1024 * 1024;
-    if pending >= PENDING_MAX_FILES || pending_bytes + extra > PENDING_MAX_MB * mb {
+    if !sent && (pending >= PENDING_MAX_FILES || pending_bytes + extra > PENDING_MAX_MB * mb) {
         return Err(ApiError::TooManyRequests {
             message: "Слишком много файлов загружено и не отправлено. Отправьте их или повторите завтра.".into(),
             retry_after_secs: 3600,
@@ -954,16 +1341,18 @@ async fn chat_get_file(State(core): State<Core>, user: CurrentUser, Path(file): 
         uploaded_by: Uuid,
         name: Vec<u8>,
         mime: String,
+        expired: bool,
     }
     let row: Option<FileRow> = sqlx::query_as(
-        "SELECT f.chat_id, x.created_at AS sent_at, f.uploaded_by, f.name, f.mime
+        "SELECT f.chat_id, x.created_at AS sent_at, f.uploaded_by, f.name, f.mime, f.expired_at IS NOT NULL AS expired
            FROM chat_files f LEFT JOIN chat_messages x ON x.id = f.message_id
           WHERE f.id = $1",
     )
     .bind(file)
     .fetch_optional(&core.db)
     .await?;
-    let FileRow { chat_id: chat, sent_at, uploaded_by: uploader, name, mime } = row.ok_or(ApiError::NotFound)?;
+    let FileRow { chat_id: chat, sent_at, uploaded_by: uploader, name, mime, expired } =
+        row.ok_or(ApiError::NotFound)?;
     let m = membership(&core.db, chat, user.user_id).await?;
     m.require_unlocked()?;
     let visible = match (sent_at, m.left_at) {
@@ -973,6 +1362,9 @@ async fn chat_get_file(State(core): State<Core>, user: CurrentUser, Path(file): 
     };
     if !visible {
         return Err(ApiError::NotFound);
+    }
+    if expired {
+        return Err(ApiError::Gone);
     }
     let _slot = DOWNLOADS.try_acquire().map_err(|_| ApiError::TooManyRequests {
         message: "Сервер сейчас отдаёт много файлов. Повторите через минуту.".into(),
@@ -1089,6 +1481,239 @@ async fn chat_message_versions(
         x.body = decrypt(&core, &x.enc)?;
     }
     Ok(Json(v))
+}
+
+/// Сообщение этого чата, видимое мне: автор, исходный автор пересылки, зашифрованный текст.
+async fn visible_message(
+    db: impl PgExecutor<'_>,
+    chat: Uuid,
+    message: Uuid,
+    upto: Option<OffsetDateTime>,
+) -> ApiResult<(Uuid, Option<Uuid>, Vec<u8>)> {
+    let row: Option<(Uuid, Option<Uuid>, Vec<u8>)> = sqlx::query_as(
+        "SELECT author_id, forwarded_from, body FROM chat_messages
+          WHERE id = $1 AND chat_id = $2 AND created_at <= coalesce($3, 'infinity')",
+    )
+    .bind(message)
+    .bind(chat)
+    .bind(upto)
+    .fetch_optional(db)
+    .await?;
+    row.ok_or(ApiError::NotFound)
+}
+
+/// Поставить или снять реакцию (эмодзи из списка).
+#[utoipa::path(put, path = "/api/chat/{id}/messages/{message}/reactions", tag = "chat",
+    params(("id" = Uuid, Path), ("message" = Uuid, Path)), request_body = ChatReactInput,
+    responses((status = 204)))]
+async fn chat_react(
+    State(core): State<Core>,
+    user: CurrentUser,
+    Path((id, message)): Path<(Uuid, Uuid)>,
+    Json(b): Json<ChatReactInput>,
+) -> ApiResult<StatusCode> {
+    let m = membership(&core.db, id, user.user_id).await?;
+    if !m.active() {
+        return Err(ApiError::Refused {
+            code: "read_only",
+            message: "Вы вышли из чата — история доступна только для чтения.".into(),
+        });
+    }
+    m.require_unlocked()?;
+    if !REACTIONS.contains(&b.emoji.as_str()) {
+        return Err(ApiError::bad_request("invalid_reaction", "Такой реакции нет."));
+    }
+    if !within_minute(&REACTED, user.user_id, REACTIONS_PER_MINUTE) {
+        return Err(slow_down());
+    }
+    visible_message(&core.db, id, message, None).await?;
+    let mut tx = core.db.begin().await?;
+    let removed = sqlx::query("DELETE FROM chat_reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3")
+        .bind(message)
+        .bind(user.user_id)
+        .bind(&b.emoji)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected();
+    if removed == 0 {
+        sqlx::query(
+            "INSERT INTO chat_reactions (message_id, user_id, emoji) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+        )
+        .bind(message)
+        .bind(user.user_id)
+        .bind(&b.emoji)
+        .execute(&mut *tx)
+        .await?;
+    }
+    changed(&mut tx, id, &[]).await?;
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Переслать сообщение в другой свой чат: текст и вложения копируются, видно, чьё оно.
+/// Копии вложений считаются в суточной квоте пересылающего.
+#[utoipa::path(post, path = "/api/chat/{id}/messages/{message}/forward", tag = "chat",
+    params(("id" = Uuid, Path), ("message" = Uuid, Path)), request_body = ChatForwardInput,
+    responses((status = 201, body = ChatMessage)))]
+async fn chat_forward(
+    State(core): State<Core>,
+    user: CurrentUser,
+    Path((id, message)): Path<(Uuid, Uuid)>,
+    Json(b): Json<ChatForwardInput>,
+) -> ApiResult<(StatusCode, Json<ChatMessage>)> {
+    let src = membership(&core.db, id, user.user_id).await?;
+    src.require_unlocked()?;
+    let (author, origin, enc) = visible_message(&core.db, id, message, src.left_at).await?;
+    let dst = membership(&core.db, b.to, user.user_id).await?;
+    if !dst.active() {
+        return Err(ApiError::Refused {
+            code: "read_only",
+            message: "Вы вышли из чата — история доступна только для чтения.".into(),
+        });
+    }
+    dst.require_unlocked()?;
+    let mut tx = core.db.begin().await?;
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended('chat_files:' || $1::text, 0))")
+        .bind(user.user_id)
+        .execute(&mut *tx)
+        .await?;
+    let bytes: i64 = sqlx::query_scalar(
+        "SELECT coalesce(sum(size), 0)::bigint FROM chat_files WHERE message_id = $1 AND expired_at IS NULL",
+    )
+    .bind(message)
+    .fetch_one(&mut *tx)
+    .await?;
+    if bytes > 0 {
+        upload_quota(&mut *tx, user.user_id, bytes, true).await?;
+    }
+    let mid: Uuid = sqlx::query_scalar(
+        "INSERT INTO chat_messages (chat_id, author_id, body, forwarded_from) VALUES ($1, $2, $3, $4) RETURNING id",
+    )
+    .bind(b.to)
+    .bind(user.user_id)
+    .bind(enc)
+    .bind(origin.unwrap_or(author))
+    .fetch_one(&mut *tx)
+    .await?;
+    sqlx::query(
+        "INSERT INTO chat_files (chat_id, message_id, uploaded_by, name, mime, size, data, kept_since)
+         SELECT $1, $2, $3, name, mime, size, data, coalesce(kept_since, created_at) FROM chat_files
+          WHERE message_id = $4 AND expired_at IS NULL ORDER BY id",
+    )
+    .bind(b.to)
+    .bind(mid)
+    .bind(user.user_id)
+    .bind(message)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query("UPDATE chats SET last_message_at = now() WHERE id = $1").bind(b.to).execute(&mut *tx).await?;
+    sqlx::query("UPDATE chat_members SET last_read_at = now() WHERE chat_id = $1 AND user_id = $2")
+        .bind(b.to)
+        .bind(user.user_id)
+        .execute(&mut *tx)
+        .await?;
+    changed(&mut tx, b.to, &[]).await?;
+    tx.commit().await?;
+    Ok((StatusCode::CREATED, Json(one_message(&core, b.to, mid, user.user_id, true).await?)))
+}
+
+/// Поиск по тексту переписки: текст зашифрован, поэтому сервер расшифровывает последние 5000
+/// доступных мне сообщений и ищет в них. Найденное — от новых к старым, не больше 50.
+#[utoipa::path(get, path = "/api/chat/{id}/search", tag = "chat", params(("id" = Uuid, Path), ChatSearchQuery),
+    responses((status = 200, body = Vec<ChatMessage>)))]
+async fn chat_search(
+    State(core): State<Core>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+    Query(q): Query<ChatSearchQuery>,
+) -> ApiResult<Json<Vec<ChatMessage>>> {
+    let m = membership(&core.db, id, user.user_id).await?;
+    m.require_unlocked()?;
+    let needle = q.q.trim().to_lowercase().replace('ё', "е");
+    if needle.chars().count() < 2 {
+        return Ok(Json(Vec::new()));
+    }
+    if !within_minute(&SEARCHED, user.user_id, SEARCHES_PER_MINUTE) {
+        return Err(slow_down());
+    }
+    let _slot = SEARCHES.try_acquire().map_err(|_| ApiError::TooManyRequests {
+        message: "Сервер сейчас занят поиском. Повторите через несколько секунд.".into(),
+        retry_after_secs: 5,
+    })?;
+    let rows: Vec<(Uuid, Vec<u8>)> = sqlx::query_as(
+        "SELECT id, body FROM chat_messages WHERE chat_id = $1 AND created_at <= coalesce($2, 'infinity')
+          ORDER BY created_at DESC, id DESC LIMIT $3",
+    )
+    .bind(id)
+    .bind(m.left_at)
+    .bind(SEARCH_SCAN)
+    .fetch_all(&core.db)
+    .await?;
+    // Расшифровка тысяч сообщений — не в потоке обработки запросов.
+    let secrets = core.secrets.clone();
+    let found = tokio::task::spawn_blocking(move || -> ApiResult<Vec<Uuid>> {
+        let mut found = Vec::new();
+        let mut text = String::new();
+        for (mid, enc) in rows {
+            let plain = secrets.decrypt(&enc).map_err(ApiError::internal)?;
+            text.clear();
+            text.extend(plain.expose().chars().flat_map(char::to_lowercase).map(|c| if c == 'ё' { 'е' } else { c }));
+            if text.contains(&needle) {
+                found.push(mid);
+                if found.len() >= SEARCH_LIMIT {
+                    break;
+                }
+            }
+        }
+        Ok(found)
+    })
+    .await
+    .map_err(ApiError::internal)??;
+    if found.is_empty() {
+        return Ok(Json(Vec::new()));
+    }
+    let sql = message_sql("AND x.id = ANY($4) ORDER BY x.created_at DESC, x.id DESC");
+    let v: Vec<ChatMessage> =
+        sqlx::query_as(&sql).bind(id).bind(user.user_id).bind(m.active()).bind(&found).fetch_all(&core.db).await?;
+    Ok(Json(open(&core, id, user.user_id, m.left_at, v).await?))
+}
+
+/// Файлы чата: отправленные вложения, от новых к старым (последние 200).
+#[utoipa::path(get, path = "/api/chat/{id}/files", tag = "chat", params(("id" = Uuid, Path)),
+    responses((status = 200, body = Vec<ChatSharedFile>)))]
+async fn chat_shared_files(
+    State(core): State<Core>,
+    user: CurrentUser,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<Vec<ChatSharedFile>>> {
+    let m = membership(&core.db, id, user.user_id).await?;
+    m.require_unlocked()?;
+    let sql = format!(
+        "SELECT f.id, f.name, f.mime, f.size, f.expired_at IS NOT NULL, f.message_id, {NAME}, x.created_at
+           FROM chat_files f JOIN chat_messages x ON x.id = f.message_id
+           JOIN users u ON u.id = x.author_id {PEOPLE}
+          WHERE f.chat_id = $1 AND x.created_at <= coalesce($2, 'infinity')
+          ORDER BY x.created_at DESC, f.id LIMIT 200"
+    );
+    type Row = (Uuid, Vec<u8>, String, i64, bool, Uuid, String, OffsetDateTime);
+    let rows: Vec<Row> = sqlx::query_as(&sql).bind(id).bind(m.left_at).fetch_all(&core.db).await?;
+    let mut out = Vec::with_capacity(rows.len());
+    for (fid, name, mime, size, expired, message_id, author_name, created_at) in rows {
+        out.push(ChatSharedFile {
+            file: ChatFile {
+                id: fid,
+                name: decrypt(&core, &name)?,
+                image: pult_core::files::is_inline_image(&mime) && !expired,
+                mime,
+                size,
+                expired,
+            },
+            message_id,
+            author_name,
+            created_at,
+        });
+    }
+    Ok(Json(out))
 }
 
 // ------------------------------------------------------------------ Состав
@@ -1376,6 +2001,71 @@ async fn chat_admin_assign_owner(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// Объём переписки: сколько сообщений и файлов и сколько места они занимают в базе.
+#[utoipa::path(get, path = "/api/admin/chats/storage", tag = "chat", responses((status = 200, body = ChatStorage)))]
+async fn chat_admin_storage(State(core): State<Core>, user: CurrentUser) -> ApiResult<Json<ChatStorage>> {
+    user.require_superadmin()?;
+    let (messages, message_bytes): (i64, i64) =
+        sqlx::query_as("SELECT count(*), coalesce(sum(octet_length(body)), 0)::bigint FROM chat_messages")
+            .fetch_one(&core.db)
+            .await?;
+    let (files, file_bytes, expired_files): (i64, i64, i64) = sqlx::query_as(
+        "SELECT count(*) FILTER (WHERE expired_at IS NULL), coalesce(sum(size) FILTER (WHERE expired_at IS NULL), 0)::bigint,
+                count(*) FILTER (WHERE expired_at IS NOT NULL)
+           FROM chat_files WHERE message_id IS NOT NULL",
+    )
+    .fetch_one(&core.db)
+    .await?;
+    let (chat_tables_bytes, database_bytes): (i64, i64) = sqlx::query_as(
+        "SELECT (pg_total_relation_size('chat_messages') + pg_total_relation_size('chat_message_versions')
+                 + pg_total_relation_size('chat_files') + pg_total_relation_size('chat_reactions'))::bigint,
+                pg_database_size(current_database())::bigint",
+    )
+    .fetch_one(&core.db)
+    .await?;
+    let cfg: ChatSettings = settings::load(&core.db).await?;
+    Ok(Json(ChatStorage {
+        messages,
+        message_bytes,
+        files,
+        file_bytes,
+        expired_files,
+        chat_tables_bytes,
+        database_bytes,
+        file_retention_days: cfg.file_retention_days,
+    }))
+}
+
+#[utoipa::path(get, path = "/api/admin/chats/settings", tag = "chat", responses((status = 200, body = ChatSettings)))]
+async fn chat_admin_get_settings(State(core): State<Core>, user: CurrentUser) -> ApiResult<Json<ChatSettings>> {
+    user.require_superadmin()?;
+    Ok(Json(settings::load(&core.db).await?))
+}
+
+/// Срок хранения вложений. Стирается только содержимое: в переписке остаётся имя файла с отметкой.
+#[utoipa::path(put, path = "/api/admin/chats/settings", tag = "chat", request_body = ChatSettings,
+    responses((status = 204)))]
+async fn chat_admin_put_settings(
+    State(core): State<Core>,
+    user: CurrentUser,
+    Json(b): Json<ChatSettings>,
+) -> ApiResult<StatusCode> {
+    user.require_superadmin()?;
+    if b.file_retention_days > MAX_RETENTION_DAYS {
+        return Err(ApiError::bad_request("invalid_retention", "Срок хранения — не больше 3650 дней."));
+    }
+    let mut tx = core.db.begin().await?;
+    settings::save(&mut *tx, &b, Some(user.user_id)).await?;
+    audit::record(
+        &mut *tx,
+        &user.actor,
+        Entry::new("chat.settings", Source::Portal).details(json!({"file_retention_days": b.file_retention_days})),
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 fn shown(n: i64) -> Option<i64> {
     (n >= MIN_COUNT).then_some(n)
 }
@@ -1427,5 +2117,7 @@ mod tests {
         assert_eq!(clean_title("  Отдел ИТ ").unwrap(), "Отдел ИТ");
         assert_eq!(shown(4), None);
         assert_eq!(shown(5), Some(5));
+        assert_eq!(first_line("\n  \nпервая строка\nвторая"), "первая строка");
+        assert!(REACTIONS.iter().all(|e| (1..=16).contains(&e.len())), "влезают в столбец");
     }
 }

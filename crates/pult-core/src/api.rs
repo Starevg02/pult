@@ -111,6 +111,15 @@ async fn mark_read(
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
+/// Данные события для браузера: номер заявки или чат и автор действия — без содержимого.
+fn sse_data(e: &crate::events::Event) -> String {
+    match (e.ticket, e.chat) {
+        (Some(t), _) => t.to_string(),
+        (None, Some(c)) => serde_json::json!({"chat": c, "from": e.from}).to_string(),
+        (None, None) => String::new(),
+    }
+}
+
 /// Поток событий (SSE): что изменилось. Сами данные браузер читает через API.
 /// Сеанс перепроверяется раз в минуту: закрытый сеанс обрывает поток.
 #[utoipa::path(get, path = "/api/events", tag = "core",
@@ -163,7 +172,7 @@ async fn events_stream(State(core): State<Core>, user: CurrentUser, headers: Hea
             };
             let out = match event {
                 Ok(e) if e.visible_to(s.user, &s.grants) => {
-                    SseEvent::default().event(e.kind.clone()).data(e.ticket.map(|t| t.to_string()).unwrap_or_default())
+                    SseEvent::default().event(e.kind.clone()).data(sse_data(&e))
                 }
                 Ok(_) => continue,
                 // Отстали — пусть браузер перечитает всё.

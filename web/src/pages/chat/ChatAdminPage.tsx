@@ -3,11 +3,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, ok, type AdminChat, type ChatPerson, type ChatStats } from "../../api/client";
+import { api, ok, type AdminChat, type ChatPerson, type ChatSettings, type ChatStats, type ChatStorage } from "../../api/client";
 import { formatDate } from "../../format";
 import { useMe } from "../../session";
-import { Badge, Button, Card, Dialog, Empty, ErrorBox, Field, PageHeader, Select, Spinner } from "../../ui";
-import { UserPicker } from "./ChatPages";
+import { toast } from "../../toast";
+import { Badge, Button, Card, Dialog, Empty, ErrorBox, Field, Input, PageHeader, Select, Spinner } from "../../ui";
+import { formatSize } from "../helpdesk/helpdeskUtil";
+import { UserPicker } from "./ChatDialogs";
 
 function OwnerDialog({ chat, onClose }: { chat: AdminChat; onClose: () => void }) {
   const { t } = useTranslation();
@@ -110,6 +112,65 @@ function Stats() {
   );
 }
 
+/** Сколько места занимают переписки и сколько хранить вложения. Сообщения не удаляются никогда. */
+function Storage() {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ["admin-chat-storage"], queryFn: () => ok<ChatStorage>(api.GET("/api/admin/chats/storage")) });
+  const [days, setDays] = useState<string | null>(null);
+  const save = useMutation({
+    mutationFn: (body: ChatSettings) => ok(api.PUT("/api/admin/chats/settings", { body })),
+    onSuccess: () => {
+      setDays(null);
+      toast(t("common.saved"));
+      void qc.invalidateQueries({ queryKey: ["admin-chat-storage"] });
+    },
+  });
+  if (q.error) return <ErrorBox error={q.error} />;
+  if (q.isPending) return <Spinner />;
+  const s = q.data;
+  const value = days ?? String(s.file_retention_days);
+  const parsed = Number(value);
+  const valid = value.trim() !== "" && Number.isInteger(parsed) && parsed >= 0 && parsed <= 3650;
+  const tile = (label: string, main: string, sub?: string) => (
+    <div className="rounded-xl bg-sunken px-3 py-2.5">
+      <div className="text-xs text-muted">{label}</div>
+      <div className="text-lg font-semibold tabular-nums">{main}</div>
+      {sub && <div className="text-xs text-muted tabular-nums">{sub}</div>}
+    </div>
+  );
+  return (
+    <Card className="p-4">
+      <h2 className="font-semibold">{t("chatAdmin.storage")}</h2>
+      <p className="mt-1 text-xs text-muted">{t("chatAdmin.storageHint")}</p>
+      <div className="mt-3 grid gap-2 sm:grid-cols-4">
+        {tile(t("chatAdmin.messages"), s.messages.toLocaleString(), formatSize(s.message_bytes))}
+        {tile(t("chatAdmin.files"), s.files.toLocaleString(), formatSize(s.file_bytes))}
+        {tile(t("chatAdmin.chatTables"), formatSize(s.chat_tables_bytes))}
+        {tile(t("chatAdmin.database"), formatSize(s.database_bytes), s.expired_files > 0 ? t("chatAdmin.expiredFiles", { count: s.expired_files }) : undefined)}
+      </div>
+      <form
+        className="mt-4 flex flex-wrap items-end gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (valid) save.mutate({ file_retention_days: parsed });
+        }}
+      >
+        <div className="w-56">
+          <Field label={t("chatAdmin.retention")}>
+            <Input type="number" min={0} max={3650} value={value} onChange={(e) => setDays(e.target.value)} />
+          </Field>
+        </div>
+        <Button type="submit" variant="primary" disabled={!valid || days === null || save.isPending}>
+          {t("common.save")}
+        </Button>
+      </form>
+      <p className="mt-1 text-xs text-muted">{t("chatAdmin.retentionHint")}</p>
+      {save.error && <ErrorBox error={save.error} />}
+    </Card>
+  );
+}
+
 export function ChatAdminPage() {
   const { t, i18n } = useTranslation();
   const [assign, setAssign] = useState<AdminChat | null>(null);
@@ -143,6 +204,7 @@ export function ChatAdminPage() {
           </ul>
         )}
       </Card>
+      <Storage />
       <Stats />
       {assign && <OwnerDialog chat={assign} onClose={() => setAssign(null)} />}
     </div>

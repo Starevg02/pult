@@ -836,3 +836,9 @@ GIF не уменьшается до 1 МБ даже с пропуском ка�
 Сервер сейчас уменьшает другие GIF. Повторите через минуту.	The server is shrinking other GIFs right now. Try again in a minute.
 Сервер сейчас отдаёт много файлов. Повторите через минуту.	The server is sending many files right now. Try again in a minute.
 За сутки загружено больше {DAILY_MAX_MB} МБ файлов. Повторите завтра.	More than {DAILY_MAX_MB} MB of files uploaded in a day. Try again tomorrow.
+Не больше {MAX_FILES} вложений в статье.	No more than {MAX_FILES} attachments per article.
+Сообщение, на которое вы отвечаете, не найдено.	The message you are replying to was not found.
+Такой реакции нет.	This reaction is not available.
+Срок хранения — не больше 3650 дней.	The retention period is at most 3650 days.
+Слишком часто. Повторите через минуту.	Too many requests. Try again in a minute.
+Сервер сейчас занят поиском. Повторите через несколько секунд.	The server is busy searching. Try again in a few seconds.

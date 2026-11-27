@@ -16,6 +16,29 @@ use uuid::Uuid;
 /// Фоновая задача: проверка раз в 5 минут (и сразу после синхронизации AD по расписанию).
 pub const SWEEP_JOB: &str = "chat.blocked_sweep";
 
+/// Срок хранения вложений (настройка): у устаревших стирается содержимое, по 200 за проход.
+async fn expire_files(db: &PgPool) -> Result<(), sqlx::Error> {
+    let cfg: crate::api::ChatSettings = pult_core::settings::load(db).await?;
+    if cfg.file_retention_days == 0 {
+        return Ok(());
+    }
+    let n = sqlx::query(
+        "UPDATE chat_files SET data = ''::bytea, expired_at = now()
+          WHERE id IN (SELECT id FROM chat_files
+                        WHERE message_id IS NOT NULL AND expired_at IS NULL
+                          AND coalesce(kept_since, created_at) < now() - make_interval(days => $1)
+                        ORDER BY coalesce(kept_since, created_at) LIMIT 200)",
+    )
+    .bind(i32::try_from(cfg.file_retention_days).unwrap_or(i32::MAX))
+    .execute(db)
+    .await?
+    .rows_affected();
+    if n > 0 {
+        tracing::info!(count = n, "вложения сообщений стёрты по сроку хранения");
+    }
+    Ok(())
+}
+
 /// Сколько участий закрыто. Заодно убираются вложения, загруженные, но не отправленные за сутки.
 pub async fn sweep_blocked(db: &PgPool) -> Result<u64, sqlx::Error> {
     // Уборка вложений не должна мешать главному — закрытию доступа отключённым учёткам.
@@ -28,6 +51,9 @@ pub async fn sweep_blocked(db: &PgPool) -> Result<u64, sqlx::Error> {
         }
         Ok(_) => {}
         Err(e) => tracing::warn!(error = %e, "неотправленные вложения сообщений не удалены"),
+    }
+    if let Err(e) = expire_files(db).await {
+        tracing::warn!(error = %e, "вложения по сроку хранения не стёрты");
     }
     let rows: Vec<(Uuid, Uuid, String)> = sqlx::query_as(
         "SELECT m.chat_id, m.user_id, m.role

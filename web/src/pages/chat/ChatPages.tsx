@@ -1,715 +1,204 @@
 // Коммуникации: список переписок слева, переписка справа (на телефоне — по очереди).
-// Поведение — как в привычных мессенджерах: закреплённые сверху, затем по последнему сообщению;
-// Enter отправляет, Shift+Enter — новая строка; своё сообщение можно править 15 минут.
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+// Порядок — как в привычных мессенджерах: закреплённые сверху, затем по последнему сообщению.
+import { Link, useParams } from "@tanstack/react-router";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, ok, type ChatDetail, type ChatFile, type ChatItem, type ChatMessage, type ChatPerson, type ChatMemberEvent, type ChatMessageVersion, type PresenceEntry } from "../../api/client";
+import type { ChatItem, PresenceEntry } from "../../api/client";
+import { formatShort } from "../../format";
+import { IconBellOff, IconChat, IconPlus, IconSearch, IconSettings, IconStar } from "../../icons";
+import { Dialog, Empty, ErrorBox, MenuButton, Spinner } from "../../ui";
 import { UserAvatar } from "../people/presence";
 import { usePresence } from "../people/profileHooks";
-import { formatDate } from "../../format";
-import { IconArrowLeft, IconFileText, IconPaperclip, IconPlus, IconStar, IconX } from "../../icons";
-import { useMe } from "../../session";
-import { Badge, Button, Card, Dialog, Empty, ErrorBox, Field, Input, MenuButton, Spinner } from "../../ui";
-import { dyn, formatSize } from "../helpdesk/helpdeskUtil";
-import { dropPending, MAX_FILES, uploadPending, useChats, usePendingFiles } from "./chatUtil";
-
-const area = "w-full resize-none rounded-lg border border-control bg-paper px-3 py-2 text-sm focus:border-accent";
-const fileUrl = (id: string) => `/api/chat/files/${id}`;
-
-/** Поиск сотрудника (действующие учётки). */
-export function UserPicker({ onPick, exclude = [] }: { onPick: (p: ChatPerson) => void; exclude?: string[] }) {
-  const { t } = useTranslation();
-  const [q, setQ] = useState("");
-  const found = useQuery({
-    queryKey: ["chat-people", q.trim()],
-    queryFn: () => ok<ChatPerson[]>(api.GET("/api/chat/people", { params: { query: { q: q.trim() } } })),
-    enabled: q.trim().length >= 2,
-  });
-  const list = (found.data ?? []).filter((p) => !exclude.includes(p.id));
-  return (
-    <div>
-      <Input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("chat.searchPeople")} aria-label={t("chat.searchPeople")} />
-      {q.trim().length >= 2 && (
-        <ul className="mt-1 max-h-56 divide-y divide-line overflow-y-auto rounded-lg border border-line">
-          {found.isPending ? (
-            <li className="px-3 py-2 text-sm text-muted">…</li>
-          ) : list.length === 0 ? (
-            <li className="px-3 py-2 text-sm text-muted">{t("chat.nobody")}</li>
-          ) : (
-            list.map((p) => (
-              <li key={p.id}>
-                <button
-                  type="button"
-                  className="w-full px-3 py-2 text-left text-sm hover:bg-hover"
-                  onClick={() => {
-                    onPick(p);
-                    setQ("");
-                  }}
-                >
-                  {p.name}
-                  {p.department && <span className="block text-xs text-muted">{p.department}</span>}
-                </button>
-              </li>
-            ))
-          )}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function NewChatDialog({ mode, onClose }: { mode: "direct" | "group"; onClose: () => void }) {
-  const { t } = useTranslation();
-  const qc = useQueryClient();
-  const nav = useNavigate();
-  const [title, setTitle] = useState("");
-  const [people, setPeople] = useState<ChatPerson[]>([]);
-  const opened = (id: string) => {
-    void qc.invalidateQueries({ queryKey: ["chats"] });
-    onClose();
-    void nav({ to: "/chats/$id", params: { id } });
-  };
-  const direct = useMutation({
-    mutationFn: (user_id: string) => ok<{ id: string }>(api.POST("/api/chat/direct", { body: { user_id } })),
-    onSuccess: (r) => opened(r.id),
-  });
-  const group = useMutation({
-    mutationFn: () => ok<{ id: string }>(api.POST("/api/chat/groups", { body: { title, members: people.map((p) => p.id) } })),
-    onSuccess: (r) => opened(r.id),
-  });
-  const error = direct.error ?? group.error;
-  return (
-    <Dialog open onClose={onClose} title={mode === "direct" ? t("chat.newDirect") : t("chat.newGroup")}>
-      {mode === "direct" ? (
-        <UserPicker onPick={(p) => direct.mutate(p.id)} />
-      ) : (
-        <div className="grid gap-3">
-          <Field label={t("chat.title")}>
-            <Input value={title} maxLength={200} onChange={(e) => setTitle(e.target.value)} />
-          </Field>
-          <Field group label={t("chat.members")}>
-            {people.length > 0 && (
-              <div className="mb-2 flex flex-wrap gap-1.5">
-                {people.map((p) => (
-                  <button key={p.id} type="button" className="rounded-full bg-hover px-2.5 py-0.5 text-xs" onClick={() => setPeople(people.filter((x) => x.id !== p.id))} aria-label={`${t("common.remove")}: ${p.name}`}>
-                    {p.name} ×
-                  </button>
-                ))}
-              </div>
-            )}
-            <UserPicker exclude={people.map((p) => p.id)} onPick={(p) => setPeople([...people, p])} />
-          </Field>
-          <p className="text-xs text-muted">{t("chat.groupHint")}</p>
-          <div className="flex justify-end gap-2">
-            <Button onClick={onClose}>{t("common.cancel")}</Button>
-            <Button variant="primary" disabled={!title.trim() || group.isPending} onClick={() => group.mutate()}>
-              {t("chat.create")}
-            </Button>
-          </div>
-        </div>
-      )}
-      {error && <ErrorBox error={error} />}
-    </Dialog>
-  );
-}
+import { NewChatDialog } from "./ChatDialogs";
+import { Conversation } from "./Conversation";
+import { alertPrefs, saveAlertPrefs, useChats, type AlertPrefs } from "./chatUtil";
 
 function ChatRow({ c, active, peer }: { c: ChatItem; active: boolean; peer?: PresenceEntry }) {
   const { t, i18n } = useTranslation();
+  const preview = c.locked ? t("chat.locked") : c.preview || (c.preview_files > 0 ? `📎 ${t("chat.files", { count: c.preview_files })}` : c.kind === "group" ? t("chat.group") : t("chat.direct"));
   return (
     <li>
       <Link
         to="/chats/$id"
         params={{ id: c.id }}
-        className={`flex items-start gap-2 border-l-2 px-3 py-2.5 text-sm hover:bg-hover ${active ? "border-accent bg-hover" : "border-transparent"}`}
+        className={`mx-1.5 my-0.5 flex items-center gap-3 rounded-xl px-2.5 py-2 text-sm transition-colors ${active ? "bg-accent text-paper" : "hover:bg-hover"}`}
         aria-current={active ? "page" : undefined}
       >
-        <UserAvatar name={c.title} userId={c.peer_id} avatar={peer?.avatar} presence={peer?.presence} size="sm" />
+        <UserAvatar name={c.title} userId={c.peer_id} avatar={peer?.avatar} presence={peer?.presence} size="md" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            {c.pinned && (
+            <span className={`min-w-0 flex-1 truncate ${c.unread > 0 ? "font-semibold" : "font-medium"}`}>{c.title}</span>
+            {c.muted && (
               <>
-                <IconStar size={12} className="text-accent" />
-                <span className="sr-only">{t("chat.pinned")}</span>
+                <IconBellOff size={13} className={active ? "text-paper/70" : "text-muted"} />
+                <span className="sr-only">{t("chat.muted")}</span>
               </>
             )}
-            <span className={`truncate ${c.unread > 0 ? "font-semibold" : "font-medium"}`}>{c.title}</span>
+            {c.last_message_at && <span className={`shrink-0 text-[11px] tabular-nums ${active ? "text-paper/80" : c.unread > 0 && !c.muted ? "text-accent" : "text-muted"}`}>{formatShort(c.last_message_at, i18n.language)}</span>}
           </div>
-          <div className="truncate text-xs text-muted">{c.locked ? t("chat.locked") : (c.preview || (c.preview_files > 0 ? `📎 ${t("chat.files", { count: c.preview_files })}` : c.kind === "group" ? t("chat.group") : t("chat.direct")))}</div>
-          {!c.active && (
-            <div className="mt-0.5">
-              <Badge>{t("chat.readOnly")}</Badge>
-            </div>
-          )}
-        </div>
-        <div className="flex shrink-0 flex-col items-end gap-1">
-          {c.last_message_at && <span className="text-[11px] text-muted">{formatDate(c.last_message_at, i18n.language)}</span>}
-          {c.unread > 0 && !c.locked && (
-            <span className="rounded-full bg-accent px-1.5 text-xs font-medium text-paper tabular-nums" aria-label={t("chat.unread", { count: c.unread })}>
-              {c.unread}
+          <div className="mt-0.5 flex items-center gap-1.5">
+            <span className={`min-w-0 flex-1 truncate text-[13px] ${active ? "text-paper/80" : "text-muted"}`}>
+              {!c.active && <span className="mr-1">{t("chat.readOnly")} ·</span>}
+              {preview}
             </span>
-          )}
+            {c.unread > 0 && !c.locked ? (
+              <span
+                className={`min-w-5 shrink-0 rounded-full px-1.5 text-center text-xs leading-5 font-semibold tabular-nums ${active ? "bg-paper text-accent" : c.muted ? "bg-muted/40 text-paper" : "bg-accent text-paper"}`}
+                aria-label={t("chat.unread", { count: c.unread })}
+              >
+                {c.unread > 999 ? "999+" : c.unread}
+              </span>
+            ) : (
+              c.pinned && (
+                <>
+                  <IconStar size={13} className={active ? "text-paper/80" : "text-muted"} aria-hidden="true" />
+                  <span className="sr-only">{t("chat.pinned")}</span>
+                </>
+              )
+            )}
+          </div>
         </div>
       </Link>
     </li>
   );
 }
 
+/** Звук и уведомления на рабочем столе — настройки этого браузера. */
+function AlertsDialog({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation();
+  const [p, setP] = useState<AlertPrefs>(alertPrefs);
+  const supported = typeof window !== "undefined" && "Notification" in window;
+  const [permission, setPermission] = useState(supported ? Notification.permission : "denied");
+  const change = (next: AlertPrefs) => {
+    setP(next);
+    saveAlertPrefs(next);
+  };
+  const desktop = async (on: boolean) => {
+    if (on && supported && Notification.permission === "default") setPermission(await Notification.requestPermission());
+    change({ ...p, desktop: on });
+  };
+  return (
+    <Dialog open onClose={onClose} title={t("chat.alerts")}>
+      <div className="grid gap-3 text-sm">
+        <label className="flex items-start gap-3">
+          <input type="checkbox" className="mt-0.5 size-4" checked={p.sound} onChange={(e) => change({ ...p, sound: e.target.checked })} />
+          <span>
+            <span className="block font-medium">{t("chat.alertSound")}</span>
+            <span className="text-xs text-muted">{t("chat.alertSoundHint")}</span>
+          </span>
+        </label>
+        <label className="flex items-start gap-3">
+          <input type="checkbox" className="mt-0.5 size-4" disabled={!supported || permission === "denied"} checked={p.desktop && permission === "granted"} onChange={(e) => void desktop(e.target.checked)} />
+          <span>
+            <span className="block font-medium">{t("chat.alertDesktop")}</span>
+            <span className="text-xs text-muted">{!supported ? t("chat.alertUnsupported") : permission === "denied" ? t("chat.alertDenied") : t("chat.alertDesktopHint")}</span>
+          </span>
+        </label>
+        <p className="text-xs text-muted">{t("chat.alertMuteHint")}</p>
+      </div>
+    </Dialog>
+  );
+}
+
 function ChatList({ current }: { current?: string }) {
   const { t } = useTranslation();
   const [hidden, setHidden] = useState(false);
+  const [onlyUnread, setOnlyUnread] = useState(false);
+  const [q, setQ] = useState("");
   const [creating, setCreating] = useState<"direct" | "group" | null>(null);
-  const q = useChats(hidden);
-  const peers = usePresence({ users: (q.data ?? []).flatMap((c) => (c.peer_id ? [c.peer_id] : [])) });
+  const [alerts, setAlerts] = useState(false);
+  const list = useChats(hidden);
+  const peers = usePresence({ users: (list.data ?? []).flatMap((c) => (c.peer_id ? [c.peer_id] : [])) });
+  const needle = q.trim().toLowerCase();
+  const shown = (list.data ?? []).filter((c) => (!onlyUnread || (c.unread > 0 && !c.locked)) && (!needle || c.title.toLowerCase().includes(needle) || (c.preview ?? "").toLowerCase().includes(needle)));
+  const unreadChats = (list.data ?? []).filter((c) => c.unread > 0 && !c.locked).length;
+  const chip = (on: boolean) => `rounded-full px-3 py-1 text-xs font-medium transition-colors ${on ? "bg-accent text-paper" : "bg-sunken text-muted hover:text-ink"}`;
   return (
-    <Card className="flex min-h-0 flex-col">
-      <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2">
-        <h2 className="font-semibold">{hidden ? t("chat.hiddenTitle") : t("chat.title_list")}</h2>
+    <section className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-line bg-paper" aria-label={t("chat.title_list")}>
+      <div className="flex items-center gap-2 px-3 pt-3 pb-2">
+        <h2 className="min-w-0 flex-1 truncate text-lg font-semibold">{hidden ? t("chat.hiddenTitle") : t("chat.title_list")}</h2>
         <MenuButton
+          iconOnly
+          variant="ghost"
+          label={t("chat.settings")}
+          icon={<IconSettings size={18} />}
+          items={[
+            { key: "alerts", label: t("chat.alerts"), onSelect: () => setAlerts(true) },
+            { key: "hidden", label: hidden ? t("chat.showMain") : t("chat.showHidden"), onSelect: () => setHidden(!hidden) },
+          ]}
+        />
+        <MenuButton
+          iconOnly
+          variant="primary"
           label={t("chat.new")}
-          icon={<IconPlus size={16} />}
+          icon={<IconPlus size={18} />}
           items={[
             { key: "direct", label: t("chat.newDirect"), onSelect: () => setCreating("direct") },
             { key: "group", label: t("chat.newGroup"), onSelect: () => setCreating("group") },
           ]}
         />
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {q.error ? (
-          <ErrorBox error={q.error} onRetry={() => void q.refetch()} />
-        ) : q.isPending ? (
+      <div className="px-3 pb-2">
+        <label className="flex items-center gap-2 rounded-full bg-sunken px-3 focus-within:ring-2 focus-within:ring-accent/40">
+          <IconSearch size={16} className="text-muted" />
+          <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("chat.searchChats")} aria-label={t("chat.searchChats")} className="min-w-0 flex-1 bg-transparent py-2 text-sm outline-none focus-visible:outline-none" />
+        </label>
+        {!hidden && (
+          <div className="mt-2 flex gap-1.5" role="group" aria-label={t("chat.filter")}>
+            <button type="button" className={chip(!onlyUnread)} aria-pressed={!onlyUnread} onClick={() => setOnlyUnread(false)}>
+              {t("chat.all")}
+            </button>
+            <button type="button" className={chip(onlyUnread)} aria-pressed={onlyUnread} onClick={() => setOnlyUnread(true)}>
+              {t("chat.unreadOnly")}
+              {unreadChats > 0 && <span className="ml-1 tabular-nums">{unreadChats}</span>}
+            </button>
+          </div>
+        )}
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto pb-1.5">
+        {list.error ? (
+          <ErrorBox error={list.error} onRetry={() => void list.refetch()} />
+        ) : list.isPending ? (
           <Spinner variant="list" />
-        ) : q.data.length === 0 ? (
-          <Empty hint={hidden ? undefined : t("chat.emptyHint")}>{hidden ? t("chat.noHidden") : t("chat.empty")}</Empty>
+        ) : list.data.length === 0 ? (
+          <Empty icon={<IconChat size={28} />} hint={hidden ? undefined : t("chat.emptyHint")}>
+            {hidden ? t("chat.noHidden") : t("chat.empty")}
+          </Empty>
+        ) : shown.length === 0 ? (
+          <p className="px-4 py-6 text-center text-sm text-muted">{onlyUnread && !needle ? t("chat.allRead") : t("chat.nothingFound")}</p>
         ) : (
-          <ul className="divide-y divide-line">
-            {q.data.map((c) => (
+          <ul>
+            {shown.map((c) => (
               <ChatRow key={c.id} c={c} active={c.id === current} peer={c.peer_id ? peers.byUser.get(c.peer_id) : undefined} />
             ))}
           </ul>
         )}
       </div>
-      <button type="button" className="border-t border-line px-3 py-2 text-left text-xs text-accent" onClick={() => setHidden(!hidden)}>
-        {hidden ? t("chat.showMain") : t("chat.showHidden")}
-      </button>
+      {hidden && (
+        <button type="button" className="border-t border-line px-3 py-2 text-left text-xs text-accent" onClick={() => setHidden(false)}>
+          {t("chat.showMain")}
+        </button>
+      )}
       {creating && <NewChatDialog mode={creating} onClose={() => setCreating(null)} />}
-    </Card>
+      {alerts && <AlertsDialog onClose={() => setAlerts(false)} />}
+    </section>
   );
 }
 
-function Versions({ chat, message, onClose }: { chat: string; message: ChatMessage; onClose: () => void }) {
-  const { t, i18n } = useTranslation();
-  const q = useQuery({
-    queryKey: ["chat-versions", message.id, message.version],
-    queryFn: () => ok<ChatMessageVersion[]>(api.GET("/api/chat/{id}/messages/{message}/versions", { params: { path: { id: chat, message: message.id } } })),
-  });
-  return (
-    <Dialog open onClose={onClose} title={t("chat.versions")}>
-      {q.error ? (
-        <ErrorBox error={q.error} />
-      ) : q.isPending ? (
-        <Spinner />
-      ) : (
-        <ol className="space-y-3 text-sm">
-          {q.data.map((v) => (
-            <li key={v.version}>
-              <div className="text-xs text-muted">
-                {t("chat.version", { n: v.version })} · {formatDate(v.created_at, i18n.language)}
-              </div>
-              <p className="whitespace-pre-wrap">{v.body}</p>
-            </li>
-          ))}
-          <li>
-            <div className="text-xs text-muted">
-              {t("chat.current")} · {formatDate(message.edited_at ?? message.created_at, i18n.language)}
-            </div>
-            <p className="whitespace-pre-wrap">{message.body}</p>
-          </li>
-        </ol>
-      )}
-    </Dialog>
-  );
-}
-
-function MemberHistory({ chat }: { chat: string }) {
-  const { t, i18n } = useTranslation();
-  const q = useQuery({ queryKey: ["chat-member-events", chat], queryFn: () => ok<ChatMemberEvent[]>(api.GET("/api/chat/{id}/member-events", { params: { path: { id: chat } } })) });
-  if (q.error) return <ErrorBox error={q.error} />;
-  if (q.isPending) return <Spinner />;
-  return (
-    <ul className="max-h-64 space-y-1 overflow-y-auto text-xs">
-      {q.data.map((e, i) => (
-        <li key={i}>
-          <span className="text-muted">{formatDate(e.created_at, i18n.language)}</span> · {e.user_name} — {dyn(t, `chat.actions.${e.action}`)}
-          {e.actor_name && e.actor_name !== e.user_name && <span className="text-muted"> ({e.actor_name})</span>}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function ChatInfo({ d, onClose }: { d: ChatDetail; onClose: () => void }) {
-  const { t } = useTranslation();
-  const qc = useQueryClient();
-  const nav = useNavigate();
-  const me = useMe().data;
-  const id = d.chat.id;
-  const memberInfo = usePresence({ users: d.members.map((m) => m.user_id) });
-  const [title, setTitle] = useState(d.chat.title);
-  const [history, setHistory] = useState(false);
-  const refresh = () => {
-    void qc.invalidateQueries({ queryKey: ["chat", id] });
-    void qc.invalidateQueries({ queryKey: ["chats"] });
-    void qc.invalidateQueries({ queryKey: ["chat-member-events", id] });
-  };
-  const act = useMutation({
-    mutationFn: (f: () => Promise<unknown>) => f(),
-    onSuccess: refresh,
-  });
-  const leave = useMutation({
-    mutationFn: () => ok(api.POST("/api/chat/{id}/leave", { params: { path: { id } } })),
-    onSuccess: () => {
-      refresh();
-      onClose();
-      void nav({ to: "/chats" });
-    },
-  });
-  const myRole = d.chat.role;
-  return (
-    <Dialog open onClose={onClose} title={d.chat.title}>
-      <div className="grid gap-4">
-        {d.can_manage && (
-          <Field label={t("chat.title")}>
-            <div className="flex gap-2">
-              <Input value={title} maxLength={200} onChange={(e) => setTitle(e.target.value)} />
-              <Button disabled={!title.trim() || title === d.chat.title || act.isPending} onClick={() => act.mutate(() => ok(api.PUT("/api/chat/{id}/title", { params: { path: { id } }, body: { title } })))}>
-                {t("common.save")}
-              </Button>
-            </div>
-          </Field>
-        )}
-        <div>
-          <h3 className="mb-1 text-sm font-semibold">{t("chat.membersN", { n: d.members.length })}</h3>
-          <ul className="divide-y divide-line rounded-lg border border-line">
-            {d.members.map((m) => {
-              const pm = memberInfo.byUser.get(m.user_id);
-              const removable = d.can_manage && m.user_id !== me?.user_id && m.role !== "owner" && (myRole === "owner" || m.role === "member");
-              return (
-                <li key={m.user_id} className="flex items-center gap-2 px-3 py-1.5 text-sm">
-                  <UserAvatar name={m.name} userId={m.user_id} avatar={pm?.avatar} presence={pm?.presence} size="xs" />
-                  <Link to="/people/$id" params={{ id: m.user_id }} className="min-w-0 flex-1 truncate hover:underline" onClick={onClose}>
-                    {m.name}
-                  </Link>
-                  {m.role !== "member" && <Badge tone={m.role === "owner" ? "accent" : "muted"}>{dyn(t, `chat.roles.${m.role}`)}</Badge>}
-                  {d.can_manage && m.role !== "owner" && m.user_id !== me?.user_id && (
-                    <MenuButton
-                      iconOnly
-                      variant="ghost"
-                      label={`${t("common.more")}: ${m.name}`}
-                      items={[
-                        m.role === "admin"
-                          ? { key: "member", label: t("chat.unmakeAdmin"), onSelect: () => act.mutate(() => ok(api.PUT("/api/chat/{id}/members/{user}/role", { params: { path: { id, user: m.user_id } }, body: { role: "member" } }))) }
-                          : { key: "admin", label: t("chat.makeAdmin"), onSelect: () => act.mutate(() => ok(api.PUT("/api/chat/{id}/members/{user}/role", { params: { path: { id, user: m.user_id } }, body: { role: "admin" } }))) },
-                        { key: "remove", label: t("chat.remove"), danger: true, disabled: !removable, onSelect: () => act.mutate(() => ok(api.DELETE("/api/chat/{id}/members/{user}", { params: { path: { id, user: m.user_id } } }))) },
-                      ]}
-                    />
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-        {d.can_manage && (
-          <Field group label={t("chat.addMembers")} hint={t("chat.addHint")}>
-            <UserPicker exclude={d.members.map((m) => m.user_id)} onPick={(p) => act.mutate(() => ok(api.POST("/api/chat/{id}/members", { params: { path: { id } }, body: { user_ids: [p.id] } })))} />
-          </Field>
-        )}
-        {d.can_manage && (
-          <div>
-            <button type="button" className="text-sm text-accent" aria-expanded={history} onClick={() => setHistory(!history)}>
-              {t("chat.memberHistory")}
-            </button>
-            {history && (
-              <div className="mt-2">
-                <MemberHistory chat={id} />
-              </div>
-            )}
-          </div>
-        )}
-        {(act.error ?? leave.error) && <ErrorBox error={act.error ?? leave.error} />}
-        <div className="flex justify-between gap-2">
-          {myRole !== "owner" ? (
-            <Button variant="danger" disabled={leave.isPending} onClick={() => leave.mutate()}>
-              {t("chat.leave")}
-            </Button>
-          ) : (
-            <p className="text-xs text-muted">{t("chat.ownerHint")}</p>
-          )}
-          <Button onClick={onClose}>{t("common.close")}</Button>
-        </div>
-      </div>
-    </Dialog>
-  );
-}
-
-function Bubble({ m, mine, group, canVersions, onEdit, onVersions }: { m: ChatMessage; mine: boolean; group: boolean; canVersions: boolean; onEdit: () => void; onVersions: () => void }) {
-  const { t, i18n } = useTranslation();
-  return (
-    <li className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-      <div className={`max-w-[85%] rounded-2xl px-3 py-1.5 text-sm sm:max-w-[70%] ${mine ? "bg-accent/15" : "bg-hover"}`}>
-        {group && !mine && <div className="text-xs font-medium text-accent">{m.author_name}</div>}
-        {m.body && <p className="break-words whitespace-pre-wrap">{m.body}</p>}
-        {m.files.length > 0 && <Attachments files={m.files} />}
-        <div className="mt-0.5 flex items-center justify-end gap-2 text-[11px] text-muted">
-          {m.version > 1 &&
-            (canVersions ? (
-              <button type="button" className="underline" onClick={onVersions}>
-                {t("chat.edited")}
-              </button>
-            ) : (
-              <span>{t("chat.edited")}</span>
-            ))}
-          {m.editable && m.body && (
-            <button type="button" className="underline" onClick={onEdit}>
-              {t("common.edit")}
-            </button>
-          )}
-          <time dateTime={m.created_at}>{formatDate(m.created_at, i18n.language)}</time>
-        </div>
-      </div>
-    </li>
-  );
-}
-
-/** Вложения сообщения: картинки — превью (открываются в новой вкладке), остальное — скачивание. */
-function Attachments({ files }: { files: ChatFile[] }) {
-  const images = files.filter((f) => f.image);
-  const other = files.filter((f) => !f.image);
-  return (
-    <div className="mt-1 space-y-1">
-      {images.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {images.map((f) => (
-            <a key={f.id} href={fileUrl(f.id)} target="_blank" rel="noopener" className="block">
-              <img src={fileUrl(f.id)} alt={f.name} loading="lazy" className="max-h-60 max-w-full rounded-lg border border-line object-contain" />
-            </a>
-          ))}
-        </div>
-      )}
-      {other.map((f) => (
-        <a key={f.id} href={fileUrl(f.id)} download={f.name} className="flex items-center gap-2 rounded-lg border border-line bg-paper px-2 py-1.5 hover:bg-hover">
-          <IconFileText size={18} className="shrink-0 text-muted" />
-          <span className="min-w-0 flex-1 truncate">{f.name}</span>
-          <span className="shrink-0 text-xs text-muted tabular-nums">{formatSize(f.size)}</span>
-        </a>
-      ))}
-    </div>
-  );
-}
-
-/** Неотправленный текст по чатам: не теряется, когда открывают правку другого сообщения или другой чат. */
-const drafts = new Map<string, string>();
-
-/** Перетаскивают файлы (а не выделенный текст). */
-const hasFiles = (e: { dataTransfer: DataTransfer }) => [...e.dataTransfer.types].includes("Files");
-
-function Composer({ chat, editing, onDone }: { chat: string; editing: ChatMessage | null; onDone: () => void }) {
-  const { t } = useTranslation();
-  const qc = useQueryClient();
-  const [text, setTextState] = useState(editing ? editing.body : (drafts.get(chat) ?? ""));
-  const setText = (v: string) => {
-    setTextState(v);
-    if (!editing) {
-      if (v) drafts.set(chat, v);
-      else drafts.delete(chat);
-    }
-  };
-  const pendingFiles = usePendingFiles(chat);
-  const files = editing ? [] : pendingFiles.files;
-  const uploading = editing ? 0 : pendingFiles.uploading;
-  const picker = useRef<HTMLInputElement>(null);
-  const box = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => {
-    box.current?.focus();
-  }, [editing]);
-  const send = useMutation({
-    // Отправляется то, что было в поле в момент нажатия: добавленное во время отправки остаётся в черновике.
-    mutationFn: ({ body, ids }: { body: string; ids: string[] }) =>
-      editing
-        ? ok(api.PUT("/api/chat/{id}/messages/{message}", { params: { path: { id: chat, message: editing.id } }, body: { body } }))
-        : ok(api.POST("/api/chat/{id}/messages", { params: { path: { id: chat } }, body: { body, files: ids } })),
-    onSuccess: (_, sent) => {
-      if ((editing ? editing.body : (drafts.get(chat) ?? "")) === sent.body || editing) setText("");
-      if (!editing) dropPending(chat, sent.ids);
-      onDone();
-      void qc.invalidateQueries({ queryKey: ["chat-messages", chat] });
-      void qc.invalidateQueries({ queryKey: ["chats"] });
-    },
-  });
-  const ready = (text.trim() !== "" || files.length > 0) && uploading === 0 && !send.isPending;
-  const submit = () => {
-    if (ready) send.mutate({ body: text, ids: files.map((f) => f.id) });
-  };
-  const add = (list: File[]) => {
-    if (!editing && list.length > 0) void uploadPending(chat, list, { tooMany: t("chat.tooManyFiles", { count: MAX_FILES }), failed: t("common.error") });
-  };
-  return (
-    <div
-      className="border-t border-line p-2"
-      // Файл, брошенный мимо поля (и во время правки), не открывается браузером вместо портала.
-      onDragOver={(e) => {
-        if (hasFiles(e)) e.preventDefault();
-      }}
-      onDrop={(e) => {
-        if (!hasFiles(e)) return;
-        e.preventDefault();
-        add([...e.dataTransfer.files]);
-      }}
-    >
-      {editing && (
-        <div className="mb-1 flex items-center justify-between text-xs text-muted">
-          <span>{t("chat.editing")}</span>
-          <button type="button" className="text-accent" onClick={onDone}>
-            {t("common.cancel")}
-          </button>
-        </div>
-      )}
-      {send.error && <ErrorBox error={send.error} />}
-      {!editing && (files.length > 0 || uploading > 0 || pendingFiles.error) && (
-        <div className="mb-1 flex flex-wrap items-center gap-1.5 text-xs">
-          {files.map((f) => (
-            <span key={f.id} className="inline-flex max-w-full items-center gap-1 rounded-lg bg-sunken px-2 py-1">
-              <IconFileText size={14} className="shrink-0 text-muted" />
-              <span className="max-w-48 truncate">{f.name}</span>
-              <span className="text-muted tabular-nums">{formatSize(f.size)}</span>
-              <button
-                type="button"
-                className="rounded p-0.5 text-muted hover:bg-hover"
-                aria-label={t("chat.removeFile", { name: f.name })}
-                onClick={() => dropPending(chat, [f.id])}
-              >
-                <IconX size={12} />
-              </button>
-            </span>
-          ))}
-          {uploading > 0 && (
-            <span role="status" className="text-muted">
-              {t("chat.uploading")}
-            </span>
-          )}
-          {pendingFiles.error && (
-            <span role="alert" className="text-bad">
-              {pendingFiles.error}
-            </span>
-          )}
-        </div>
-      )}
-      <div className="flex items-end gap-2">
-        {!editing && (
-          <>
-            <Button
-              variant="ghost"
-              aria-label={t("chat.attach")}
-              title={t("chat.attachHint")}
-              disabled={files.length + uploading >= MAX_FILES}
-              onClick={() => picker.current?.click()}
-            >
-              <IconPaperclip size={18} />
-            </Button>
-            <input
-              ref={picker}
-              type="file"
-              multiple
-              className="hidden"
-              onChange={(e) => {
-                add([...(e.target.files ?? [])]);
-                e.target.value = "";
-              }}
-            />
-          </>
-        )}
-        <textarea
-          ref={box}
-          rows={2}
-          maxLength={4000}
-          value={text}
-          aria-label={t("chat.message")}
-          placeholder={t("chat.placeholder")}
-          className={area}
-          onChange={(e) => setText(e.target.value)}
-          onPaste={(e) => {
-            // Из Word или браузера вместе с текстом копируется и картинка-превью: тогда вставляется текст.
-            const pasted = [...e.clipboardData.files];
-            if (pasted.length > 0 && !editing && !e.clipboardData.getData("text/plain")) {
-              e.preventDefault();
-              add(pasted);
-            }
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-              e.preventDefault();
-              submit();
-            }
-            if (e.key === "Escape" && editing) onDone();
-          }}
-        />
-        <Button variant="primary" disabled={!ready} onClick={submit}>
-          {editing ? t("common.save") : t("chat.send")}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function Conversation({ id }: { id: string }) {
-  const { t } = useTranslation();
-  const qc = useQueryClient();
-  const me = useMe().data;
-  const [info, setInfo] = useState(false);
-  const [editing, setEditing] = useState<ChatMessage | null>(null);
-  const [versions, setVersions] = useState<ChatMessage | null>(null);
-  const detail = useQuery({ queryKey: ["chat", id], queryFn: () => ok<ChatDetail>(api.GET("/api/chat/{id}", { params: { path: { id } } })) });
-  const locked = detail.data?.chat.locked === true;
-  const messages = useInfiniteQuery({
-    queryKey: ["chat-messages", id],
-    queryFn: ({ pageParam }) => ok<ChatMessage[]>(api.GET("/api/chat/{id}/messages", { params: { path: { id }, query: { before: pageParam } } })),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (last) => (last.length >= 100 ? last[0]?.id : undefined),
-    enabled: detail.isSuccess && !locked,
-  });
-  const all = [...(messages.data?.pages ?? [])].reverse().flat();
-  const newest = all[all.length - 1]?.id;
-  const unread = detail.data?.chat.unread ?? 0;
-  // Открытая переписка прочитана: и при входе, и когда приходит новое сообщение.
-  const read = useMutation({
-    mutationFn: () => ok(api.POST("/api/chat/{id}/read", { params: { path: { id } } })),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["chats"] });
-      void qc.invalidateQueries({ queryKey: ["chat", id] });
-    },
-  });
-  const readMutate = read.mutate;
-  useEffect(() => {
-    if (newest && unread > 0 && document.visibilityState === "visible") readMutate();
-  }, [newest, unread, readMutate]);
-  const end = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    end.current?.scrollIntoView({ block: "end" });
-  }, [newest]);
-  const prefs = useMutation({
-    mutationFn: (body: { pinned?: boolean; hidden?: boolean }) => ok(api.PUT("/api/chat/{id}/prefs", { params: { path: { id } }, body })),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["chats"] });
-      void qc.invalidateQueries({ queryKey: ["chat", id] });
-    },
-  });
-  const peerInfo = usePresence({ users: detail.data?.chat.peer_id ? [detail.data.chat.peer_id] : [] });
-  if (detail.error) return <ErrorBox error={detail.error} />;
-  if (detail.isPending) return <Spinner />;
-  const d = detail.data;
-  const c = d.chat;
-  const group = c.kind === "group";
-  const peer = c.peer_id ? peerInfo.byUser.get(c.peer_id) : undefined;
-  const manager = c.active && (c.role === "owner" || c.role === "admin");
-  return (
-    <Card className="flex min-h-0 flex-col">
-      <div className="flex items-center gap-2 border-b border-line px-3 py-2">
-        <Link to="/chats" className="rounded-lg p-1 text-muted hover:bg-hover md:hidden" aria-label={t("chat.back")}>
-          <IconArrowLeft size={18} />
-        </Link>
-        {c.peer_id && <UserAvatar name={c.title} userId={c.peer_id} avatar={peer?.avatar} presence={peer?.presence} size="sm" />}
-        <div className="min-w-0 flex-1">
-          {c.peer_id ? (
-            <Link to="/people/$id" params={{ id: c.peer_id }} className="block truncate font-semibold hover:underline">
-              {c.title}
-            </Link>
-          ) : (
-            <h2 className="truncate font-semibold">{c.title}</h2>
-          )}
-          <div className="truncate text-xs text-muted">
-            {group
-              ? c.active
-                ? t("chat.membersN", { n: d.members.length })
-                : t("chat.readOnly")
-              : peer && (peer.status_emoji || peer.status_text)
-                ? `${peer.status_emoji ?? ""} ${peer.status_text ?? ""}`.trim()
-                : peer
-                  ? t(`people.presence.${peer.presence}`)
-                  : t("chat.direct")}
-          </div>
-        </div>
-        {(c.kind === "direct" || c.active) && (
-          <Button variant="ghost" disabled={prefs.isPending} onClick={() => prefs.mutate({ pinned: !c.pinned })}>
-            {c.pinned ? t("chat.unpin") : t("chat.pin")}
-          </Button>
-        )}
-        {group && !c.active && (
-          <Button variant="ghost" disabled={prefs.isPending} onClick={() => prefs.mutate({ hidden: !c.hidden })}>
-            {c.hidden ? t("chat.unhide") : t("chat.hide")}
-          </Button>
-        )}
-        {group && c.active && !locked && <Button onClick={() => setInfo(true)}>{t("chat.info")}</Button>}
-      </div>
-      {prefs.error && <ErrorBox error={prefs.error} />}
-      {locked ? (
-        <Empty hint={t("chat.lockedHint")}>{t("chat.locked")}</Empty>
-      ) : (
-        <>
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2" aria-live="polite" aria-relevant="additions">
-            {messages.hasNextPage && (
-              <div className="mb-2 text-center">
-                <Button variant="ghost" disabled={messages.isFetchingNextPage} onClick={() => void messages.fetchNextPage()}>
-                  {t("chat.older")}
-                </Button>
-              </div>
-            )}
-            {messages.error ? (
-              <ErrorBox error={messages.error} />
-            ) : messages.isPending ? (
-              <Spinner />
-            ) : all.length === 0 ? (
-              <Empty>{t("chat.noMessages")}</Empty>
-            ) : (
-              <ul className="space-y-1.5">
-                {all.map((m) => (
-                  <Bubble
-                    key={m.id}
-                    m={m}
-                    mine={m.author_id === me?.user_id}
-                    group={group}
-                    canVersions={!group || m.author_id === me?.user_id || manager}
-                    onEdit={() => setEditing(m)}
-                    onVersions={() => setVersions(m)}
-                  />
-                ))}
-              </ul>
-            )}
-            <div ref={end} />
-          </div>
-          {d.can_write ? (
-            <Composer key={editing?.id ?? "new"} chat={id} editing={editing} onDone={() => setEditing(null)} />
-          ) : (
-            <p className="border-t border-line px-3 py-2 text-sm text-muted">{t("chat.readOnlyHint")}</p>
-          )}
-        </>
-      )}
-      {info && <ChatInfo d={d} onClose={() => setInfo(false)} />}
-      {versions && <Versions chat={id} message={versions} onClose={() => setVersions(null)} />}
-    </Card>
-  );
-}
-
-const shell = "grid h-[calc(100dvh-7.5rem)] min-h-96 gap-3 md:grid-cols-[20rem_1fr]";
+const shell = "grid h-[calc(100dvh-7.5rem)] min-h-96 gap-3 md:grid-cols-[21rem_1fr]";
 
 export function ChatsPage() {
   const { t } = useTranslation();
   return (
     <div className={shell}>
       <ChatList />
-      <Card className="hidden items-center justify-center md:flex">
-        <p className="text-sm text-muted">{t("chat.pick")}</p>
-      </Card>
+      <div className="chat-wallpaper hidden items-center justify-center rounded-xl border border-line md:flex">
+        <div className="rounded-2xl bg-paper/90 px-6 py-5 text-center shadow-sm">
+          <IconChat size={36} className="mx-auto mb-2 text-accent" />
+          <p className="font-medium">{t("chat.pick")}</p>
+          <p className="mt-1 text-sm text-muted">{t("chat.pickHint")}</p>
+        </div>
+      </div>
     </div>
   );
 }

@@ -87,3 +87,10 @@ export const IconAlert = make("Alert", <><path d="M10.3 4.2 2.8 17.5A2 2 0 0 0 4
 export const IconInfo = make("Info", <><circle cx="12" cy="12" r="8.5" /><path d="M12 11v5" /><path d="M12 8h.01" /></>);
 export const IconClock = make("Clock", <><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></>);
 export const IconSparkles = make("Sparkles", <><path d="M12 3.5 13.8 9l5.7 1.8-5.7 1.8L12 18.5l-1.8-5.9L4.5 10.8 10.2 9Z" /><path d="M19 3v3" /><path d="M17.5 4.5h3" /></>);
+export const IconBellOff = make("BellOff", <><path d="M8.7 3.9A6 6 0 0 1 18 9c0 3 .6 4.9 1.3 6" /><path d="M6.2 6.6A6 6 0 0 0 6 9c0 6-2.5 7.5-2.5 7.5h13" /><path d="M10.3 20a2 2 0 0 0 3.4 0" /><path d="m3 3 18 18" /></>);
+export const IconSend = make("Send", <><path d="M21 3 10 14" /><path d="M21 3 14.5 21l-4.5-7-7-4.5Z" /></>);
+export const IconSmile = make("Smile", <><circle cx="12" cy="12" r="9" /><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0" /><path d="M9 9.5h.01" /><path d="M15 9.5h.01" /></>);
+export const IconReply = make("Reply", <><path d="M9.5 7 4.5 12l5 5" /><path d="M4.5 12h9a6 6 0 0 1 6 6v1" /></>);
+export const IconPin = make("Pin", <><path d="M12 16.5V21" /><path d="M8 3.5h8l-1 6 3 3.5v1.5H6V13l3-3.5Z" /></>);
+export const IconCheckDouble = make("CheckDouble", <><path d="m2.5 12.5 4.5 4.5L16.5 7.5" /><path d="m11.5 16 1 1L22 7.5" /></>);
+export const IconChevronUp = make("ChevronUp", <path d="m6 15 6-6 6 6" />);

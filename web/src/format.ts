@@ -25,3 +25,29 @@ export function formatDate(iso: string | null | undefined, lang: string, p: Pick
   const time = d.toLocaleTimeString(intlTag(lang), { hour: "2-digit", minute: "2-digit", hour12 });
   return `${date} ${time}`;
 }
+
+/** Только время: «14:05» (или 12-часовое по настройке). */
+export function formatTime(iso: string, lang: string, p: Pick<UserPrefs, "clock"> = prefs()): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString(intlTag(lang), { hour: "2-digit", minute: "2-digit", hour12: p.clock === "h12" });
+}
+
+/** День словами: «12 ноября 2026», в этом году — «12 ноября». */
+export function formatDay(iso: string, lang: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  const thisYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleDateString(intlTag(lang), { day: "numeric", month: "long", ...(thisYear ? {} : { year: "numeric" }) });
+}
+
+/** Метка в списке переписок: сегодня — время, на этой неделе — день недели, раньше — дата. */
+export function formatShort(iso: string, lang: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return formatTime(iso, lang);
+  const days = (now.getTime() - d.getTime()) / 86_400_000;
+  if (days < 6) return d.toLocaleDateString(intlTag(lang), { weekday: "short" });
+  return d.toLocaleDateString(intlTag(lang), { day: "numeric", month: "short", ...(d.getFullYear() === now.getFullYear() ? {} : { year: "2-digit" }) });
+}

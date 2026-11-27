@@ -230,6 +230,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/chats/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["chat_admin_get_settings"];
+        /** Срок хранения вложений. Стирается только содержимое: в переписке остаётся имя файла с отметкой. */
+        put: operations["chat_admin_put_settings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/chats/stats": {
         parameters: {
             query?: never;
@@ -239,6 +256,23 @@ export interface paths {
         };
         /** Обезличенная статистика по всему порталу по месяцам (без разбивки по людям, отделам и чатам). */
         get: operations["chat_admin_stats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/chats/storage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Объём переписки: сколько сообщений и файлов и сколько места они занимают в базе. */
+        get: operations["chat_admin_storage"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1907,7 +1941,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Файлы чата: отправленные вложения, от новых к старым (последние 200). */
+        get: operations["chat_shared_files"];
         put?: never;
         /**
          * Загрузить вложение в чат. Прикрепляется к сообщению при отправке; типы и предел размера — как у
@@ -2041,6 +2076,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/chat/{id}/messages/{message}/forward": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Переслать сообщение в другой свой чат: текст и вложения копируются, видно, чьё оно.
+         *     Копии вложений считаются в суточной квоте пересылающего.
+         */
+        post: operations["chat_forward"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/chat/{id}/messages/{message}/reactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Поставить или снять реакцию (эмодзи из списка). */
+        put: operations["chat_react"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/chat/{id}/messages/{message}/versions": {
         parameters: {
             query?: never;
@@ -2051,6 +2123,26 @@ export interface paths {
         /** Прежние версии: в личном диалоге — обоим, в групповом чате — автору, владельцу и администраторам. */
         get: operations["chat_message_versions"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/chat/{id}/pin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Закрепить сообщение (одно на чат) или открепить. В личном диалоге — любой из двоих, в групповом —
+         *     владелец и администраторы.
+         */
+        put: operations["chat_pin"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2091,6 +2183,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/chat/{id}/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Поиск по тексту переписки: текст зашифрован, поэтому сервер расшифровывает последние 5000
+         *     доступных мне сообщений и ищет в них. Найденное — от новых к старым, не больше 50.
+         */
+        get: operations["chat_search"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/chat/{id}/title": {
         parameters: {
             query?: never;
@@ -2101,6 +2213,26 @@ export interface paths {
         get?: never;
         put: operations["chat_rename"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/chat/{id}/typing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * «Печатает…»: собеседникам на несколько секунд. Не чаще раза в 3 секунды; в большой группе не
+         *     рассылается. Ничего не хранится.
+         */
+        post: operations["chat_typing"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2890,7 +3022,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Скачать вложение. Права — как на заявку; вложение внутренней заметки сотруднику недоступно. */
+        /**
+         * Скачать вложение. Права — как на заявку; вложение внутренней заметки сотруднику недоступно.
+         *     Вложение статьи базы знаний видит тот, кому видна статья.
+         */
         get: operations["download_file"];
         put?: never;
         post?: never;
@@ -5519,6 +5654,9 @@ export interface components {
             author_name?: string | null;
             body: string;
             can_edit: boolean;
+            /** Format: date-time */
+            created_at: string;
+            files: components["schemas"]["KbFile"][];
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -5536,6 +5674,8 @@ export interface components {
         ArticleInput: {
             audience: string;
             body: string;
+            /** @description Вложения статьи (загруженные через `/api/helpdesk/files`); картинки из текста добавляются сами. */
+            files?: string[];
             /** Format: uuid */
             section_id?: string | null;
             /**
@@ -5549,6 +5689,12 @@ export interface components {
         ArticleRow: {
             /** @description `all` или `engineers`. */
             audience: string;
+            /**
+             * Format: uuid
+             * @description Обложка: первая картинка в тексте статьи.
+             */
+            cover?: string | null;
+            /** @description Начало текста без разметки. */
             excerpt: string;
             /** Format: uuid */
             id: string;
@@ -6011,11 +6157,19 @@ export interface components {
         ChatDetail: {
             /** @description Могу вести состав: владелец или администратор группового чата. */
             can_manage: boolean;
+            /** @description Могу закреплять: участник личного диалога, владелец или администратор группового чата. */
+            can_pin: boolean;
             /** @description Могу писать: участник и чат не заблокирован. */
             can_write: boolean;
             chat: components["schemas"]["ChatItem"];
             /** @description Действующие участники (бывшему участнику не показываются). */
             members: components["schemas"]["ChatMember"][];
+            pinned_message?: null | components["schemas"]["ChatQuote"];
+            /**
+             * Format: date-time
+             * @description До какого момента мои сообщения прочитаны собеседником (в группе — хотя бы одним участником).
+             */
+            read_upto?: string | null;
         };
         ChatDirectInput: {
             /** Format: uuid */
@@ -6023,6 +6177,8 @@ export interface components {
         };
         /** @description Вложение сообщения (или загруженное, но ещё не отправленное). */
         ChatFile: {
+            /** @description Стёрт по сроку хранения. */
+            expired: boolean;
             /** Format: uuid */
             id: string;
             /** @description Картинка: показывается в переписке, остальное скачивается. */
@@ -6031,6 +6187,13 @@ export interface components {
             name: string;
             /** Format: int64 */
             size: number;
+        };
+        ChatForwardInput: {
+            /**
+             * Format: uuid
+             * @description Куда переслать.
+             */
+            to: string;
         };
         ChatGroupInput: {
             members?: string[];
@@ -6049,6 +6212,8 @@ export interface components {
             last_message_at?: string | null;
             /** @description Чат временно заблокирован: владельца нет. */
             locked: boolean;
+            /** @description Без звука: не считается в непрочитанном меню и не всплывает уведомлением. */
+            muted: boolean;
             /**
              * Format: uuid
              * @description Собеседник в личном диалоге.
@@ -6099,8 +6264,17 @@ export interface components {
             /** Format: date-time */
             edited_at?: string | null;
             files: components["schemas"]["ChatFile"][];
+            /** @description Переслано: автор исходного сообщения. */
+            forwarded_from_name?: string | null;
             /** Format: uuid */
             id: string;
+            reactions: components["schemas"]["ChatReaction"][];
+            reply?: null | components["schemas"]["ChatQuote"];
+            /**
+             * Format: uuid
+             * @description Ответ на сообщение этого же чата.
+             */
+            reply_to?: string | null;
             /** Format: int32 */
             version: number;
         };
@@ -6109,6 +6283,11 @@ export interface components {
             body?: string;
             /** @description Загруженные заранее вложения (до 10), только при отправке. */
             files?: string[];
+            /**
+             * Format: uuid
+             * @description Ответ на сообщение этого чата (только при отправке).
+             */
+            reply_to?: string | null;
         };
         ChatMessageVersion: {
             body: string;
@@ -6129,13 +6308,65 @@ export interface components {
             id: string;
             name: string;
         };
+        ChatPinInput: {
+            /**
+             * Format: uuid
+             * @description Какое сообщение закрепить; пусто — открепить.
+             */
+            message?: string | null;
+        };
         ChatPrefsInput: {
             hidden?: boolean | null;
+            muted?: boolean | null;
             pinned?: boolean | null;
+        };
+        /** @description Короткий вид сообщения: ответ, закреплённое. */
+        ChatQuote: {
+            author_name: string;
+            /**
+             * Format: int64
+             * @description Вложений в сообщении.
+             */
+            files: number;
+            /** Format: uuid */
+            id: string;
+            /** @description Первая строка текста (до 100 знаков). */
+            preview: string;
+        };
+        ChatReactInput: {
+            /** @description Эмодзи из списка; повторное нажатие снимает реакцию. */
+            emoji: string;
+        };
+        /** @description Реакция под сообщением. */
+        ChatReaction: {
+            /** Format: int64 */
+            count: number;
+            emoji: string;
+            /** @description Есть моя. */
+            mine: boolean;
+            /** @description Кто поставил (первые 10). */
+            names: string[];
         };
         ChatRoleInput: {
             /** @description `admin` или `member`. */
             role: string;
+        };
+        /** @description Настройки модуля (админка): срок хранения вложений. */
+        ChatSettings: {
+            /**
+             * Format: int32
+             * @description Через сколько дней стирать вложения сообщений; 0 — хранить всегда.
+             */
+            file_retention_days?: number;
+        };
+        /** @description Вложение в списке «Файлы чата». */
+        ChatSharedFile: {
+            author_name: string;
+            /** Format: date-time */
+            created_at: string;
+            file: components["schemas"]["ChatFile"];
+            /** Format: uuid */
+            message_id: string;
         };
         ChatStats: {
             /** Format: int64 */
@@ -6158,6 +6389,31 @@ export interface components {
             month: string;
             /** Format: int64 */
             senders?: number | null;
+        };
+        /** @description Объём переписки на портале (суперадминистратору), байты. */
+        ChatStorage: {
+            /**
+             * Format: int64
+             * @description Таблицы переписки на диске вместе с индексами.
+             */
+            chat_tables_bytes: number;
+            /**
+             * Format: int64
+             * @description Вся база портала.
+             */
+            database_bytes: number;
+            /** Format: int64 */
+            expired_files: number;
+            /** Format: int64 */
+            file_bytes: number;
+            /** Format: int32 */
+            file_retention_days: number;
+            /** Format: int64 */
+            files: number;
+            /** Format: int64 */
+            message_bytes: number;
+            /** Format: int64 */
+            messages: number;
         };
         ChatTitleInput: {
             title: string;
@@ -6559,6 +6815,8 @@ export interface components {
         };
         Draft: {
             body: string;
+            /** @description Открытые вложения заявки, скопированные для статьи (ссылки в тексте ведут на копии). */
+            files: components["schemas"]["KbFile"][];
             /** Format: int64 */
             source_ticket_number: number;
             title: string;
@@ -7063,6 +7321,17 @@ export interface components {
             change?: null | components["schemas"]["ChangeView"];
             kind: string;
             problem?: null | components["schemas"]["ProblemView"];
+        };
+        /** @description Вложение статьи (или черновика из заявки). */
+        KbFile: {
+            /** Format: uuid */
+            id: string;
+            /** @description Картинка: её можно вставить в текст. */
+            is_image: boolean;
+            mime: string;
+            name: string;
+            /** Format: int64 */
+            size: number;
         };
         /** @enum {string} */
         Kind: "full" | "incremental";
@@ -9658,6 +9927,46 @@ export interface operations {
             };
         };
     };
+    chat_admin_get_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatSettings"];
+                };
+            };
+        };
+    };
+    chat_admin_put_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatSettings"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     chat_admin_stats: {
         parameters: {
             query?: never;
@@ -9673,6 +9982,25 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChatStats"];
+                };
+            };
+        };
+    };
+    chat_admin_storage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatStorage"];
                 };
             };
         };
@@ -12895,6 +13223,27 @@ export interface operations {
             };
         };
     };
+    chat_shared_files: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatSharedFile"][];
+                };
+            };
+        };
+    };
     chat_upload_file: {
         parameters: {
             query?: never;
@@ -13113,6 +13462,56 @@ export interface operations {
             };
         };
     };
+    chat_forward: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                message: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatForwardInput"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatMessage"];
+                };
+            };
+        };
+    };
+    chat_react: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                message: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatReactInput"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     chat_message_versions: {
         parameters: {
             query?: never;
@@ -13132,6 +13531,29 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ChatMessageVersion"][];
                 };
+            };
+        };
+    };
+    chat_pin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatPinInput"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -13177,6 +13599,29 @@ export interface operations {
             };
         };
     };
+    chat_search: {
+        parameters: {
+            query: {
+                q: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatMessage"][];
+                };
+            };
+        };
+    };
     chat_rename: {
         parameters: {
             query?: never;
@@ -13191,6 +13636,25 @@ export interface operations {
                 "application/json": components["schemas"]["ChatTitleInput"];
             };
         };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    chat_typing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             204: {
                 headers: {

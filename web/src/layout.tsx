@@ -1,7 +1,7 @@
 // Оболочка: левое меню | центр; меню сворачивается на узком экране.
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { api, ok, type AccessRequestView, type ChangeApprovalItem, type ComputerRow, type ExtensionLink, type Me, type MyAsset, type NotificationList, type Person, type TicketRow } from "./api/client";
 import { Logo, RequireAuth } from "./auth";
@@ -18,7 +18,7 @@ import { adminGroups, visibleItems } from "./pages/admin/adminMenu";
 import { OrgWizard } from "./pages/OrgWizard";
 import { fullName } from "./pages/phonebookUtil";
 import { useAssist } from "./pages/helpdesk/useAssist";
-import { useChatUnread } from "./pages/chat/chatUtil";
+import { useChatAlerts, useChatUnread } from "./pages/chat/chatUtil";
 
 type NavItem = { to: string; key: "home" | "phonebook" | "tickets" | "catalog" | "newTicket" | "desk" | "problems" | "changes" | "vault" | "assistant" | "kb" | "assets" | "computers" | "reports" | "settings" | "access" | "approvals" | "myAssets" | "chats" | "feed" };
 
@@ -320,9 +320,6 @@ function Shell({ me }: { me: Me }) {
   const path = useLocation().pathname;
   // Тема и плотность из учётки (выбранные на другом компьютере) — поверх сохранённых в браузере.
   useEffect(() => applyPrefs(me.prefs), [me.prefs]);
-  useEffect(() => {
-    document.title = unread > 0 ? `(${unread}) Pult` : "Pult";
-  }, [unread]);
 
   const modules = useOrg().data?.modules;
   const on = (m: ModuleKey) => modules?.[m] ?? true;
@@ -343,6 +340,14 @@ function Shell({ me }: { me: Me }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- только при входе в оболочку
   }, []);
   const chatUnread = useChatUnread();
+  // Во вкладке браузера — всё непрочитанное: уведомления и сообщения.
+  useEffect(() => {
+    const total = unread + chatUnread;
+    document.title = total > 0 ? `(${total > 99 ? "99+" : total}) Pult` : "Pult";
+  }, [unread, chatUnread]);
+  // Новое сообщение в другом чате — звук и уведомление на рабочем столе (если включены).
+  const openChat = useCallback((id: string) => void nav({ to: "/chats/$id", params: { id } }), [nav]);
+  useChatAlerts(openChat);
   // Ссылки установленных расширений (внешние сервисы) — в новой вкладке.
   const extLinks = useQuery({
     queryKey: ["extension-links"],

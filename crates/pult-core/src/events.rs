@@ -24,6 +24,12 @@ pub struct Event {
     /// Всем, у кого есть это разрешение (инженеры); `*` — всем вошедшим.
     #[serde(default)]
     pub permission: Option<String>,
+    /// Чат, к которому относится событие (`chat`, `chat_read`, `typing`).
+    #[serde(default)]
+    pub chat: Option<Uuid>,
+    /// Кто сделал (`typing` — кто печатает).
+    #[serde(default)]
+    pub from: Option<Uuid>,
 }
 
 impl Event {

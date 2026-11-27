@@ -1300,7 +1300,8 @@ async fn upload_file(
     let (count, bytes): (i64, i64) = sqlx::query_as(
         "SELECT count(*), coalesce(sum(size), 0)::bigint FROM files f
           WHERE f.uploaded_by = $1 AND f.created_at > now() - interval '1 day'
-            AND NOT EXISTS (SELECT 1 FROM ticket_attachments a WHERE a.file_id = f.id)",
+            AND NOT EXISTS (SELECT 1 FROM ticket_attachments a WHERE a.file_id = f.id)
+            AND NOT EXISTS (SELECT 1 FROM kb_attachments k WHERE k.file_id = f.id)",
     )
     .bind(user.user_id)
     .fetch_one(&core.db)
@@ -1344,9 +1345,12 @@ struct FileAccess {
     requester_user_id: Option<Uuid>,
     assignee_id: Option<Uuid>,
     watcher: bool,
+    kb_audience: Option<String>,
+    kb_status: Option<String>,
 }
 
 /// Скачать вложение. Права — как на заявку; вложение внутренней заметки сотруднику недоступно.
+/// Вложение статьи базы знаний видит тот, кому видна статья.
 #[utoipa::path(get, path = "/api/helpdesk/files/{id}", tag = "helpdesk", params(("id" = Uuid, Path)),
     responses((status = 200, description = "Содержимое файла"), (status = 404, body = pult_core::error::ErrorBody)))]
 async fn download_file(
@@ -1359,9 +1363,12 @@ async fn download_file(
         "SELECT f.sha256, f.mime, f.original_name, f.uploaded_by, a.ticket_id,
                 coalesce(c.visibility = 'internal', false) AS internal,
                 t.requester_id, t.requester_user_id, t.assignee_id,
-                coalesce(EXISTS (SELECT 1 FROM ticket_watchers w WHERE w.ticket_id = a.ticket_id AND w.person_id = $2), false) AS watcher
+                coalesce(EXISTS (SELECT 1 FROM ticket_watchers w WHERE w.ticket_id = a.ticket_id AND w.person_id = $2), false) AS watcher,
+                ka.audience AS kb_audience, ka.status AS kb_status
            FROM files f
            LEFT JOIN ticket_attachments a ON a.file_id = f.id
+           LEFT JOIN kb_attachments k ON k.file_id = f.id
+           LEFT JOIN kb_articles ka ON ka.id = k.article_id
            LEFT JOIN ticket_comments c ON c.id = a.comment_id
            LEFT JOIN tickets t ON t.id = a.ticket_id
           WHERE f.id = $1",
@@ -1375,9 +1382,13 @@ async fn download_file(
     let requester = f.requester_user_id == Some(user.user_id)
         || (user.person_id.is_some() && f.requester_id == user.person_id)
         || f.watcher;
-    let allowed = match f.ticket_id {
-        None => f.uploaded_by == Some(user.user_id),
-        Some(_) => engineer || (requester && !f.internal),
+    let allowed = match (f.ticket_id, f.kb_audience.as_deref()) {
+        (Some(_), _) => engineer || (requester && !f.internal),
+        (None, Some(audience)) => {
+            (engineer || audience == "all")
+                && (f.kb_status.as_deref() == Some("published") || user.grants.has(&crate::kb::EDIT))
+        }
+        (None, None) => f.uploaded_by == Some(user.user_id),
     };
     if !allowed {
         return Err(ApiError::NotFound);

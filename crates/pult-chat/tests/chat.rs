@@ -415,6 +415,91 @@ async fn chat_acceptance() {
     // Чужой групповой чат не виден и суперадминистратору.
     assert_eq!(admin.get(&format!("/api/chat/{group}/messages")).await.0, StatusCode::NOT_FOUND);
 
+    // 3а. Как в мессенджерах: ответ, реакции, закрепление, «прочитано», пересылка, поиск, файлы чата.
+    // Владелец «Новостей» — Сидоров, участник — Петров (Иванова дальше отключают в AD — его здесь нет).
+    let (_, n) = si.post("/api/chat/groups", json!({"title": "Новости", "members": [pe_id]})).await;
+    let news = id(&n);
+    let (_, q1) = si.post(&format!("/api/chat/{news}/messages"), json!({"body": "Обновление 1С вечером"})).await;
+    let (code, r1) =
+        pe.post(&format!("/api/chat/{news}/messages"), json!({"body": "Во сколько?", "reply_to": id(&q1)})).await;
+    assert_eq!((code, r1["reply"]["preview"].as_str()), (StatusCode::CREATED, Some("Обновление 1С вечером")), "{r1}");
+    let (code, e) = pe.post(&format!("/api/chat/{news}/messages"), json!({"body": "x", "reply_to": id(&gm1)})).await;
+    assert_eq!((code, e["error"].as_str()), (StatusCode::BAD_REQUEST, Some("invalid_reply")), "ответ — в своём чате");
+    let react = format!("/api/chat/{news}/messages/{}/reactions", id(&q1));
+    assert_eq!(pe.put(&react, json!({"emoji": "👍"})).await.0, StatusCode::NO_CONTENT);
+    assert_eq!(si.put(&react, json!({"emoji": "👍"})).await.0, StatusCode::NO_CONTENT);
+    assert_eq!(si.put(&react, json!({"emoji": "💩"})).await.0, StatusCode::BAD_REQUEST, "только из списка");
+    let (_, msgs) = si.get(&format!("/api/chat/{news}/messages")).await;
+    let r = &msgs[0]["reactions"][0];
+    assert_eq!(
+        (r["emoji"].as_str(), r["count"].as_i64(), r["mine"].as_bool(), r["names"].as_array().map(Vec::len)),
+        (Some("👍"), Some(2), Some(true), Some(2)),
+        "{msgs}"
+    );
+    assert_eq!(si.put(&react, json!({"emoji": "👍"})).await.0, StatusCode::NO_CONTENT, "повторно — снять");
+    let (_, msgs) = si.get(&format!("/api/chat/{news}/messages")).await;
+    assert_eq!(msgs[0]["reactions"][0]["count"], 1, "{msgs}");
+    // Закрепляют в группе владелец и администраторы.
+    let pin = format!("/api/chat/{news}/pin");
+    assert_eq!(pe.put(&pin, json!({"message": id(&q1)})).await.0, StatusCode::FORBIDDEN);
+    assert_eq!(si.put(&pin, json!({"message": id(&gm1)})).await.0, StatusCode::NOT_FOUND, "сообщение другого чата");
+    assert_eq!(si.put(&pin, json!({"message": id(&q1)})).await.0, StatusCode::NO_CONTENT);
+    let (_, d) = pe.get(&format!("/api/chat/{news}")).await;
+    assert_eq!(
+        (d["pinned_message"]["preview"].as_str(), d["can_pin"].as_bool()),
+        (Some("Обновление 1С вечером"), Some(false)),
+        "{d}"
+    );
+    assert_eq!(pe.post(&format!("/api/chat/{news}/read"), json!({})).await.0, StatusCode::NO_CONTENT);
+    let (_, d) = si.get(&format!("/api/chat/{news}")).await;
+    assert!(d["read_upto"].is_string(), "собеседник прочитал: {d}");
+    assert_eq!(pe.post(&format!("/api/chat/{news}/typing"), json!({})).await.0, StatusCode::NO_CONTENT);
+    // Пересылка: текст и вложения копируются, видно автора исходного сообщения.
+    let (_, dm) = pe.get(&format!("/api/chat/{direct}/messages")).await;
+    let with_files = dm.as_array().unwrap().iter().find(|m| m["files"].as_array().unwrap().len() == 2).unwrap();
+    let forward = format!("/api/chat/{direct}/messages/{}/forward", id(with_files));
+    let (code, fw) = pe.post(&forward, json!({"to": news})).await;
+    assert_eq!(
+        (code, fw["forwarded_from_name"].is_string(), fw["files"].as_array().map(Vec::len)),
+        (StatusCode::CREATED, true, Some(2)),
+        "{fw}"
+    );
+    let copy = fw["files"][0]["id"].as_str().unwrap().to_string();
+    assert_eq!(si.download(&copy).await.0, StatusCode::OK, "копию видят участники того чата");
+    assert_eq!(si.download(&id(&pdf)).await.0, StatusCode::NOT_FOUND, "а исходник — нет");
+    assert_eq!(ko.post(&forward, json!({"to": news})).await.0, StatusCode::NOT_FOUND, "из чужого чата не переслать");
+    // Поиск по зашифрованному тексту («во сколько») и файлы чата.
+    let (_, found) =
+        si.get(&format!("/api/chat/{news}/search?q=%D0%B2%D0%BE%20%D1%81%D0%BA%D0%BE%D0%BB%D1%8C%D0%BA%D0%BE")).await;
+    assert_eq!(found.as_array().map(Vec::len), Some(1), "{found}");
+    let (_, files) = si.get(&format!("/api/chat/{news}/files")).await;
+    assert_eq!(files.as_array().map(Vec::len), Some(2), "{files}");
+    assert_eq!(si.put(&format!("/api/chat/{news}/prefs"), json!({"muted": true})).await.0, StatusCode::NO_CONTENT);
+    assert!(si.chats(false).await.iter().any(|c| c["id"] == news.as_str() && c["muted"] == true));
+    // Срок хранения вложений: содержимое стирается, отметка в переписке остаётся.
+    let retention = "/api/admin/chats/settings";
+    assert_eq!(si.put(retention, json!({"file_retention_days": 30})).await.0, StatusCode::FORBIDDEN);
+    assert_eq!(admin.put(retention, json!({"file_retention_days": 30})).await.0, StatusCode::NO_CONTENT);
+    // Пересланная копия считает срок от оригинала (kept_since): пересылка не продлевает хранение.
+    let kept: Option<String> = sqlx::query_scalar("SELECT kept_since::text FROM chat_files WHERE id = $1::uuid")
+        .bind(&copy)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(kept.is_some(), "у копии нет kept_since");
+    sqlx::query("UPDATE chat_files SET kept_since = now() - interval '40 days' WHERE id = $1::uuid")
+        .bind(&copy)
+        .execute(&pool)
+        .await
+        .unwrap();
+    pult_chat::sweep_blocked(&pool).await.unwrap();
+    assert_eq!(si.download(&copy).await.0, StatusCode::GONE);
+    let (_, msgs) = si.get(&format!("/api/chat/{news}/messages")).await;
+    assert!(msgs.to_string().contains("\"expired\":true"), "{msgs}");
+    let (_, st) = admin.get("/api/admin/chats/storage").await;
+    assert_eq!((st["expired_files"].as_i64(), st["file_retention_days"].as_i64()), (Some(1), Some(30)), "{st}");
+    assert_eq!(admin.put(retention, json!({"file_retention_days": 0})).await.0, StatusCode::NO_CONTENT);
+
     // 4. Учётка владельца отключена в AD: владение — самому давнему администратору, уведомление — только ему.
     sqlx::query("UPDATE users SET is_active = false WHERE id = $1::uuid").bind(&iv_id).execute(&pool).await.unwrap();
     assert_eq!(pult_chat::sweep_blocked(&pool).await.unwrap(), 1, "только групповой чат; личный диалог не трогается");

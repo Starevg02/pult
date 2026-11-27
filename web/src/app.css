@@ -195,3 +195,141 @@ html {
   padding-left: 0.75rem;
   color: var(--muted);
 }
+
+/* Статья базы знаний «как в Telegraph»: колонка ~680 px, текст с засечками 18 px, заголовки без засечек.
+   Шрифты только системные (CSP `default-src 'self'`). */
+.telegraph-title {
+  font-family: Georgia, Cambria, "Times New Roman", serif;
+  font-size: clamp(1.75rem, 1.2rem + 2.2vw, 2.5rem);
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.telegraph-body {
+  font-family: Georgia, Cambria, "Times New Roman", serif;
+  font-size: 1.125rem;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.telegraph-body > * + * {
+  margin-top: 1.1em;
+}
+.telegraph-body .tg-h2,
+.telegraph-body .tg-h3 {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  line-height: 1.3;
+  scroll-margin-top: 5rem;
+}
+.telegraph-body .tg-h2 {
+  font-size: 1.5rem;
+  margin-top: 1.8em;
+}
+.telegraph-body .tg-h3 {
+  font-size: 1.2rem;
+  margin-top: 1.5em;
+}
+.telegraph-body .tg-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+.telegraph-body ul {
+  list-style: disc;
+  padding-left: 1.5em;
+}
+.telegraph-body ol {
+  list-style: decimal;
+  padding-left: 1.5em;
+}
+.telegraph-body li + li {
+  margin-top: 0.35em;
+}
+.telegraph-body blockquote {
+  border-left: 3px solid var(--ink);
+  padding-left: 1.1em;
+  font-style: italic;
+}
+.telegraph-body code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--sunken);
+  padding: 0.1em 0.35em;
+  border-radius: 0.3rem;
+}
+.telegraph-body pre {
+  font-size: 0.95rem;
+  line-height: 1.55;
+  overflow-x: auto;
+  background: var(--sunken);
+  padding: 0.9rem 1.1rem;
+  border-radius: 0.75rem;
+}
+.telegraph-body pre code {
+  padding: 0;
+  background: none;
+  font-size: inherit;
+}
+.telegraph-body hr {
+  border: 0;
+  text-align: center;
+  margin: 2em 0;
+}
+.telegraph-body hr::after {
+  content: "* * *";
+  color: var(--muted);
+  letter-spacing: 0.6em;
+}
+.telegraph-body .tg-figure img {
+  display: block;
+  width: 100%;
+  max-height: 80vh;
+  object-fit: contain;
+  border-radius: 0.5rem;
+  background: var(--sunken);
+}
+.telegraph-body .tg-figure figcaption {
+  margin-top: 0.5em;
+  text-align: center;
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+@media print {
+  .telegraph-body {
+    font-size: 12pt;
+  }
+}
+
+/* Переписка: фон ленты сообщений, пузырь своего сообщения. */
+.chat-wallpaper {
+  background-color: light-dark(#eef1f6, #0f1217);
+  background-image: radial-gradient(light-dark(rgb(79 70 229 / 0.07), rgb(165 180 252 / 0.06)) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+.chat-bubble-mine {
+  background: light-dark(#e3e7ff, #2a2f5c);
+}
+.chat-bubble-other {
+  background: var(--paper);
+}
+/* «печатает…» — три точки по очереди. */
+.chat-typing-dots {
+  display: inline-block;
+  width: 1.1em;
+  height: 0.5em;
+  vertical-align: middle;
+  background:
+    radial-gradient(circle, currentColor 0.11em, transparent 0.12em) 0 50% / 0.36em 0.36em no-repeat,
+    radial-gradient(circle, currentColor 0.11em, transparent 0.12em) 50% 50% / 0.36em 0.36em no-repeat,
+    radial-gradient(circle, currentColor 0.11em, transparent 0.12em) 100% 50% / 0.36em 0.36em no-repeat;
+  animation: chat-typing 1.2s infinite ease-in-out;
+}
+@keyframes chat-typing {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-typing-dots { animation: none; }
+}

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { TFunction } from "i18next";
 import { useEffect } from "react";
 import { api, ApiError, csrfToken, ok, type AnnouncementView } from "../../api/client";
+import { clearTyping, markTyping } from "../chat/chatUtil";
 
 /** Перевод ключа, собранного из значения с сервера (статус, канал…). */
 export const dyn = (t: TFunction, key: string) => t(key as never) as string;
@@ -72,13 +73,38 @@ export function useServerEvents(enabled: boolean) {
     es.addEventListener("ticket", tickets);
     es.addEventListener("notification", notifications);
     es.addEventListener("announcement", announcements);
-    // Переписка: список, открытый чат и его сообщения перечитываются (текст в событии не передаётся).
-    const chats = () => {
+    // Переписка: в событии только номер чата (текст не передаётся) — перечитываются список и этот чат.
+    const chatOf = (e: Event): { chat?: string; from?: string } => {
+      try {
+        const v = JSON.parse((e as MessageEvent<string>).data) as { chat?: string; from?: string | null };
+        return { chat: v.chat ?? undefined, from: v.from ?? undefined };
+      } catch {
+        return {};
+      }
+    };
+    const chats = (e?: Event) => {
+      const { chat } = e ? chatOf(e) : {};
       void qc.invalidateQueries({ queryKey: ["chats"] });
-      void qc.invalidateQueries({ queryKey: ["chat"] });
-      void qc.invalidateQueries({ queryKey: ["chat-messages"] });
+      if (chat) {
+        clearTyping(chat);
+        void qc.invalidateQueries({ queryKey: ["chat", chat] });
+        void qc.invalidateQueries({ queryKey: ["chat-messages", chat] });
+        void qc.invalidateQueries({ queryKey: ["chat-files", chat] });
+      } else {
+        void qc.invalidateQueries({ queryKey: ["chat"] });
+        void qc.invalidateQueries({ queryKey: ["chat-messages"] });
+      }
     };
     es.addEventListener("chat", chats);
+    // Собеседник прочитал — галочки «✓✓»; собеседник печатает — «печатает…» в шапке.
+    es.addEventListener("chat_read", (e) => {
+      const { chat } = chatOf(e);
+      if (chat) void qc.invalidateQueries({ queryKey: ["chat", chat] });
+    });
+    es.addEventListener("typing", (e) => {
+      const { chat, from } = chatOf(e);
+      if (chat && from) markTyping(chat, from);
+    });
     // Стены и лента: новая или удалённая запись.
     const walls = () => {
       void qc.invalidateQueries({ queryKey: ["feed"] });

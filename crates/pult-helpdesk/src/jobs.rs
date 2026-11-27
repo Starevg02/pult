@@ -28,11 +28,12 @@ pub fn definitions() -> Vec<JobDefinition> {
     ]
 }
 
-/// Файлы, загруженные, но так и не прикреплённые за сутки.
+/// Файлы, загруженные, но так и не прикреплённые за сутки (ни к заявке, ни к статье базы знаний).
 pub async fn files_gc(core: &Core, st: &HelpdeskState) -> ApiResult<usize> {
     let gone: Vec<(Uuid, String)> = sqlx::query_as(
         "DELETE FROM files f WHERE f.created_at < now() - interval '1 day'
             AND NOT EXISTS (SELECT 1 FROM ticket_attachments a WHERE a.file_id = f.id)
+            AND NOT EXISTS (SELECT 1 FROM kb_attachments k WHERE k.file_id = f.id)
          RETURNING f.id, f.sha256",
     )
     .fetch_all(&core.db)
