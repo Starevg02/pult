@@ -843,6 +843,9 @@ GIF не уменьшается до 1 МБ даже с пропуском ка�
 Слишком часто. Повторите через минуту.	Too many requests. Try again in a minute.
 Сервер сейчас занят поиском. Повторите через несколько секунд.	The server is busy searching. Try again in a few seconds.
 Это не GIF.	This is not a GIF.
-GIF больше {} МБ.	The GIF is larger than {} MB.
-В подборке уже {} GIF — уберите ненужные.	Your collection already has {} GIFs — remove the ones you don't need.
-Подборка заняла {} МБ — уберите ненужные GIF.	Your collection takes {} MB — remove the GIFs you don't need.
+GIF больше {GIF_MAX_MB} МБ.	The GIF is larger than {GIF_MAX_MB} MB.
+В подборке уже {GIFS_MAX} GIF — уберите ненужные.	Your collection already has {GIFS_MAX} GIFs — remove the ones you don't need.
+Подборка заняла {GIFS_TOTAL_MB} МБ — уберите ненужные GIF.	Your collection takes {GIFS_TOTAL_MB} MB — remove the GIFs you don't need.
+GIF не правится.	A GIF cannot be edited.
+Ключ KLIPY — от 8 до 128 латинских букв, цифр, «-» и «_».	A KLIPY key is 8 to 128 Latin letters, digits, "-" and "_".
+Этот GIF не получается отправить.	This GIF cannot be sent.
