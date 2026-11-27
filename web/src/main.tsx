@@ -3,6 +3,7 @@ import { RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ApiError } from "./api/client";
+import "./emoji-font.css";
 import "./app.css";
 import { Crash } from "./crash";
 import "./i18n";

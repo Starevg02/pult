@@ -1,5 +1,6 @@
 // Общие элементы интерфейса в стиле макетов (mockups/v7): графитовые основные кнопки, индиго — акцент.
-import { useEffect, useId, useRef, useState, type ComponentProps, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type Ref } from "react";
+import { useEffect, useId, useRef, useState, type ComponentProps, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type Ref } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { ApiError } from "./api/client";
 import { IconAlert, IconCheck, IconChevronDown, IconCopy, IconInbox, IconInfo, IconX } from "./icons";
@@ -258,8 +259,24 @@ export function Toaster() {
   const { t } = useTranslation();
   const items = useToasts();
   const last = items[items.length - 1];
+  // Сообщения — в верхнем слое браузера (popover): иначе открытое модальное окно накрывает их своим фоном.
+  // Каждое новое сообщение заново поднимает слой — над окном, открытым позже.
+  const region = useRef<HTMLDivElement>(null);
+  const count = items.length;
+  useEffect(() => {
+    const el = region.current;
+    if (!el || typeof el.showPopover !== "function") return;
+    try {
+      if (el.matches(":popover-open")) el.hidePopover();
+      el.showPopover();
+    } catch {
+      // Старый браузер — область остаётся обычным слоем.
+    }
+  }, [count]);
   return (
     <div
+      ref={region}
+      popover="manual"
       role="region"
       aria-label={t("toast.region")}
       // Пока указатель или фокус на сообщениях — они не исчезают (WCAG 2.2.1).
@@ -267,7 +284,7 @@ export function Toaster() {
       onMouseLeave={() => pauseToasts(false)}
       onFocus={() => pauseToasts(true)}
       onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && pauseToasts(false)}
-      className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex flex-col items-center gap-2 px-4 sm:inset-x-auto sm:right-4 sm:items-end"
+      className="pointer-events-none fixed inset-x-0 top-auto bottom-4 z-50 m-0 flex h-auto w-auto flex-col items-center gap-2 overflow-visible border-0 bg-transparent p-0 px-4 text-inherit sm:left-auto sm:right-4 sm:items-end"
     >
       {/* Диктору — только текст последнего сообщения (без кнопок «Закрыть»); область есть всегда, и пустая. */}
       <div role="status" className="sr-only">
@@ -296,18 +313,36 @@ export type MenuEntry = { key: string; label: string; icon?: ReactNode; onSelect
 /** Кнопка с выпадающим меню (WAI-ARIA menu button): стрелки, Home/End, первая буква, Esc — назад на кнопку. */
 export function MenuButton({ label, icon, items, variant = "secondary", iconOnly }: { label: string; icon?: ReactNode; items: MenuEntry[]; variant?: Variant; iconOnly?: boolean }) {
   const [open, setOpen] = useState(false);
-  const [alignEnd, setAlignEnd] = useState(false);
+  // Положение меню на экране: оно рисуется поверх страницы (портал), рамки с overflow его не обрезают.
+  const [place, setPlace] = useState<CSSProperties>({});
+  const [origin, setOrigin] = useState("origin-top-left");
+  // В модальном окне меню живёт внутри него: всё снаружи модального окна недоступно.
+  const [host, setHost] = useState<HTMLElement | null>(null);
   const box = useRef<HTMLDivElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const menuId = useId();
   const triggerId = useId();
   const enabled = items.map((x, i) => (x.disabled ? -1 : i)).filter((i) => i >= 0);
+  // Значки — в одном столбце: пункты без значка выровнены по тексту остальных; меню без значков — без отступа.
+  const withIcons = items.some((x) => x.icon);
   const focusAt = (i: number | undefined) => i !== undefined && refs.current[i]?.focus();
   const show = (first: "first" | "last") => {
     const r = trigger.current?.getBoundingClientRect();
-    // У правого края экрана меню раскрывается влево, чтобы не уйти за край (телефон).
-    setAlignEnd(!!r && r.left + 260 > window.innerWidth);
+    if (r) {
+      // У правого края экрана меню раскрывается влево, у нижнего — вверх.
+      const end = r.left + 260 > window.innerWidth;
+      const tall = items.length * 38 + 16;
+      const up = window.innerHeight - r.bottom < tall + 8 && r.top > window.innerHeight - r.bottom;
+      setPlace({
+        ...(up ? { bottom: window.innerHeight - r.top + 6 } : { top: r.bottom + 6 }),
+        ...(end ? { right: Math.max(8, window.innerWidth - r.right) } : { left: Math.max(8, r.left) }),
+        maxHeight: Math.max(160, (up ? r.top : window.innerHeight - r.bottom) - 16),
+      });
+      setOrigin(up ? (end ? "origin-bottom-right" : "origin-bottom-left") : end ? "origin-top-right" : "origin-top-left");
+    }
+    setHost(trigger.current?.closest("dialog") ?? document.body);
     setOpen(true);
     requestAnimationFrame(() => focusAt(first === "first" ? enabled[0] : enabled[enabled.length - 1]));
   };
@@ -317,11 +352,26 @@ export function MenuButton({ label, icon, items, variant = "secondary", iconOnly
   };
   useEffect(() => {
     if (!open) return;
+    const inside = (t: EventTarget | null) => t instanceof Node && (!!box.current?.contains(t) || !!menu.current?.contains(t));
     const outside = (e: MouseEvent) => {
-      if (!box.current?.contains(e.target as Node)) setOpen(false);
+      if (!inside(e.target)) setOpen(false);
+    };
+    // Меню стоит на месте экрана: если страница или лента прокрутилась, оно бы «отъехало» от кнопки.
+    const moved = (e: Event) => {
+      if (!inside(e.target)) setOpen(false);
+    };
+    const width = window.innerWidth;
+    const resized = () => {
+      if (window.innerWidth !== width) setOpen(false);
     };
     document.addEventListener("mousedown", outside);
-    return () => document.removeEventListener("mousedown", outside);
+    window.addEventListener("scroll", moved, true);
+    window.addEventListener("resize", resized);
+    return () => {
+      document.removeEventListener("mousedown", outside);
+      window.removeEventListener("scroll", moved, true);
+      window.removeEventListener("resize", resized);
+    };
   }, [open]);
   const onMenuKey = (e: ReactKeyboardEvent) => {
     const cur = refs.current.findIndex((el) => el === document.activeElement);
@@ -376,13 +426,17 @@ export function MenuButton({ label, icon, items, variant = "secondary", iconOnly
         {!iconOnly && label}
         {!iconOnly && <IconChevronDown size={14} className={`transition-transform ${open ? "rotate-180" : ""}`} />}
       </Button>
-      {open && (
+      {open &&
+        host &&
+        createPortal(
         <div
+          ref={menu}
           id={menuId}
           role="menu"
           aria-labelledby={triggerId}
           onKeyDown={onMenuKey}
-          className={`animate-pop-in absolute top-full z-40 mt-1.5 w-max max-w-[calc(100vw-2rem)] min-w-56 rounded-xl border border-line bg-paper p-1 shadow-xl ${alignEnd ? "right-0 origin-top-right" : "left-0 origin-top-left"}`}
+          style={place}
+          className={`animate-pop-in fixed z-[60] w-max max-w-[calc(100vw-1rem)] min-w-56 overflow-y-auto rounded-xl border border-line bg-paper p-1 shadow-xl ${origin}`}
         >
           {items.map((x, i) => (
             <div key={x.key}>
@@ -402,15 +456,18 @@ export function MenuButton({ label, icon, items, variant = "secondary", iconOnly
                 }}
                 className={`flex min-h-9 w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-sm outline-none hover:bg-hover focus:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent disabled:opacity-50 ${x.danger ? "text-bad" : "text-ink"}`}
               >
-                <span aria-hidden="true" className={x.danger ? "text-bad" : "text-muted"}>
-                  {x.icon}
-                </span>
+                {withIcons && (
+                  <span aria-hidden="true" className={`flex w-4 shrink-0 justify-center ${x.danger ? "text-bad" : "text-muted"}`}>
+                    {x.icon}
+                  </span>
+                )}
                 {x.label}
               </button>
             </div>
           ))}
-        </div>
-      )}
+        </div>,
+          host,
+        )}
     </div>
   );
 }

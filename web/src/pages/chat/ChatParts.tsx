@@ -198,7 +198,7 @@ export function EmojiPanel({ onPick, onClose, toggle, onGif, gifBusy }: PanelPro
   usePopover(box, toggle, onClose, false);
   const tabClass = (on: boolean) => `flex-1 rounded-full py-1.5 text-sm font-medium transition-colors ${on ? "bg-accent text-paper" : "text-muted hover:bg-hover hover:text-ink"}`;
   return (
-    <div ref={box} role="dialog" aria-label={t("chat.emoji")} className="absolute bottom-full left-0 z-20 mb-2 flex h-[25rem] w-[22rem] max-w-[calc(100vw-1.5rem)] animate-pop-in flex-col overflow-hidden rounded-2xl border border-line bg-paper shadow-2xl">
+    <div ref={box} role="dialog" aria-label={t("chat.emoji")} className="absolute bottom-full left-0 z-20 mb-2 flex h-[clamp(14rem,calc(100dvh-16rem),25rem)] w-[22rem] max-w-[calc(100vw-1.5rem)] animate-pop-in flex-col overflow-hidden rounded-2xl border border-line bg-paper shadow-2xl">
       <div className="min-h-0 flex-1">{tab === "emoji" ? <EmojiTab onPick={onPick} /> : <GifTab onGif={onGif} busy={gifBusy} />}</div>
       {onGif && (
         <div className="flex gap-1 border-t border-line p-1.5">
@@ -303,7 +303,7 @@ function GifTab({ onGif, busy: sending }: { onGif?: (gif: string) => void; busy?
       await postFile<ChatGif>("/api/chat/gifs", file);
       void qc.invalidateQueries({ queryKey: ["chat-gifs"] });
     } catch (e) {
-      toast(e instanceof Error ? e.message : t("common.error"), "bad");
+      toast((e instanceof Error && e.message) || t("common.error"), "bad");
     } finally {
       setBusy(false);
     }
@@ -313,7 +313,7 @@ function GifTab({ onGif, busy: sending }: { onGif?: (gif: string) => void; busy?
       await ok(api.DELETE("/api/chat/gifs/{gif}", { params: { path: { gif: id } } }));
       void qc.invalidateQueries({ queryKey: ["chat-gifs"] });
     } catch (e) {
-      toast(e instanceof Error ? e.message : t("common.error"), "bad");
+      toast((e instanceof Error && e.message) || t("common.error"), "bad");
     }
   };
   const gifs = list.data ?? [];

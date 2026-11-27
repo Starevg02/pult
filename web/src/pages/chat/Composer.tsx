@@ -82,7 +82,7 @@ export function Composer({ chat, editing, reply, onAddFiles, onEditLast, onJump,
       void qc.invalidateQueries({ queryKey: ["chats"] });
       void qc.invalidateQueries({ queryKey: ["chat-files", chat] });
     },
-    onError: (e) => toast(e instanceof Error ? e.message : t("common.error"), "bad"),
+    onError: (e) => toast((e instanceof Error && e.message) || t("common.error"), "bad"),
   });
   const ready = (text.trim() !== "" || files.length > 0) && uploading === 0 && !send.isPending;
   const submit = () => {

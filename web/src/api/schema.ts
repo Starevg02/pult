@@ -13353,6 +13353,13 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Не изменился */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             404: {
                 headers: {
                     [name: string]: unknown;

@@ -2,7 +2,7 @@
 // ширину колонки с подписью, цитаты и код. Разметка — markdown; ссылки открываются в новой вкладке,
 // картинки — только вложения портала (внешние адреса закрыты CSP и не подгружаются).
 import { useMemo, useState, type ReactNode } from "react";
-import Markdown, { type Components } from "react-markdown";
+import Markdown, { type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useTranslation } from "react-i18next";
 import type { KbFile } from "../../api/client";
@@ -89,7 +89,8 @@ export function TelegraphBody({ text }: { text: string }) {
 }
 
 /** Таблицы, ~~зачёркивание~~, списки задач и ссылки без скобок (GitHub Flavored Markdown). */
-const PLUGINS = [remarkGfm];
+// Одиночная тильда — обычный текст («~5 мин~»), зачёркивание — только двойной: ~~так~~.
+const PLUGINS: Options["remarkPlugins"] = [[remarkGfm, { singleTilde: false }]];
 
 /** Вложения статьи, которых нет в тексте: карточки для скачивания. */
 export function KbFiles({ files, text }: { files: KbFile[]; text: string }) {

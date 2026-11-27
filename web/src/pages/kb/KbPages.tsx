@@ -407,7 +407,7 @@ function ArticleForm({ initial, initialFiles, id }: { initial: FormState; initia
               maxLength={300}
               rows={1}
               onChange={(e) => setF({ ...f, title: e.target.value.replace(/\n/g, " ") })}
-              className="telegraph-title field-sizing-content w-full resize-none bg-transparent outline-none placeholder:text-muted/60"
+              className="telegraph-title field-sizing-content w-full resize-none rounded-md bg-transparent outline-none placeholder:text-muted/60 focus-visible:ring-2 focus-visible:ring-accent/30"
             />
             <div className="mt-3 flex flex-wrap gap-2 text-sm">
               <Select aria-label={t("kb.section")} value={f.section_id} onChange={(e) => setF({ ...f, section_id: e.target.value })} className="w-auto">

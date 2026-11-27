@@ -82,4 +82,5 @@ Docker: `docker compose -f deploy/compose.yml up -d --build`
 
 ## Лицензия
 
-MIT — [LICENSE](LICENSE).
+MIT — [LICENSE](LICENSE). Эмодзи — шрифт [Noto Color Emoji](https://github.com/googlefonts/noto-emoji) (Google),
+лицензия SIL Open Font License 1.1.

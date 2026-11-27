@@ -227,8 +227,27 @@ async fn gif_save_from_chat(
 
 /// Содержимое GIF из моей подборки.
 #[utoipa::path(get, path = "/api/chat/gifs/{gif}", tag = "chat", params(("gif" = Uuid, Path)),
-    responses((status = 200, description = "GIF"), (status = 404, body = pult_core::error::ErrorBody)))]
-async fn gif_get(State(core): State<Core>, user: CurrentUser, Path(gif): Path<Uuid>) -> ApiResult<Response> {
+    responses((status = 200, description = "GIF"), (status = 304, description = "Не изменился"), (status = 404, body = pult_core::error::ErrorBody)))]
+async fn gif_get(
+    State(core): State<Core>,
+    user: CurrentUser,
+    Path(gif): Path<Uuid>,
+    headers: axum::http::HeaderMap,
+) -> ApiResult<Response> {
+    // Метка содержимого — его SHA-256: повторное открытие подборки получает 304 без расшифровки.
+    let hash: Option<Vec<u8>> = sqlx::query_scalar("SELECT sha256 FROM chat_gifs WHERE id = $1 AND user_id = $2")
+        .bind(gif)
+        .bind(user.user_id)
+        .fetch_optional(&core.db)
+        .await?;
+    let hex: String = hash.ok_or(ApiError::NotFound)?.iter().map(|b| format!("{b:02x}")).collect();
+    let etag = format!("\"{hex}\"");
+    // no-cache: браузер хранит копию, но перед показом спрашивает сервер — после выхода из учётки
+    // (на общем компьютере) GIF без входа не покажется.
+    let cache = (header::CACHE_CONTROL, "private, no-cache".to_string());
+    if headers.get(header::IF_NONE_MATCH).and_then(|v| v.to_str().ok()) == Some(etag.as_str()) {
+        return Ok((StatusCode::NOT_MODIFIED, [(header::ETAG, etag), cache]).into_response());
+    }
     let _slot = DOWNLOADS.try_acquire().map_err(|_| ApiError::TooManyRequests {
         message: "Сервер сейчас отдаёт много файлов. Повторите через минуту.".into(),
         retry_after_secs: 30,
@@ -239,15 +258,7 @@ async fn gif_get(State(core): State<Core>, user: CurrentUser, Path(gif): Path<Uu
         .fetch_optional(&core.db)
         .await?;
     let data = core.secrets.decrypt_bytes(&enc.ok_or(ApiError::NotFound)?).map_err(ApiError::internal)?;
-    Ok((
-        [
-            (header::CONTENT_TYPE, "image/gif".to_string()),
-            // Как у вложений переписки: на общем компьютере в кэше браузера ничего не остаётся.
-            (header::CACHE_CONTROL, "no-store".to_string()),
-        ],
-        data,
-    )
-        .into_response())
+    Ok(([(header::CONTENT_TYPE, "image/gif".to_string()), (header::ETAG, etag), cache], data).into_response())
 }
 
 /// Убрать GIF из подборки. Отправленные копии остаются в переписке.

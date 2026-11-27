@@ -4,7 +4,8 @@
 // читает старое: внизу появляется кнопка со счётчиком. На телефоне переписка открывается во весь экран.
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { api, ok, type ChatDetail, type ChatMessage, type ChatSharedFile } from "../../api/client";
 import { formatDate, formatDay, formatTime, tone } from "../../format";
@@ -255,7 +256,7 @@ export function Conversation({ id }: { id: string }) {
 
   // ---------------------------------------------------------------- действия
   const refreshMessages = () => void qc.invalidateQueries({ queryKey: ["chat-messages", id] });
-  const fail = (e: unknown) => toast(e instanceof Error ? e.message : t("common.error"), "bad");
+  const fail = (e: unknown) => toast((e instanceof Error && e.message) || t("common.error"), "bad");
   const prefs = useMutation({
     mutationFn: (body: { pinned?: boolean; hidden?: boolean; muted?: boolean }) => ok(api.PUT("/api/chat/{id}/prefs", { params: { path: { id } }, body })),
     onSuccess: () => {
@@ -460,7 +461,7 @@ export function Conversation({ id }: { id: string }) {
                     return (
                       <li key={m.id}>
                         {newDay && (
-                          <div className="sticky top-0 z-[2] my-3 flex justify-center">
+                          <div className="my-3 flex justify-center">
                             <span className="rounded-full bg-black/30 px-3 py-1 text-xs font-medium text-white backdrop-blur-sm">{formatDay(m.created_at, i18n.language)}</span>
                           </div>
                         )}
@@ -577,10 +578,32 @@ function Bubble(p: BubbleProps) {
   const { m, mine, group } = p;
   const { t, i18n } = useTranslation();
   const [picking, setPicking] = useState(false);
-  // У верхнего края ленты выбор открывается вниз, иначе его обрежет прокрутка.
-  const [below, setBelow] = useState(false);
+  // Выбор реакции рисуется поверх страницы у кнопки (или у сообщения): лента его не обрезает.
+  const [pickAt, setPickAt] = useState<CSSProperties>({});
   const smile = useRef<HTMLButtonElement>(null);
+  const pickBox = useRef<HTMLDivElement>(null);
   const closePicker = useCallback(() => setPicking(false), []);
+  const openPicker = (r: DOMRect | undefined) => {
+    if (!r) return;
+    const up = r.top > 64;
+    const w = Math.min(288, window.innerWidth - 16);
+    const left = mine ? r.right - w : r.left;
+    setPickAt({
+      ...(up ? { bottom: window.innerHeight - r.top + 6 } : { top: r.bottom + 6 }),
+      left: Math.max(8, Math.min(left, window.innerWidth - w - 8)),
+      width: w,
+    });
+    setPicking(true);
+  };
+  // Лента прокрутилась — выбор закрывается, чтобы не висеть отдельно от сообщения.
+  useEffect(() => {
+    if (!picking) return;
+    const moved = (e: Event) => {
+      if (!(e.target instanceof Node && pickBox.current?.contains(e.target))) setPicking(false);
+    };
+    window.addEventListener("scroll", moved, true);
+    return () => window.removeEventListener("scroll", moved, true);
+  }, [picking]);
   const images = m.files.filter((f) => f.image && !f.expired);
   const docs = m.files.filter((f) => !f.image || f.expired);
   const big = !m.reply && !m.forwarded_from_name && m.files.length === 0 && onlyEmoji(m.body);
@@ -600,10 +623,7 @@ function Bubble(p: BubbleProps) {
       () => toast(t("common.error"), "bad"),
     );
   };
-  const reactFromMenu = () => {
-    setBelow((document.getElementById(`msg-${m.id}`)?.getBoundingClientRect().top ?? 999) < 220);
-    setPicking(true);
-  };
+  const reactFromMenu = () => openPicker(document.getElementById(`msg-${m.id}`)?.getBoundingClientRect());
   const menu = [
     ...(p.canWrite ? [{ key: "react", label: t("chat.react"), icon: <IconSmile size={16} />, onSelect: reactFromMenu }] : []),
     ...(p.canWrite ? [{ key: "reply", label: t("chat.reply"), icon: <IconReply size={16} />, onSelect: p.onReply }] : []),
@@ -615,7 +635,7 @@ function Bubble(p: BubbleProps) {
     ...(m.version > 1 && p.canVersions ? [{ key: "versions", label: t("chat.versions"), onSelect: p.onVersions, separated: true }] : []),
   ];
   const meta = (chip: boolean) => (
-    <span className={`inline-flex items-center gap-1 text-[11px] leading-4 whitespace-nowrap select-none ${chip ? "chat-meta-chip py-0.5" : mine ? "text-white/75" : "text-muted"}`}>
+    <span className={`inline-flex items-center gap-1 text-[11px] leading-4 whitespace-nowrap select-none ${chip ? "chat-meta-chip" : mine ? "text-white/75" : "text-muted"}`}>
       {m.version > 1 && <span>{t("chat.edited")}</span>}
       <time dateTime={m.created_at} title={formatDate(m.created_at, i18n.language)}>
         {formatTime(m.created_at, i18n.language)}
@@ -722,7 +742,7 @@ function Bubble(p: BubbleProps) {
           {(big || bare) && m.reactions.length > 0 && <Reactions items={m.reactions} disabled={!p.canWrite} onToggle={p.onReact} mine={false} />}
         </div>
         {/* Действия: на мыши — при наведении, на сенсорном экране — всегда. */}
-        <div className="mb-1 flex shrink-0 items-center gap-0.5 rounded-full bg-paper/85 p-0.5 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover/msg:opacity-100 focus-within:opacity-100 [@media(hover:none)]:bg-transparent [@media(hover:none)]:opacity-100 [@media(hover:none)]:shadow-none">
+        <div className="mb-1 flex shrink-0 items-center gap-0.5 rounded-full bg-paper/85 p-0.5 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover/msg:opacity-100 focus-within:opacity-100 has-[[aria-expanded=true]]:opacity-100 [@media(hover:none)]:bg-transparent [@media(hover:none)]:opacity-100 [@media(hover:none)]:shadow-none">
           {p.canWrite && (
             <>
               <button
@@ -731,10 +751,7 @@ function Bubble(p: BubbleProps) {
                 className="rounded-full p-1.5 text-muted hover:bg-hover hover:text-ink max-sm:hidden"
                 aria-label={t("chat.react")}
                 aria-expanded={picking}
-                onClick={(e) => {
-                  setBelow(e.currentTarget.getBoundingClientRect().top < 160);
-                  setPicking(!picking);
-                }}
+                onClick={(e) => (picking ? setPicking(false) : openPicker(e.currentTarget.getBoundingClientRect()))}
               >
                 <IconSmile size={16} />
               </button>
@@ -745,18 +762,20 @@ function Bubble(p: BubbleProps) {
           )}
           <MenuButton iconOnly variant="ghost" label={t("chat.messageActions")} icon={<IconMore size={16} />} items={menu} />
         </div>
-        {picking && (
-          <div className={`absolute z-20 ${below ? "top-full mt-1" : "bottom-full mb-1"} ${mine ? "right-0" : "left-0"}`}>
-            <ReactionPicker
-              toggle={smile}
-              onClose={closePicker}
-              onPick={(e) => {
-                setPicking(false);
-                p.onReact(e);
-              }}
-            />
-          </div>
-        )}
+        {picking &&
+          createPortal(
+            <div ref={pickBox} className={`fixed z-[60] flex ${mine ? "justify-end" : "justify-start"}`} style={pickAt}>
+              <ReactionPicker
+                toggle={smile}
+                onClose={closePicker}
+                onPick={(e) => {
+                  setPicking(false);
+                  p.onReact(e);
+                }}
+              />
+            </div>,
+            document.body,
+          )}
       </div>
     </div>
   );

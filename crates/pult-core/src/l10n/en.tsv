@@ -842,3 +842,7 @@ GIF не уменьшается до 1 МБ даже с пропуском ка�
 Срок хранения — не больше 3650 дней.	The retention period is at most 3650 days.
 Слишком часто. Повторите через минуту.	Too many requests. Try again in a minute.
 Сервер сейчас занят поиском. Повторите через несколько секунд.	The server is busy searching. Try again in a few seconds.
+Это не GIF.	This is not a GIF.
+GIF больше {} МБ.	The GIF is larger than {} MB.
+В подборке уже {} GIF — уберите ненужные.	Your collection already has {} GIFs — remove the ones you don't need.
+Подборка заняла {} МБ — уберите ненужные GIF.	Your collection takes {} MB — remove the GIFs you don't need.

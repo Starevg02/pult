@@ -19,7 +19,8 @@ automatically.
   прыгает, пока догружаются картинки, а на телефоне переписка открывается на весь экран.
 - GIF в переписке: личная подборка «Мои GIF» (до 200 GIF, до 10 МБ каждый) — загрузить с компьютера или
   сохранить из чата, отправить одним нажатием.
-- Новая панель эмодзи: разделы, поиск по словам на русском и английском, недавние.
+- Новая панель эмодзи: разделы, поиск по словам на русском и английском, недавние. Эмодзи теперь одного вида на
+  всех компьютерах (набор Noto, на Mac и iPhone — родные Apple), а не угловатые системные Windows 10.
 - База знаний: таблицы, зачёркнутый текст, списки задач; кнопка «Таблица» в редакторе.
 - Письма оформлены карточкой: название организации, номер заявки, цветная полоса по смыслу письма, текст в
   рамке, кнопки. Служебные письма администраторам — в том же оформлении.
@@ -28,6 +29,10 @@ automatically.
 - Надёжность: реакция на телефоне — из меню сообщения; поиск и файлы на телефоне закрываются после перехода к
   сообщению; кнопка «Назад», если чат не открылся; GIF не уходит дважды; удаление GIF — с подтверждением;
   подборка GIF ограничена по объёму и частоте пополнения, файл GIF проверяется по полной сигнатуре.
+- Исправлено: меню «…» и «+» больше не обрезаются рамкой списка или переписки (у нижнего края открываются
+  вверх); у поля ввода нет второй прямоугольной рамки при фокусе; выбор реакции не прячется за краем ленты;
+  меню профиля не уходит под карточку справочника; всплывающие сообщения видны поверх открытых окон; ошибки
+  подборки GIF переведены на английский и китайский; «Мои GIF» не перекачиваются при каждом открытии.
 
 ### English
 
@@ -36,7 +41,8 @@ automatically.
   longer jumps while images load, and on a phone the chat opens full screen.
 - GIFs in chats: a personal "My GIFs" collection (up to 200 GIFs, up to 10 MB each) — upload from your computer
   or save from a chat, send with one tap.
-- A new emoji panel: categories, search by Russian and English words, recently used.
+- A new emoji panel: categories, search by Russian and English words, recently used. Emoji look the same on every
+  computer (the Noto set; native Apple emoji on a Mac or iPhone) instead of the Windows 10 system ones.
 - Knowledge base: tables, strikethrough, task lists; a "Table" button in the editor.
 - Emails are styled as a card: organization name, request number, a color strip by message meaning, the text in
   a frame, buttons. Service emails to administrators use the same design.
@@ -46,18 +52,26 @@ automatically.
   message; a Back button if a chat fails to open; a GIF is never sent twice; removing a GIF asks for
   confirmation; the GIF collection is limited in total size and how often it can grow, and a GIF file is
   checked by its full signature.
+- Fixed: the "…" and "+" menus are no longer cut off by the list or chat frame (near the bottom they open
+  upwards); the message box no longer shows a second rectangular focus frame; the reaction picker is not hidden
+  behind the edge of the chat; the account menu no longer goes under the phonebook card; toasts show above open
+  dialogs; GIF collection errors are translated; "My GIFs" are not downloaded again on every open.
 
 ### 中文
 
 - “消息”采用新外观：带图案的背景、带尾巴的彩色气泡、时间位于气泡右下角、无边框的图片拼贴、群组中彩色的头像和名字、
   大号表情。图片加载时视图不再跳动，在手机上会话全屏打开。
 - 会话中的 GIF：个人“我的 GIF”收藏（最多 200 个，每个不超过 10 MB）——可从电脑上传或从会话保存，一键发送。
-- 新的表情面板：分类、按俄文和英文关键词搜索、最近使用。
+- 新的表情面板：分类、按俄文和英文关键词搜索、最近使用。表情在所有电脑上外观一致（Noto 表情集，Mac 和 iPhone 上为 Apple 原生表情），
+  不再使用 Windows 10 的系统表情。
 - 知识库：表格、删除线、任务列表；编辑器中新增“表格”按钮。
 - 邮件采用卡片样式：组织名称、工单号、按含义区分颜色的色条、带边框的正文、按钮。发给管理员的服务邮件使用同样的样式。
 - 界面：首页更生动，新增“404”页面，并以清晰的错误页面取代 “Something went wrong!”，空列表显示彩色图标。
 - 可靠性：在手机上可从消息菜单添加回应；在手机上跳转到消息后搜索和文件面板会关闭；会话打开失败时显示“返回”按钮；
   GIF 不会重复发送；移除 GIF 需要确认；GIF 收藏限制总大小和添加频率，并按完整签名校验 GIF 文件。
+- 修复：“…”和“+”菜单不再被列表或会话边框截断（靠近底部时向上展开）；输入框获得焦点时不再出现第二个矩形边框；
+  回应选择器不再被会话边缘遮挡；账户菜单不再被通讯录卡片遮住；提示消息显示在打开的对话框之上；GIF 收藏的错误信息已翻译；
+  “我的 GIF”不会在每次打开时重新下载。
 
 ## 0.4.0 — мессенджер и база знаний · messenger and knowledge base · 消息与知识库
 

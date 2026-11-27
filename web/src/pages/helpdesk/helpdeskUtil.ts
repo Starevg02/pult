@@ -43,7 +43,7 @@ export async function postFile<T>(url: string, file: File): Promise<T> {
   const r = await fetch(url, { method: "POST", body: form, headers, credentials: "same-origin" });
   if (!r.ok) {
     const b = (await r.json().catch(() => ({}))) as { error?: string; message?: string };
-    throw new ApiError(r.status, b.error ?? "upload", b.message ?? r.statusText);
+    throw new ApiError(r.status, b.error ?? "upload", b.message || r.statusText || `HTTP ${r.status}`);
   }
   return (await r.json()) as T;
 }

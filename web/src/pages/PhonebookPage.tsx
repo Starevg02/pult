@@ -455,7 +455,7 @@ function PersonCard({
       </div>
     ) : null;
   return (
-    <aside className="animate-fade-in fixed inset-x-0 bottom-0 z-40 max-h-[80vh] overflow-y-auto rounded-t-2xl border border-line bg-paper p-5 shadow-xl md:inset-x-auto md:top-[4.5rem] md:right-4 md:bottom-4 md:w-80 md:max-h-none md:rounded-xl 2xl:sticky 2xl:max-h-[calc(100vh-5.5rem)] 2xl:w-auto 2xl:self-start 2xl:shadow-xs">
+    <aside className="animate-fade-in fixed inset-x-0 bottom-0 z-40 max-h-[80vh] md:z-10 overflow-y-auto rounded-t-2xl border border-line bg-paper p-5 shadow-xl md:inset-x-auto md:top-[4.5rem] md:right-4 md:bottom-4 md:w-80 md:max-h-none md:rounded-xl 2xl:sticky 2xl:max-h-[calc(100vh-5.5rem)] 2xl:w-auto 2xl:self-start 2xl:shadow-xs">
       <div className="mb-3 flex items-start gap-2">
         <UserAvatar name={`${p.last_name} ${p.first_name}`} userId={account?.user_id} avatar={account?.avatar} presence={account?.presence} size="md" />
         <button

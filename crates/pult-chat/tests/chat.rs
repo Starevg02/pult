@@ -115,6 +115,18 @@ impl Browser {
         let (status, headers) = (resp.status(), resp.headers().clone());
         (status, resp.into_body().collect().await.unwrap().to_bytes().to_vec(), headers)
     }
+    /// GET с If-None-Match: код ответа.
+    async fn revalidate(&mut self, uri: &str, etag: &str) -> StatusCode {
+        let c = self.cookies.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().join("; ");
+        let mut req = Request::builder()
+            .uri(uri)
+            .header(header::COOKIE, c)
+            .header(header::IF_NONE_MATCH, etag)
+            .body(Body::empty())
+            .unwrap();
+        req.extensions_mut().insert(ConnectInfo("10.1.1.1:5000".parse::<SocketAddr>().unwrap()));
+        self.app.clone().oneshot(req).await.unwrap().status()
+    }
     async fn upload(&mut self, chat: &str, name: &str, data: &[u8]) -> (StatusCode, Value) {
         let b = "XBOUNDARYX";
         let mut body = format!("--{b}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{name}\"\r\nContent-Type: application/octet-stream\r\n\r\n").into_bytes();
@@ -501,6 +513,10 @@ async fn chat_acceptance() {
         (code, data.as_slice(), headers[header::CONTENT_TYPE].to_str().unwrap()),
         (StatusCode::OK, GIF, "image/gif")
     );
+    assert_eq!(headers[header::CACHE_CONTROL], "private, no-cache");
+    let etag = headers[header::ETAG].to_str().unwrap().to_string();
+    assert_eq!(si.revalidate(&gif_url, &etag).await, StatusCode::NOT_MODIFIED, "повторное открытие — без перекачки");
+    assert_eq!(pe.revalidate(&gif_url, &etag).await, StatusCode::NOT_FOUND, "метка не открывает чужую подборку");
     assert_eq!(pe.get(&gif_url).await.0, StatusCode::NOT_FOUND, "чужая подборка не видна");
     let send_gif = format!("/api/chat/{news}/gifs/{}", id(&g));
     assert_eq!(pe.post(&send_gif, json!({})).await.0, StatusCode::NOT_FOUND, "чужой GIF не отправить");

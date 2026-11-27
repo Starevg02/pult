@@ -40,7 +40,7 @@
   --color-ok: var(--ok);
   --color-bad: var(--bad);
   --color-away: var(--away);
-  --font-sans: Inter, system-ui, sans-serif;
+  --font-sans: Inter, "Pult Emoji", system-ui, sans-serif;
   --font-mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
 }
 
@@ -63,10 +63,13 @@ body {
   font-size: 14px;
 }
 
-/* Видимый фокус клавиатуры для всего интерактивного (WCAG 2.4.7, 2.4.11). */
-:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+/* Видимый фокус клавиатуры для всего интерактивного (WCAG 2.4.7, 2.4.11). В слое base: иначе правило
+   вне слоёв перебивает утилиты (`outline-none` у поля ввода сообщения и т. п.) и рисует вторую рамку. */
+@layer base {
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
 }
 
 /* Движение: короткие появления (страница, меню, окно, сообщение). Только если система не просит
@@ -397,12 +400,12 @@ html {
   border-radius: 999px;
   background: rgb(0 0 0 / 0.42);
   color: #fff;
-  padding: 0 0.45rem;
+  padding: 0.125rem 0.45rem;
   backdrop-filter: blur(4px);
 }
-/* Эмодзи — цветным шрифтом системы. */
+/* Эмодзи — встроенным набором (emoji-font.css), системный — если чего-то в наборе нет. */
 .emoji {
-  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Segoe UI Symbol", sans-serif;
+  font-family: "Pult Emoji", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Segoe UI Symbol", sans-serif;
 }
 /* Цвета участников: аватар без фото и имя в групповом чате (по участнику, а не случайно). */
 .tone-0 { --tone-a: #ff885e; --tone-b: #ff516a; --tone-ink: light-dark(#d9363e, #ff9a9a); }
@@ -436,11 +439,6 @@ html {
   0%, 100% { opacity: 0.35; }
   50% { opacity: 1; }
 }
-/* Новое сообщение появляется снизу. */
-.chat-msg-in {
-  animation: pult-fade-in 200ms ease-out backwards;
-}
 @media (prefers-reduced-motion: reduce) {
-  .chat-typing-dots,
-  .chat-msg-in { animation: none; }
+  .chat-typing-dots { animation: none; }
 }
