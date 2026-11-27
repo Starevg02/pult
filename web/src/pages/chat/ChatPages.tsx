@@ -21,13 +21,13 @@ function ChatRow({ c, active, peer }: { c: ChatItem; active: boolean; peer?: Pre
       <Link
         to="/chats/$id"
         params={{ id: c.id }}
-        className={`mx-1.5 my-0.5 flex items-center gap-3 rounded-xl px-2.5 py-2 text-sm transition-colors ${active ? "bg-accent text-paper" : "hover:bg-hover"}`}
+        className={`mx-1.5 my-px flex items-center gap-3 rounded-2xl px-2.5 py-2 text-sm transition-colors ${active ? "bg-accent text-paper shadow-sm" : "hover:bg-hover"}`}
         aria-current={active ? "page" : undefined}
       >
-        <UserAvatar name={c.title} userId={c.peer_id} avatar={peer?.avatar} presence={peer?.presence} size="md" />
+        <UserAvatar name={c.title} userId={c.peer_id ?? c.id} avatar={peer?.avatar} presence={peer?.presence} size="ml" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <span className={`min-w-0 flex-1 truncate ${c.unread > 0 ? "font-semibold" : "font-medium"}`}>{c.title}</span>
+            <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{c.title}</span>
             {c.muted && (
               <>
                 <IconBellOff size={13} className={active ? "text-paper/70" : "text-muted"} />
@@ -37,13 +37,13 @@ function ChatRow({ c, active, peer }: { c: ChatItem; active: boolean; peer?: Pre
             {c.last_message_at && <span className={`shrink-0 text-[11px] tabular-nums ${active ? "text-paper/80" : c.unread > 0 && !c.muted ? "text-accent" : "text-muted"}`}>{formatShort(c.last_message_at, i18n.language)}</span>}
           </div>
           <div className="mt-0.5 flex items-center gap-1.5">
-            <span className={`min-w-0 flex-1 truncate text-[13px] ${active ? "text-paper/80" : "text-muted"}`}>
+            <span className={`min-w-0 flex-1 truncate ${active ? "text-paper/85" : "text-muted"}`}>
               {!c.active && <span className="mr-1">{t("chat.readOnly")} ·</span>}
               {preview}
             </span>
             {c.unread > 0 && !c.locked ? (
               <span
-                className={`min-w-5 shrink-0 rounded-full px-1.5 text-center text-xs leading-5 font-semibold tabular-nums ${active ? "bg-paper text-accent" : c.muted ? "bg-muted/40 text-paper" : "bg-accent text-paper"}`}
+                className={`min-w-[1.375rem] shrink-0 rounded-full px-1.5 text-center text-xs leading-[1.375rem] font-semibold tabular-nums ${active ? "bg-paper text-accent" : c.muted ? "bg-muted/45 text-paper" : "bg-accent text-paper"}`}
                 aria-label={t("chat.unread", { count: c.unread })}
               >
                 {c.unread > 999 ? "999+" : c.unread}

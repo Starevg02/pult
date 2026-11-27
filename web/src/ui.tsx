@@ -165,7 +165,7 @@ export function ErrorBox({ error, onRetry }: { error: unknown; onRetry?: () => v
 export function Empty({ children, hint, icon, action }: { children: ReactNode; hint?: ReactNode; icon?: ReactNode; action?: ReactNode }) {
   return (
     <div className="animate-fade-in flex flex-col items-center px-4 py-10 text-center">
-      <span aria-hidden="true" className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-sunken text-muted">
+      <span aria-hidden="true" className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-accentsoft text-accent">
         {icon ?? <IconInbox size={22} />}
       </span>
       <div className="text-sm font-medium text-ink">{children}</div>

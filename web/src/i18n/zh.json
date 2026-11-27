@@ -754,7 +754,8 @@
   },
   "notFound": {
     "title": "页面未找到",
-    "back": "首页"
+    "back": "首页",
+    "hint": "链接可能已过期，或页面已移动。"
   },
   "setup": {
     "title": "初始设置向导",
@@ -1179,7 +1180,9 @@
       "linkPrompt": "链接地址",
       "linkText": "链接",
       "sample": "文本",
-      "attach": "附加文件或图片"
+      "attach": "附加文件或图片",
+      "table": "表格",
+      "tableSample": "| 列 1 | 列 2 | 列 3 |\n| --- | --- | --- |\n| 文本 | 文本 | 文本 |\n| 文本 | 文本 | 文本 |"
     },
     "leaveConfirm": "离开此页面？未保存的更改将丢失。"
   },
@@ -2198,7 +2201,7 @@
     "older": "显示更早的消息",
     "noMessages": "暂无消息。",
     "message": "消息",
-    "placeholder": "消息…（Enter 发送，Shift+Enter 换行）",
+    "placeholder": "消息",
     "send": "发送",
     "editing": "编辑消息（发送后 15 分钟内可编辑）",
     "edited": "已编辑",
@@ -2292,7 +2295,27 @@
     "emoji": "表情",
     "dropHere": "松开以附加",
     "read": "已读",
-    "sent": "已发送"
+    "sent": "已发送",
+    "placeholderHint": "Enter 发送，Shift+Enter 换行",
+    "emojiTab": "表情",
+    "emojiSearch": "搜索表情",
+    "emojiRecent": "最近使用",
+    "emojiGroups": {
+      "smileys": "笑脸",
+      "people": "人物与手势",
+      "nature": "自然",
+      "food": "食物与饮料",
+      "activity": "活动",
+      "travel": "旅行与地点",
+      "objects": "物品",
+      "symbols": "符号"
+    },
+    "gifAdd": "添加",
+    "gifSend": "发送 GIF",
+    "gifRemove": "从我的 GIF 中移除",
+    "gifEmpty": "这里会显示你的 GIF。可以添加文件，或通过消息菜单保存聊天中的 GIF。",
+    "gifSave": "保存到我的 GIF",
+    "gifSaved": "GIF 已保存到“我的 GIF”"
   },
   "people": {
     "presence": {
@@ -2477,5 +2500,11 @@
     "request": "请求",
     "incident": "故障",
     "withForm": "含表单"
+  },
+  "crash": {
+    "title": "页面无法显示",
+    "hint": "界面出现错误。请刷新页面；如果无效，请联系 IT 支持。",
+    "reload": "刷新页面",
+    "details": "供 IT 支持查看的详细信息"
   }
 }

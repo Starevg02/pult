@@ -164,6 +164,7 @@ export type ChatQuote = components["schemas"]["ChatQuote"];
 export type ChatReaction = components["schemas"]["ChatReaction"];
 export type ChatSharedFile = components["schemas"]["ChatSharedFile"];
 export type ChatStorage = components["schemas"]["ChatStorage"];
+export type ChatGif = components["schemas"]["ChatGif"];
 export type ChatSettings = components["schemas"]["ChatSettings"];
 export type NetboxView = components["schemas"]["NetboxView"];
 export type NetboxState = components["schemas"]["NetboxState"];

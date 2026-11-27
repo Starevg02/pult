@@ -28,6 +28,9 @@ use utoipa::{IntoParams, ToSchema};
 use utoipa_axum::{router::OpenApiRouter, routes};
 use uuid::Uuid;
 
+mod gifs;
+pub use gifs::{ChatGif, ChatGifFromFile, ChatGifSend, GIF_MAX_MB, GIFS_MAX};
+
 /// Сколько минут автор может править сообщение.
 pub const EDIT_MINUTES: i64 = 15;
 /// Длина сообщения в символах.
@@ -152,6 +155,7 @@ where
         .routes(routes!(chat_admin_stats))
         .routes(routes!(chat_admin_storage))
         .routes(routes!(chat_admin_get_settings, chat_admin_put_settings))
+        .merge(gifs::routes())
 }
 
 // ------------------------------------------------------------------ Типы
@@ -2018,7 +2022,8 @@ async fn chat_admin_storage(State(core): State<Core>, user: CurrentUser) -> ApiR
     .await?;
     let (chat_tables_bytes, database_bytes): (i64, i64) = sqlx::query_as(
         "SELECT (pg_total_relation_size('chat_messages') + pg_total_relation_size('chat_message_versions')
-                 + pg_total_relation_size('chat_files') + pg_total_relation_size('chat_reactions'))::bigint,
+                 + pg_total_relation_size('chat_files') + pg_total_relation_size('chat_reactions')
+                 + pg_total_relation_size('chat_gifs'))::bigint,
                 pg_database_size(current_database())::bigint",
     )
     .fetch_one(&core.db)

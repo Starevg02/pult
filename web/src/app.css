@@ -296,23 +296,129 @@ html {
   font-size: 0.85rem;
   color: var(--muted);
 }
+.telegraph-body .tg-table {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+}
+.telegraph-body .tg-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.telegraph-body .tg-table th,
+.telegraph-body .tg-table td {
+  padding: 0.55em 0.85em;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+.telegraph-body .tg-table th {
+  background: var(--sunken);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.telegraph-body .tg-table tr:last-child td {
+  border-bottom: 0;
+}
+.telegraph-body .tg-table tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--sunken) 45%, transparent);
+}
+.telegraph-body del {
+  color: var(--muted);
+}
+.telegraph-body li:has(> input[type="checkbox"]) {
+  list-style: none;
+  margin-left: -1.3em;
+}
+.telegraph-body li > input[type="checkbox"] {
+  margin-right: 0.5em;
+  vertical-align: middle;
+}
 @media print {
   .telegraph-body {
     font-size: 12pt;
   }
 }
 
-/* Переписка: фон ленты сообщений, пузырь своего сообщения. */
+/* Переписка: фон ленты (градиент и узор), пузыри с хвостиком, цвета участников. */
 .chat-wallpaper {
-  background-color: light-dark(#eef1f6, #0f1217);
-  background-image: radial-gradient(light-dark(rgb(79 70 229 / 0.07), rgb(165 180 252 / 0.06)) 1px, transparent 1px);
-  background-size: 18px 18px;
+  background-color: light-dark(#dfe6f5, #0e1220);
+  background-image:
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'240'%20height%3D'240'%20viewBox%3D'0%200%20240%20240'%20fill%3D'none'%20stroke%3D'%237c83b8'%20stroke-opacity%3D'.22'%20stroke-width%3D'1.6'%20stroke-linecap%3D'round'%20stroke-linejoin%3D'round'%3E%3Cpath%20d%3D'M22%2034l30-12-9%2030-6-11z'%2F%3E%3Cpath%20d%3D'M37%2041l15-19'%2F%3E%3Cpath%20d%3D'M150%2020h34a8%208%200%20018%208v16a8%208%200%2001-8%208h-20l-10%208v-8h-4a8%208%200%2001-8-8V28a8%208%200%20018-8z'%2F%3E%3Cpath%20d%3D'M96%2092c-6-8-20-4-17%207%202%207%2017%2015%2017%2015s15-8%2017-15c3-11-11-15-17-7z'%2F%3E%3Ccircle%20cx%3D'205'%20cy%3D'110'%20r%3D'9'%2F%3E%3Cpath%20d%3D'M200%20110h10M205%20105v10'%2F%3E%3Cpath%20d%3D'M30%20150l6%2012%2013%202-9%209%202%2013-12-6-12%206%202-13-9-9%2013-2z'%2F%3E%3Cpath%20d%3D'M120%20170c8-8%2016%208%2024%200s16%208%2024%200'%2F%3E%3Crect%20x%3D'182'%20y%3D'176'%20width%3D'30'%20height%3D'22'%20rx%3D'4'%2F%3E%3Cpath%20d%3D'M182%20182l15%209%2015-9'%2F%3E%3Ccircle%20cx%3D'88'%20cy%3D'212'%20r%3D'3'%2F%3E%3Ccircle%20cx%3D'140'%20cy%3D'120'%20r%3D'2.5'%2F%3E%3Cpath%20d%3D'M60%20100l8%208M68%20100l-8%208'%2F%3E%3Cpath%20d%3D'M110%2030a10%2010%200%201018%206'%2F%3E%3C%2Fsvg%3E"),
+    radial-gradient(120% 90% at 0% 0%, light-dark(#c8d6ff, #1f2550) 0%, transparent 60%),
+    radial-gradient(120% 90% at 100% 100%, light-dark(#cfeee6, #10313a) 0%, transparent 60%),
+    linear-gradient(160deg, light-dark(#e6e9fb, #121632), light-dark(#e3f1f4, #0f1d26));
+  background-size: 240px 240px, 100% 100%, 100% 100%, 100% 100%;
+  background-attachment: local, scroll, scroll, scroll;
 }
 .chat-bubble-mine {
-  background: light-dark(#e3e7ff, #2a2f5c);
+  --bubble: light-dark(#4f46e5, #4338ca);
+  background: linear-gradient(165deg, light-dark(#7b6dff, #6457f5), var(--bubble));
+  color: #fff;
 }
 .chat-bubble-other {
-  background: var(--paper);
+  --bubble: var(--paper);
+  background: var(--bubble);
+}
+.chat-bubble-mine,
+.chat-bubble-other {
+  box-shadow: 0 1px 1.5px rgb(16 24 40 / 0.13);
+}
+/* Хвостик у последнего пузыря в группе сообщений. */
+.chat-tail-out::after,
+.chat-tail-in::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  width: 11px;
+  height: 18px;
+  background: var(--bubble);
+}
+.chat-tail-out::after {
+  right: -8px;
+  mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'11'%20height%3D'18'%20viewBox%3D'0%200%2011%2018'%3E%3Cpath%20d%3D'M0%200c0%209%204%2014%2011%2018H0z'%2F%3E%3C%2Fsvg%3E") no-repeat;
+}
+.chat-tail-in::after {
+  left: -8px;
+  mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'11'%20height%3D'18'%20viewBox%3D'0%200%2011%2018'%3E%3Cpath%20d%3D'M11%200c0%209-4%2014-11%2018h11z'%2F%3E%3C%2Fsvg%3E") no-repeat;
+}
+/* Внутри своего (цветного) пузыря: ссылки, код, цитаты — светлые. */
+.chat-bubble-mine a {
+  color: #fff;
+}
+.chat-bubble-mine code,
+.chat-bubble-mine pre {
+  background: rgb(255 255 255 / 0.18);
+}
+/* Подпись времени поверх картинки или крупного эмодзи. */
+.chat-meta-chip {
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.42);
+  color: #fff;
+  padding: 0 0.45rem;
+  backdrop-filter: blur(4px);
+}
+/* Эмодзи — цветным шрифтом системы. */
+.emoji {
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Segoe UI Symbol", sans-serif;
+}
+/* Цвета участников: аватар без фото и имя в групповом чате (по участнику, а не случайно). */
+.tone-0 { --tone-a: #ff885e; --tone-b: #ff516a; --tone-ink: light-dark(#d9363e, #ff9a9a); }
+.tone-1 { --tone-a: #ffcd6a; --tone-b: #ffa85c; --tone-ink: light-dark(#c2620a, #fbbf6a); }
+.tone-2 { --tone-a: #9ea8ff; --tone-b: #665fff; --tone-ink: light-dark(#5b4ef0, #b4b9ff); }
+.tone-3 { --tone-a: #a0de7e; --tone-b: #3fb95a; --tone-ink: light-dark(#1d8a3e, #8fe3a4); }
+.tone-4 { --tone-a: #53edd6; --tone-b: #20b2a3; --tone-ink: light-dark(#0c8577, #6ee7d6); }
+.tone-5 { --tone-a: #72d5fd; --tone-b: #2a9ef1; --tone-ink: light-dark(#0874c2, #8dd6ff); }
+.tone-6 { --tone-a: #e9a6f7; --tone-b: #c45fe0; --tone-ink: light-dark(#a92fc4, #f0b0ff); }
+.tone-avatar {
+  background: linear-gradient(160deg, var(--tone-a), var(--tone-b));
+  color: #fff;
+  text-shadow: 0 1px 1px rgb(0 0 0 / 0.12);
+}
+.tone-ink {
+  color: var(--tone-ink);
 }
 /* «печатает…» — три точки по очереди. */
 .chat-typing-dots {
@@ -330,6 +436,11 @@ html {
   0%, 100% { opacity: 0.35; }
   50% { opacity: 1; }
 }
+/* Новое сообщение появляется снизу. */
+.chat-msg-in {
+  animation: pult-fade-in 200ms ease-out backwards;
+}
 @media (prefers-reduced-motion: reduce) {
-  .chat-typing-dots { animation: none; }
+  .chat-typing-dots,
+  .chat-msg-in { animation: none; }
 }

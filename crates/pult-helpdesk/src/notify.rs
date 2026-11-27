@@ -4,7 +4,10 @@
 use crate::{schedule::AfterHours, settings::HelpdeskSettings, tickets::T};
 use pult_core::{
     ApiResult, Core,
-    mail::{MailSettings, Outgoing, ThreadHeaders, enqueue_message},
+    mail::{
+        MailSettings, Outgoing, ThreadHeaders, enqueue_message,
+        letter::{self, Button, Letter},
+    },
     notify,
     rbac::ROLE_SUPERADMIN,
     settings,
@@ -13,11 +16,12 @@ use serde_json::json;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
-/// Адрес портала и домен для заголовков.
+/// Адрес портала, домен для заголовков и название организации (в оформлении письма).
 #[derive(Debug, Clone)]
 pub struct Ctx {
     pub portal: String,
     pub domain: String,
+    pub brand: String,
 }
 
 pub async fn ctx(core: &Core) -> ApiResult<Ctx> {
@@ -31,8 +35,9 @@ pub async fn ctx(core: &Core) -> ApiResult<Ctx> {
 pub async fn ctx_tx(tx: &mut Transaction<'_, Postgres>) -> Result<Ctx, sqlx::Error> {
     let h: HelpdeskSettings = settings::load(&mut **tx).await?;
     let m: MailSettings = settings::load(&mut **tx).await?;
+    let org: pult_core::org::OrgSettings = settings::load(&mut **tx).await?;
     let domain = m.from_address.rsplit_once('@').map(|(_, d)| d.to_string()).unwrap_or_else(|| "pult.local".into());
-    Ok(Ctx { portal: h.portal_url.trim_end_matches('/').to_string(), domain })
+    Ok(Ctx { portal: h.portal_url.trim_end_matches('/').to_string(), domain, brand: org.name.trim().to_string() })
 }
 
 /// Письмо на произвольный адрес (отчёт).
@@ -109,20 +114,25 @@ pub enum Msg<'a> {
     },
 }
 
-fn esc(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
-}
-
-fn para(s: &str) -> String {
-    format!("<p style=\"white-space:pre-wrap\">{}</p>", esc(s))
-}
-
-fn button(url: &str, text: &str, color: &str) -> String {
-    format!(
-        "<a href=\"{}\" style=\"display:inline-block;padding:10px 18px;margin-right:8px;border-radius:8px;background:{color};color:#fff;text-decoration:none\">{}</a>",
-        esc(url),
-        esc(text)
-    )
+/// Цвет письма по смыслу: полоса сверху, рамка текста, основная кнопка.
+fn accent(m: &Msg<'_>) -> &'static str {
+    match m {
+        Msg::Created { .. } | Msg::Assigned | Msg::Report { .. } => "#4f46e5",
+        Msg::Reply { .. } | Msg::RequesterReplied { .. } => "#2563eb",
+        Msg::Waiting { .. } | Msg::Reminder | Msg::SlaWarning => "#d97706",
+        Msg::Resolved { .. } => "#16a34a",
+        Msg::Closed | Msg::OnHold { .. } => "#64748b",
+        Msg::Reopened { .. } => "#ea580c",
+        Msg::SlaBreached | Msg::BadRating { .. } => "#dc2626",
+        Msg::ApprovalRequested { .. } => "#7c3aed",
+        Msg::ApprovalDecided { approved, .. } => {
+            if *approved {
+                "#16a34a"
+            } else {
+                "#dc2626"
+            }
+        }
+    }
 }
 
 /// `(тема, текст, HTML)`. Тема всегда содержит `[#номер]` — по нему ответ вернётся в заявку.
@@ -235,8 +245,8 @@ pub fn render(lang: &str, m: &Msg<'_>, number: i64, title: &str, c: &Ctx) -> (St
     };
     let subject = if number > 0 { format!("[#{number}] {title}") } else { head.clone() };
     let mut text = format!("{head}\n\n{body}\n");
-    let mut html =
-        format!("<div style=\"font-family:sans-serif;font-size:14px\"><h3>{}</h3>{}", esc(&head), para(&body));
+    let mut buttons = Vec::new();
+    let mut question = String::new();
     if let Msg::Resolved { token, .. } = m
         && !c.portal.is_empty()
         && !token.is_empty()
@@ -244,21 +254,14 @@ pub fn render(lang: &str, m: &Msg<'_>, number: i64, title: &str, c: &Ctx) -> (St
         let yes = format!("{}/ticket-response/{token}?a=yes", c.portal);
         let no = format!("{}/ticket-response/{token}?a=no", c.portal);
         let (y, n) = (l("Да, решена", "Yes, resolved"), l("Нет, не решена", "No, not resolved"));
-        text.push_str(&format!("\n{}\n{y}: {yes}\n{n}: {no}\n", l("Проблема решена?", "Is the problem resolved?")));
-        html.push_str(&format!(
-            "<p>{}</p><p>{}{}</p>",
-            esc(&l("Проблема решена?", "Is the problem resolved?")),
-            button(&yes, &y, "#15803d"),
-            button(&no, &n, "#b91c1c")
-        ));
+        question = l("Проблема решена?", "Is the problem resolved?").to_string();
+        text.push_str(&format!("\n{question}\n{y}: {yes}\n{n}: {no}\n"));
+        buttons.push((yes, y.to_string(), Button::Good));
+        buttons.push((no, n.to_string(), Button::Bad));
     }
     if !link.is_empty() && number > 0 {
         text.push_str(&format!("\n{}: {link}\n", l("Заявка", "Request")));
-        html.push_str(&format!(
-            "<p><a href=\"{}\">{} #{number}</a></p>",
-            esc(&link),
-            esc(&l("Открыть заявку", "Open request"))
-        ));
+        buttons.push((link.clone(), format!("{} #{number}", l("Открыть заявку", "Open request")), Button::Primary));
     }
     // Почта — только уведомления: ответы в ящик никто не читает.
     let note = l(
@@ -266,8 +269,22 @@ pub fn render(lang: &str, m: &Msg<'_>, number: i64, title: &str, c: &Ctx) -> (St
         "This is an automatic notification, please do not reply. You can write in the request on the portal.",
     );
     text.push_str(&format!("\n{note}\n"));
-    html.push_str(&format!("<p style=\"color:#666;font-size:12px\">{}</p>", esc(&note)));
-    html.push_str("</div>");
+    let eyebrow = if number > 0 { format!("{} #{number}", l("Заявка", "Request")) } else { String::new() };
+    // Тема заявки под заголовком — если она ещё не стоит в тексте («Вам назначена заявка»).
+    let subtitle = if number > 0 && body != title { title } else { "" };
+    let html = letter::render(&Letter {
+        lang: lang.code(),
+        brand: &c.brand,
+        eyebrow: &eyebrow,
+        title: &head,
+        subtitle,
+        accent: accent(m),
+        body: &body,
+        question: &question,
+        buttons,
+        footer: &note,
+        portal: &c.portal,
+    });
     (subject, text, html)
 }
 
@@ -400,7 +417,9 @@ mod tests {
     use super::*;
 
     fn c() -> Ctx {
-        Ctx { portal: "https://pult.example.test".into(), domain: "example.test".into() }
+        Ctx {
+            portal: "https://pult.example.test".into(), domain: "example.test".into(), brand: "Ромашка".into()
+        }
     }
 
     #[test]
@@ -448,6 +467,16 @@ mod tests {
         let a = AfterHours { next_open: "2026-11-10 09:00".into(), emergency_phone: Some("100".into()) };
         let (_, text, _) = render("ru", &Msg::Created { assignee: None, after: Some(&a) }, 7, "x", &c());
         assert!(text.contains("нерабочее время") && text.contains("2026-11-10 09:00") && text.contains("звоните 100"));
+    }
+
+    #[test]
+    fn letter_is_branded_and_colored() {
+        let (_, _, html) = render("ru", &Msg::Resolved { body: "Готово", token: "tok" }, 42, "Принтер", &c());
+        assert!(html.contains("Ромашка") && html.contains("Заявка #42") && html.contains("Принтер"), "{html}");
+        assert!(html.contains("#16a34a"), "решённая — зелёная");
+        assert!(html.contains("https://pult.example.test/tickets/42"), "кнопка «Открыть заявку»");
+        let (_, _, html) = render("ru", &Msg::SlaBreached, 42, "Принтер", &c());
+        assert!(html.contains("#dc2626"), "нарушен срок — красная");
     }
 
     #[test]

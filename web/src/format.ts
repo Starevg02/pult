@@ -9,6 +9,13 @@ export function initials(name: string): string {
   return (parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "");
 }
 
+/** Цвет участника (0–6) — постоянный для одного человека: аватар без фото и имя в групповом чате. */
+export function tone(key: string): number {
+  let h = 0;
+  for (const ch of key) h = (h * 31 + (ch.codePointAt(0) ?? 0)) | 0;
+  return Math.abs(h) % 7;
+}
+
 const pad = (n: number) => String(n).padStart(2, "0");
 
 /** Дата и время: «как в языке» или выбранный формат (31.12.2026, 2026-12-31, 12/31/2026), 24 или 12 часов. */

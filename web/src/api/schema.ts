@@ -1884,6 +1884,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/chat/gifs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Моя подборка GIF, недавние сверху. */
+        get: operations["gif_list"];
+        put?: never;
+        /** Добавить GIF в подборку с компьютера. */
+        post: operations["gif_upload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/chat/gifs/from-file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Сохранить GIF из переписки. Доступен тот же файл, что и для скачивания: видимое мне сообщение. */
+        post: operations["gif_save_from_chat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/chat/gifs/{gif}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Содержимое GIF из моей подборки. */
+        get: operations["gif_get"];
+        put?: never;
+        post?: never;
+        /** Убрать GIF из подборки. Отправленные копии остаются в переписке. */
+        delete: operations["gif_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/chat/groups": {
         parameters: {
             query?: never;
@@ -1949,6 +2002,23 @@ export interface paths {
          *     вложений заявок (настройка Helpdesk). Имя и содержимое шифруются ключом портала.
          */
         post: operations["chat_upload_file"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/chat/{id}/gifs/{gif}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Отправить GIF из подборки в чат: сообщение с копией GIF без текста. */
+        post: operations["gif_send"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6194,6 +6264,29 @@ export interface components {
              * @description Куда переслать.
              */
             to: string;
+        };
+        /** @description GIF подборки. */
+        ChatGif: {
+            /** Format: date-time */
+            created_at: string;
+            /** Format: uuid */
+            id: string;
+            /** Format: int64 */
+            size: number;
+        };
+        ChatGifFromFile: {
+            /**
+             * Format: uuid
+             * @description Вложение переписки (GIF), которое сохранить в подборку.
+             */
+            file: string;
+        };
+        ChatGifSend: {
+            /**
+             * Format: uuid
+             * @description Ответ на сообщение этого чата.
+             */
+            reply_to?: string | null;
         };
         ChatGroupInput: {
             members?: string[];
@@ -13158,6 +13251,145 @@ export interface operations {
             };
         };
     };
+    gif_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatGif"][];
+                };
+            };
+        };
+    };
+    gif_upload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatGif"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    gif_save_from_chat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatGifFromFile"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatGif"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    gif_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                gif: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description GIF */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    gif_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                gif: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     chat_create_group: {
         parameters: {
             query?: never;
@@ -13271,6 +13503,40 @@ export interface operations {
                 };
             };
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    gif_send: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                gif: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatGifSend"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatMessage"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

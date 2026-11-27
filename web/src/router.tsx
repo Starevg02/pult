@@ -5,7 +5,7 @@ import { KbArticlePage, KbEditPage, KbNewPage, KbPage } from "./pages/kb/KbPages
 import { CatalogPage } from "./pages/helpdesk/CatalogPage";
 import { ReportsPage } from "./pages/reports/ReportsPage";
 import { AssetTypesAdminPage, AutomationAdminPage, IntegrationsPage, SlaAdminPage, TemplatesAdminPage } from "./pages/admin/ServicePages";
-import { Layout, ModuleGate, NotFound, PermGate } from "./layout";
+import { Layout, ModuleGate, NotFound, PageCrash, PermGate } from "./layout";
 import { adminGroups } from "./pages/admin/adminMenu";
 import type { ModuleKey } from "./session";
 import { AdPage } from "./pages/admin/AdPage";
@@ -157,7 +157,7 @@ const routeTree = rootRoute.addChildren([
   page("/admin/system", SystemPage),
 ]);
 
-export const router = createRouter({ routeTree });
+export const router = createRouter({ routeTree, defaultErrorComponent: PageCrash });
 
 declare module "@tanstack/react-router" {
   interface Register {

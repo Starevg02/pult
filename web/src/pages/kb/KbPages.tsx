@@ -240,7 +240,7 @@ type FormState = { title: string; body: string; section_id: string; audience: st
 
 const fileRef = (id: string) => new RegExp(`!?\\[[^\\]]*\\]\\(${fileUrl(id).replace(/[/]/g, "\\/")}\\)\\n?`, "g");
 
-type Tool = "b" | "i" | "h2" | "h3" | "q" | "ul" | "ol" | "code" | "hr";
+type Tool = "b" | "i" | "h2" | "h3" | "q" | "ul" | "ol" | "code" | "table" | "hr";
 
 function ArticleForm({ initial, initialFiles, id }: { initial: FormState; initialFiles: KbFile[]; id?: string }) {
   const { t } = useTranslation();
@@ -342,6 +342,7 @@ function ArticleForm({ initial, initialFiles, id }: { initial: FormState; initia
     { key: "ul", label: t("kb.tools.list"), text: "•" },
     { key: "ol", label: t("kb.tools.numbered"), text: "1." },
     { key: "code", label: t("kb.tools.code"), text: "</>", className: "font-mono text-xs" },
+    { key: "table", label: t("kb.tools.table"), text: "▦" },
     { key: "hr", label: t("kb.tools.divider"), text: "—" },
   ];
   const runTool = (k: Tool) => {
@@ -355,6 +356,7 @@ function ArticleForm({ initial, initialFiles, id }: { initial: FormState; initia
       ul: (e) => prefixLines(e, "- "),
       ol: (e) => prefixLines(e, (n) => `${n + 1}. `),
       code: (e) => (e.value.slice(e.start, e.end).includes("\n") ? wrap(e, "```\n", "\n```", "") : wrap(e, "`", "`", "code")),
+      table: (e) => insertBlock(e, t("kb.tools.tableSample")),
       hr: (e) => insertBlock(e, "---"),
     };
     apply(edits[k]);

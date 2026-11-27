@@ -2,6 +2,8 @@
 //! транзакции, что и событие, — а задача `mail.send` отправляет его по SMTP с повторами.
 //! Только STARTTLS или TLS; без шифрования отправка невозможна (как и для AD).
 
+pub mod letter;
+
 use crate::{Secret, crypto::SecretBox, settings::SettingsGroup};
 use lettre::{
     AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor,
@@ -167,7 +169,22 @@ pub async fn enqueue_superadmins(db: &PgPool, subject: &str, body_text: &str) ->
     if to.is_empty() {
         return Ok(None);
     }
-    enqueue(db, &to, subject, body_text).await.map(Some)
+    let org: crate::org::OrgSettings = crate::settings::load(db).await?;
+    let html = letter::render(&letter::Letter {
+        brand: &org.name,
+        title: subject,
+        accent: "#dc2626",
+        body: body_text,
+        ..Default::default()
+    });
+    let m = Outgoing {
+        to,
+        subject: subject.to_string(),
+        text: body_text.to_string(),
+        html: Some(html),
+        headers: ThreadHeaders::default(),
+    };
+    enqueue_message(db, &m).await.map(Some)
 }
 
 fn transport(s: &MailSettings, password: Option<Secret>) -> Result<AsyncSmtpTransport<Tokio1Executor>, String> {

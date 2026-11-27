@@ -608,11 +608,40 @@ export function ModuleGate({ module, children }: { module: ModuleKey; children: 
 export function NotFound() {
   const { t } = useTranslation();
   return (
-    <div className="mx-auto max-w-xl text-center">
-      <h1 className="mb-3 text-xl font-semibold">{t("notFound.title")}</h1>
-      <Link to="/" className="text-accent underline">
+    <div className="mx-auto mt-10 max-w-md animate-fade-in text-center">
+      <div className="bg-[linear-gradient(135deg,#7b6dff,#4f46e5)] bg-clip-text text-7xl font-black tracking-tight text-transparent">404</div>
+      <h1 className="mt-2 text-xl font-semibold">{t("notFound.title")}</h1>
+      <p className="mt-1 text-sm text-muted">{t("notFound.hint")}</p>
+      <Link to="/" className="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-ink px-4 py-2 text-sm font-medium text-paper hover:opacity-90">
         {t("notFound.back")}
       </Link>
+    </div>
+  );
+}
+
+/** Ошибка в интерфейсе страницы: меню и шапка остаются, вместо страницы — понятное сообщение. */
+export function PageCrash({ error }: { error: unknown }) {
+  const { t } = useTranslation();
+  const detail = error instanceof Error ? error.message : String(error);
+  return (
+    <div className="mx-auto mt-10 max-w-md animate-fade-in rounded-2xl border border-line bg-paper p-6 text-center shadow-xs" role="alert">
+      <div className="emoji mb-2 text-5xl" aria-hidden="true">
+        🛠️
+      </div>
+      <h1 className="text-lg font-semibold">{t("crash.title")}</h1>
+      <p className="mt-1 text-sm text-muted">{t("crash.hint")}</p>
+      <div className="mt-5 flex justify-center gap-2">
+        <button type="button" className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-paper hover:opacity-90" onClick={() => window.location.reload()}>
+          {t("crash.reload")}
+        </button>
+        <Link to="/" className="rounded-lg border border-line px-4 py-2 text-sm font-medium hover:bg-hover">
+          {t("notFound.back")}
+        </Link>
+      </div>
+      <details className="mt-4 text-left text-xs text-muted">
+        <summary className="cursor-pointer">{t("crash.details")}</summary>
+        <pre className="mt-2 overflow-x-auto rounded-lg bg-sunken p-2 whitespace-pre-wrap">{detail}</pre>
+      </details>
     </div>
   );
 }

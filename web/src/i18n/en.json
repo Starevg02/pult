@@ -756,7 +756,8 @@
   },
   "notFound": {
     "title": "Page not found",
-    "back": "Home"
+    "back": "Home",
+    "hint": "The link may be outdated or the page has moved."
   },
   "setup": {
     "title": "First-time setup",
@@ -1183,7 +1184,9 @@
       "linkPrompt": "Link address",
       "linkText": "link",
       "sample": "text",
-      "attach": "Attach a file or image"
+      "attach": "Attach a file or image",
+      "table": "Table",
+      "tableSample": "| Column 1 | Column 2 | Column 3 |\n| --- | --- | --- |\n| Text | Text | Text |\n| Text | Text | Text |"
     },
     "leaveConfirm": "Leave this page? Unsaved changes will be lost."
   },
@@ -2206,7 +2209,7 @@
     "older": "Show earlier",
     "noMessages": "No messages yet.",
     "message": "Message",
-    "placeholder": "Message… (Enter to send, Shift+Enter for a new line)",
+    "placeholder": "Message",
     "send": "Send",
     "editing": "Editing a message (possible for 15 minutes after sending)",
     "edited": "edited",
@@ -2306,7 +2309,27 @@
     "emoji": "Emoji",
     "dropHere": "Drop to attach",
     "read": "Read",
-    "sent": "Sent"
+    "sent": "Sent",
+    "placeholderHint": "Enter to send, Shift+Enter for a new line",
+    "emojiTab": "Emoji",
+    "emojiSearch": "Search emoji",
+    "emojiRecent": "Recent",
+    "emojiGroups": {
+      "smileys": "Smileys",
+      "people": "People & gestures",
+      "nature": "Nature",
+      "food": "Food & drink",
+      "activity": "Activities",
+      "travel": "Travel & places",
+      "objects": "Objects",
+      "symbols": "Symbols"
+    },
+    "gifAdd": "Add",
+    "gifSend": "Send GIF",
+    "gifRemove": "Remove from my GIFs",
+    "gifEmpty": "Your GIFs will be here. Add a file or save a GIF from a chat via the message menu.",
+    "gifSave": "Save to my GIFs",
+    "gifSaved": "GIF saved to My GIFs"
   },
   "people": {
     "presence": {
@@ -2493,5 +2516,11 @@
     "request": "request",
     "incident": "issue",
     "withForm": "with a form"
+  },
+  "crash": {
+    "title": "The page could not be shown",
+    "hint": "Something went wrong in the interface. Reload the page; if that does not help, contact IT support.",
+    "reload": "Reload page",
+    "details": "Details for IT support"
   }
 }

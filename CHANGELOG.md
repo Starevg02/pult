@@ -10,6 +10,55 @@ automatically.
 格式：[Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号：[SemVer](https://semver.org/lang/zh-CN/)。
 1.0 版本之前，设置和 API 可能出现不兼容的变更；数据库迁移始终自动执行。
 
+## 0.4.1 — оформление сообщений, GIF и письма · messages look, GIFs and emails · 消息外观、GIF 与邮件
+
+### Русский
+
+- «Сообщения» в новом оформлении: фон с узором, цветные пузыри с «хвостиком», время в правом нижнем углу
+  пузыря, картинки мозаикой без рамки, цветные аватары и имена в группах, крупные эмодзи. Лента больше не
+  прыгает, пока догружаются картинки, а на телефоне переписка открывается на весь экран.
+- GIF в переписке: личная подборка «Мои GIF» (до 200 GIF, до 10 МБ каждый) — загрузить с компьютера или
+  сохранить из чата, отправить одним нажатием.
+- Новая панель эмодзи: разделы, поиск по словам на русском и английском, недавние.
+- База знаний: таблицы, зачёркнутый текст, списки задач; кнопка «Таблица» в редакторе.
+- Письма оформлены карточкой: название организации, номер заявки, цветная полоса по смыслу письма, текст в
+  рамке, кнопки. Служебные письма администраторам — в том же оформлении.
+- Интерфейс: живее главная, страница «404» и понятная страница ошибки вместо английского «Something went
+  wrong!», цветные значки в пустых списках.
+- Надёжность: реакция на телефоне — из меню сообщения; поиск и файлы на телефоне закрываются после перехода к
+  сообщению; кнопка «Назад», если чат не открылся; GIF не уходит дважды; удаление GIF — с подтверждением;
+  подборка GIF ограничена по объёму и частоте пополнения, файл GIF проверяется по полной сигнатуре.
+
+### English
+
+- Messages have a new look: a patterned background, colored bubbles with tails, the time in the bubble's
+  bottom-right corner, borderless image mosaics, colored avatars and names in groups, large emoji. The view no
+  longer jumps while images load, and on a phone the chat opens full screen.
+- GIFs in chats: a personal "My GIFs" collection (up to 200 GIFs, up to 10 MB each) — upload from your computer
+  or save from a chat, send with one tap.
+- A new emoji panel: categories, search by Russian and English words, recently used.
+- Knowledge base: tables, strikethrough, task lists; a "Table" button in the editor.
+- Emails are styled as a card: organization name, request number, a color strip by message meaning, the text in
+  a frame, buttons. Service emails to administrators use the same design.
+- Interface: a livelier home page, a "404" page and a clear error page instead of "Something went wrong!",
+  colored icons in empty lists.
+- Reliability: react on a phone from the message menu; search and files on a phone close after jumping to a
+  message; a Back button if a chat fails to open; a GIF is never sent twice; removing a GIF asks for
+  confirmation; the GIF collection is limited in total size and how often it can grow, and a GIF file is
+  checked by its full signature.
+
+### 中文
+
+- “消息”采用新外观：带图案的背景、带尾巴的彩色气泡、时间位于气泡右下角、无边框的图片拼贴、群组中彩色的头像和名字、
+  大号表情。图片加载时视图不再跳动，在手机上会话全屏打开。
+- 会话中的 GIF：个人“我的 GIF”收藏（最多 200 个，每个不超过 10 MB）——可从电脑上传或从会话保存，一键发送。
+- 新的表情面板：分类、按俄文和英文关键词搜索、最近使用。
+- 知识库：表格、删除线、任务列表；编辑器中新增“表格”按钮。
+- 邮件采用卡片样式：组织名称、工单号、按含义区分颜色的色条、带边框的正文、按钮。发给管理员的服务邮件使用同样的样式。
+- 界面：首页更生动，新增“404”页面，并以清晰的错误页面取代 “Something went wrong!”，空列表显示彩色图标。
+- 可靠性：在手机上可从消息菜单添加回应；在手机上跳转到消息后搜索和文件面板会关闭；会话打开失败时显示“返回”按钮；
+  GIF 不会重复发送；移除 GIF 需要确认；GIF 收藏限制总大小和添加频率，并按完整签名校验 GIF 文件。
+
 ## 0.4.0 — мессенджер и база знаний · messenger and knowledge base · 消息与知识库
 
 ### Русский

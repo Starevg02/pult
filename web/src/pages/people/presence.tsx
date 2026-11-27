@@ -1,7 +1,7 @@
 // Аватар с точкой присутствия.
 import { useTranslation } from "react-i18next";
 import type { Presence } from "../../api/client";
-import { initials } from "../../format";
+import { initials, tone } from "../../format";
 import { avatarUrl } from "./profileHooks";
 
 const DOT: Record<Presence, string> = {
@@ -15,6 +15,7 @@ const SIZES = {
   xs: { box: "h-6 w-6 text-[10px]", dot: "h-2 w-2" },
   sm: { box: "h-8 w-8 text-xs", dot: "h-2.5 w-2.5" },
   md: { box: "h-10 w-10 text-sm", dot: "h-3 w-3" },
+  ml: { box: "h-12 w-12 text-base", dot: "h-3.5 w-3.5" },
   lg: { box: "h-24 w-24 text-2xl", dot: "h-5 w-5 border-[3px]" },
 } as const;
 
@@ -47,7 +48,7 @@ export function UserAvatar({
       {userId && avatar ? (
         <img src={avatarUrl(userId, avatar)} alt="" className={`${s.box} rounded-full object-cover`} loading="lazy" />
       ) : (
-        <span aria-hidden="true" className={`${s.box} flex items-center justify-center rounded-full bg-accentsoft font-semibold text-accent-ink`}>
+        <span aria-hidden="true" className={`${s.box} tone-${tone(userId ?? name)} tone-avatar flex items-center justify-center rounded-full font-semibold`}>
           {initials(name)}
         </span>
       )}

@@ -1,12 +1,13 @@
-// Переписка как в привычных мессенджерах: пузыри с хвостиком, разделители по дням, «Новые сообщения»,
-// ответы и пересылка, реакции, закреплённое сверху, «печатает…», ✓/✓✓ прочитано, поиск по переписке
-// и все её файлы. Лента не прыгает вниз, пока человек читает старое: внизу появляется кнопка со счётчиком.
+// Переписка как в привычных мессенджерах: пузыри с хвостиком на фоне с узором, картинки мозаикой,
+// разделители по дням, «Новые сообщения», ответы и пересылка, реакции, закреплённое сверху, «печатает…»,
+// ✓/✓✓ прочитано, поиск по переписке и все её файлы, «Мои GIF». Лента не прыгает вниз, пока человек
+// читает старое: внизу появляется кнопка со счётчиком. На телефоне переписка открывается во весь экран.
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { api, ok, type ChatDetail, type ChatMessage, type ChatSharedFile } from "../../api/client";
-import { formatDate, formatDay, formatTime } from "../../format";
+import { formatDate, formatDay, formatTime, tone } from "../../format";
 import {
   IconArrowLeft,
   IconBell,
@@ -18,6 +19,7 @@ import {
   IconFileText,
   IconMore,
   IconPin,
+  IconPlus,
   IconReply,
   IconSearch,
   IconSmile,
@@ -33,7 +35,7 @@ import { UserAvatar } from "../people/presence";
 import { usePresence } from "../people/profileHooks";
 import { formatSize } from "../helpdesk/helpdeskUtil";
 import { ChatInfo, ForwardDialog, Versions } from "./ChatDialogs";
-import { Attachments, MessageText, Quote, ReactionPicker, Reactions } from "./ChatParts";
+import { Documents, Media, MessageText, Quote, ReactionPicker, Reactions } from "./ChatParts";
 import { Composer } from "./Composer";
 import { chatFileUrl, dayKey, onlyEmoji, uploadPending, MAX_FILES, useTyping } from "./chatUtil";
 
@@ -41,6 +43,19 @@ import { chatFileUrl, dayKey, onlyEmoji, uploadPending, MAX_FILES, useTyping } f
 const RUN_MS = 5 * 60_000;
 /** Сколько страниц истории догружать, чтобы дойти до сообщения из поиска или закреплённого. */
 const JUMP_PAGES = 30;
+/** Сколько после открытия лента держится у «Новых сообщений» (или внизу), пока догружаются картинки. */
+const SETTLE_MS = 2500;
+const settleDeadline = () => Date.now() + SETTLE_MS;
+
+/** Прокрутить ленту к элементу: `start` — к верху, `center` — в середину. Страница вокруг не двигается. */
+function scrollWithin(scroller: HTMLElement, target: HTMLElement, block: "start" | "center", smooth = false) {
+  const s = scroller.getBoundingClientRect();
+  const r = target.getBoundingClientRect();
+  const shift = block === "center" ? (s.height - r.height) / 2 : 0;
+  scroller.scrollTo({ top: scroller.scrollTop + r.top - s.top - shift, behavior: smooth ? "smooth" : "auto" });
+}
+
+const narrow = () => typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches;
 
 const hasFiles = (e: { dataTransfer: DataTransfer }) => [...e.dataTransfer.types].includes("Files");
 
@@ -110,8 +125,11 @@ export function Conversation({ id }: { id: string }) {
 
   // ---------------------------------------------------------------- прокрутка
   const scroller = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLOListElement>(null);
   const nearBottom = useRef(true);
   const started = useRef(false);
+  // До этого времени лента держится у начальной точки (картинки догружаются и меняют высоту).
+  const settleUntil = useRef(0);
   const jumping = useRef(false);
   const lastNewest = useRef<string | undefined>(undefined);
   const heightBefore = useRef<number | null>(null);
@@ -121,22 +139,46 @@ export function Conversation({ id }: { id: string }) {
   const seenAt = seen ? all.findIndex((m) => m.id === seen) : -1;
   const missed = atBottom || seenAt < 0 ? 0 : all.slice(seenAt + 1).filter((m) => m.author_id !== me?.user_id).length;
 
+  const settle = useCallback(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const mark = document.getElementById("chat-unread-mark");
+    if (mark) scrollWithin(el, mark, "start");
+    else el.scrollTop = el.scrollHeight;
+  }, []);
+
   // Первый показ: к «Новым сообщениям» или в самый низ.
   useLayoutEffect(() => {
     const el = scroller.current;
     if (started.current || !el || firstUnread === undefined || all.length === 0) return;
     started.current = true;
     lastNewest.current = newest?.id;
-    const mark = firstUnread ? document.getElementById("chat-unread-mark") : null;
-    if (mark) mark.scrollIntoView({ block: "start" });
-    else el.scrollTop = el.scrollHeight;
-  }, [all.length, firstUnread, newest?.id]);
+    settleUntil.current = settleDeadline();
+    settle();
+  }, [all.length, firstUnread, newest?.id, settle]);
+
+  // Высота ленты изменилась (догрузилась картинка, раскрылся код): держим начальную точку или низ.
+  const hasList = all.length > 0;
+  useEffect(() => {
+    const el = scroller.current;
+    const ol = list.current;
+    if (!hasList || !el || !ol || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      if (!started.current || jumping.current || heightBefore.current !== null) return;
+      if (Date.now() < settleUntil.current) settle();
+      else if (nearBottom.current) el.scrollTop = el.scrollHeight;
+    });
+    ro.observe(ol);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [hasList, settle]);
 
   // Новое сообщение: вниз, если человек и так внизу или написал сам; иначе — счётчик на кнопке.
   useLayoutEffect(() => {
     const el = scroller.current;
     if (!started.current || !el || !newest || newest.id === lastNewest.current) return;
     lastNewest.current = newest.id;
+    settleUntil.current = 0;
     if (nearBottom.current || newest.author_id === me?.user_id) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [newest, me?.user_id]);
 
@@ -155,6 +197,11 @@ export function Conversation({ id }: { id: string }) {
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   };
 
+  // Человек сам крутит ленту — начальная точка больше не держится.
+  const userScroll = () => {
+    settleUntil.current = 0;
+  };
+
   const onScroll = () => {
     const el = scroller.current;
     if (!el) return;
@@ -166,7 +213,9 @@ export function Conversation({ id }: { id: string }) {
     // У верхнего края — догрузить старое.
     if (el.scrollTop < 200 && started.current && !jumping.current && messages.hasNextPage && !messages.isFetchingNextPage) {
       heightBefore.current = el.scrollHeight;
-      void messages.fetchNextPage();
+      void messages.fetchNextPage().then((r) => {
+        if (r.isError) heightBefore.current = null;
+      });
     }
   };
 
@@ -176,12 +225,13 @@ export function Conversation({ id }: { id: string }) {
   const jumpTo = async (mid: string) => {
     if (!mid || jumping.current) return;
     jumping.current = true;
+    settleUntil.current = 0;
     try {
       let more = messages.hasNextPage;
       for (let n = 0; n <= JUMP_PAGES; n++) {
         const el = document.getElementById(`msg-${mid}`);
-        if (el) {
-          el.scrollIntoView({ block: "center", behavior: "smooth" });
+        if (el && scroller.current) {
+          scrollWithin(scroller.current, el, "center", true);
           setFlash(mid);
           window.setTimeout(() => setFlash((f) => (f === mid ? null : f)), 1800);
           return;
@@ -198,9 +248,14 @@ export function Conversation({ id }: { id: string }) {
     }
   };
   const jump = (mid: string) => void jumpTo(mid);
+  const jumpFromPanel = (mid: string) => {
+    if (narrow()) setPanel(null);
+    jump(mid);
+  };
 
   // ---------------------------------------------------------------- действия
   const refreshMessages = () => void qc.invalidateQueries({ queryKey: ["chat-messages", id] });
+  const fail = (e: unknown) => toast(e instanceof Error ? e.message : t("common.error"), "bad");
   const prefs = useMutation({
     mutationFn: (body: { pinned?: boolean; hidden?: boolean; muted?: boolean }) => ok(api.PUT("/api/chat/{id}/prefs", { params: { path: { id } }, body })),
     onSuccess: () => {
@@ -212,20 +267,46 @@ export function Conversation({ id }: { id: string }) {
     mutationFn: ({ message, emoji }: { message: string; emoji: string }) =>
       ok(api.PUT("/api/chat/{id}/messages/{message}/reactions", { params: { path: { id, message } }, body: { emoji } })),
     onSuccess: refreshMessages,
-    onError: (e) => toast(e instanceof Error ? e.message : t("common.error"), "bad"),
+    onError: fail,
   });
   const pin = useMutation({
     mutationFn: (message: string | null) => ok(api.PUT("/api/chat/{id}/pin", { params: { path: { id } }, body: { message } })),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["chat", id] }),
-    onError: (e) => toast(e instanceof Error ? e.message : t("common.error"), "bad"),
+    onError: fail,
+  });
+  const saveGif = useMutation({
+    mutationFn: (file: string) => ok(api.POST("/api/chat/gifs/from-file", { body: { file } })),
+    onSuccess: () => {
+      toast(t("chat.gifSaved"));
+      void qc.invalidateQueries({ queryKey: ["chat-gifs"] });
+    },
+    onError: fail,
   });
 
   const members = detail.data?.members ?? [];
   const typingIds = useTyping(id).filter((u) => u !== me?.user_id);
   const memberInfo = usePresence({ users: detail.data?.chat.kind === "group" ? members.map((m) => m.user_id) : detail.data?.chat.peer_id ? [detail.data.chat.peer_id] : [] });
 
-  if (detail.error) return <ErrorBox error={detail.error} />;
-  if (detail.isPending) return <Spinner />;
+  const frame = "relative flex min-h-0 flex-col overflow-hidden bg-paper md:rounded-xl md:border md:border-line max-md:fixed max-md:inset-0 max-md:z-40";
+  const back = (
+    <Link to="/chats" className="m-2 self-start rounded-full p-2 text-muted hover:bg-hover md:hidden" aria-label={t("chat.back")}>
+      <IconArrowLeft size={20} />
+    </Link>
+  );
+  if (detail.error)
+    return (
+      <section className={frame}>
+        {back}
+        <ErrorBox error={detail.error} />
+      </section>
+    );
+  if (detail.isPending)
+    return (
+      <section className={frame}>
+        {back}
+        <Spinner />
+      </section>
+    );
   const d = detail.data;
   const c = d.chat;
   const group = c.kind === "group";
@@ -248,6 +329,7 @@ export function Conversation({ id }: { id: string }) {
         : peer
           ? t(`people.presence.${peer.presence}`)
           : t("chat.direct");
+  const online = !group && peer?.presence === "online" && !typingNames.length;
 
   const canWrite = d.can_write && !locked;
   const addFiles = (list: File[]) => {
@@ -257,10 +339,11 @@ export function Conversation({ id }: { id: string }) {
     const mine = [...all].reverse().find((m) => m.author_id === me?.user_id && m.editable && m.body);
     if (mine) setEditing(mine);
   };
+  const headButton = (on: boolean) => `rounded-full p-2 transition-colors hover:bg-hover ${on ? "bg-hover text-accent" : "text-muted hover:text-ink"}`;
 
   return (
     <section
-      className="relative flex min-h-0 flex-col overflow-hidden rounded-xl border border-line bg-paper"
+      className={frame}
       aria-label={c.title}
       onDragEnter={(e) => {
         if (hasFiles(e) && canWrite && !editing) setDragging(true);
@@ -279,35 +362,35 @@ export function Conversation({ id }: { id: string }) {
       }}
     >
       {/* Шапка */}
-      <header className="flex items-center gap-2 border-b border-line bg-paper/95 px-3 py-2 backdrop-blur">
-        <Link to="/chats" className="rounded-lg p-1 text-muted hover:bg-hover md:hidden" aria-label={t("chat.back")}>
-          <IconArrowLeft size={18} />
+      <header className="z-10 flex items-center gap-3 border-b border-line bg-paper px-2 py-2 sm:px-3">
+        <Link to="/chats" className="rounded-full p-2 text-muted hover:bg-hover md:hidden" aria-label={t("chat.back")}>
+          <IconArrowLeft size={20} />
         </Link>
-        <UserAvatar name={c.title} userId={c.peer_id} avatar={peer?.avatar} presence={peer?.presence} size="md" />
-        <div className="min-w-0 flex-1">
+        <UserAvatar name={c.title} userId={c.peer_id ?? c.id} avatar={peer?.avatar} presence={peer?.presence} size="md" />
+        <div className="min-w-0 flex-1 leading-tight">
           {c.peer_id ? (
-            <Link to="/people/$id" params={{ id: c.peer_id }} className="block truncate font-semibold hover:underline">
+            <Link to="/people/$id" params={{ id: c.peer_id }} className="block truncate text-[15px] font-semibold hover:underline">
               {c.title}
             </Link>
           ) : group && c.active && !locked ? (
-            <button type="button" className="block max-w-full truncate text-left font-semibold hover:underline" onClick={() => setInfo(true)}>
+            <button type="button" className="block max-w-full truncate text-left text-[15px] font-semibold hover:underline" onClick={() => setInfo(true)}>
               {c.title}
             </button>
           ) : (
-            <h2 className="truncate font-semibold">{c.title}</h2>
+            <h2 className="truncate text-[15px] font-semibold">{c.title}</h2>
           )}
-          <div className={`truncate text-xs ${typingNames.length ? "text-accent" : "text-muted"}`} aria-live="polite">
+          <div className={`mt-0.5 truncate text-[13px] ${typingNames.length || online ? "text-accent" : "text-muted"}`} aria-live="polite">
             {typingNames.length > 0 && <span className="chat-typing-dots mr-1" aria-hidden="true" />}
             {subtitle}
           </div>
         </div>
         {!locked && (
           <>
-            <button type="button" className={`rounded-lg p-2 hover:bg-hover ${panel === "search" ? "bg-hover text-accent" : "text-muted"}`} aria-pressed={panel === "search"} aria-label={t("chat.searchInChat")} title={t("chat.searchInChat")} onClick={() => setPanel(panel === "search" ? null : "search")}>
-              <IconSearch size={18} />
+            <button type="button" className={headButton(panel === "search")} aria-pressed={panel === "search"} aria-label={t("chat.searchInChat")} title={t("chat.searchInChat")} onClick={() => setPanel(panel === "search" ? null : "search")}>
+              <IconSearch size={19} />
             </button>
-            <button type="button" className={`rounded-lg p-2 hover:bg-hover ${panel === "files" ? "bg-hover text-accent" : "text-muted"}`} aria-pressed={panel === "files"} aria-label={t("chat.sharedFiles")} title={t("chat.sharedFiles")} onClick={() => setPanel(panel === "files" ? null : "files")}>
-              <IconFileText size={18} />
+            <button type="button" className={`${headButton(panel === "files")} max-sm:hidden`} aria-pressed={panel === "files"} aria-label={t("chat.sharedFiles")} title={t("chat.sharedFiles")} onClick={() => setPanel(panel === "files" ? null : "files")}>
+              <IconFileText size={19} />
             </button>
           </>
         )}
@@ -315,8 +398,9 @@ export function Conversation({ id }: { id: string }) {
           iconOnly
           variant="ghost"
           label={t("common.more")}
-          icon={<IconMore size={18} />}
+          icon={<IconMore size={19} />}
           items={[
+            ...(!locked ? [{ key: "files", label: t("chat.sharedFiles"), icon: <IconFileText size={16} />, onSelect: () => setPanel("files") }] : []),
             { key: "mute", label: c.muted ? t("chat.unmute") : t("chat.mute"), icon: c.muted ? <IconBell size={16} /> : <IconBellOff size={16} />, onSelect: () => prefs.mutate({ muted: !c.muted }) },
             ...(c.kind === "direct" || c.active ? [{ key: "pin", label: c.pinned ? t("chat.unpin") : t("chat.pin"), icon: <IconStar size={16} />, onSelect: () => prefs.mutate({ pinned: !c.pinned }) }] : []),
             ...(group && !c.active ? [{ key: "hide", label: c.hidden ? t("chat.unhide") : t("chat.hide"), onSelect: () => prefs.mutate({ hidden: !c.hidden }) }] : []),
@@ -328,8 +412,10 @@ export function Conversation({ id }: { id: string }) {
 
       {/* Закреплённое */}
       {d.pinned_message && !locked && (
-        <div className="flex items-center gap-2 border-b border-line bg-paper px-3 py-1.5">
-          <IconPin size={16} className="text-accent" />
+        <div className="z-10 flex items-center gap-2 border-b border-line bg-paper/95 px-3 py-1.5 backdrop-blur">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accentsoft text-accent">
+            <IconPin size={15} />
+          </span>
           <div className="min-w-0 flex-1">
             <Quote q={d.pinned_message} label={t("chat.pinnedMessage")} onClick={() => jump(d.pinned_message?.id ?? "")} onClear={d.can_pin ? () => pin.mutate(null) : undefined} />
           </div>
@@ -340,11 +426,11 @@ export function Conversation({ id }: { id: string }) {
         <Empty hint={t("chat.lockedHint")}>{t("chat.locked")}</Empty>
       ) : (
         <div className="relative flex min-h-0 flex-1">
-          <div className="relative flex min-w-0 flex-1 flex-col">
-            <div ref={scroller} onScroll={onScroll} className="chat-wallpaper min-h-0 flex-1 overflow-y-auto px-2 py-3 sm:px-4" aria-label={t("chat.messages")}>
+          <div className="chat-wallpaper relative flex min-w-0 flex-1 flex-col">
+            <div ref={scroller} onScroll={onScroll} onWheel={userScroll} onTouchStart={userScroll} onKeyDown={userScroll} className="min-h-0 flex-1 overflow-y-auto px-2 pt-3 pb-1 [overflow-anchor:none] focus-visible:outline-none sm:px-4" role="log" tabIndex={0} aria-label={t("chat.messages")}>
               {messages.isFetchingNextPage && (
-                <div className="mb-2 text-center text-xs text-muted" role="status">
-                  {t("chat.loadingOlder")}
+                <div className="mb-2 flex justify-center" role="status">
+                  <span className="rounded-full bg-black/30 px-3 py-0.5 text-xs text-white backdrop-blur-sm">{t("chat.loadingOlder")}</span>
                 </div>
               )}
               {messages.error ? (
@@ -353,16 +439,16 @@ export function Conversation({ id }: { id: string }) {
                 <Spinner />
               ) : all.length === 0 ? (
                 <div className="flex h-full items-center justify-center">
-                  <div className="rounded-2xl bg-paper/90 px-6 py-5 text-center shadow-sm">
-                    <div className="mb-1 text-4xl" aria-hidden="true">
+                  <div className="max-w-xs rounded-3xl bg-paper/90 px-7 py-6 text-center shadow-sm backdrop-blur">
+                    <div className="emoji mb-2 text-5xl" aria-hidden="true">
                       👋
                     </div>
-                    <p className="font-medium">{t("chat.noMessages")}</p>
-                    <p className="text-sm text-muted">{t("chat.sayHello")}</p>
+                    <p className="font-semibold">{t("chat.noMessages")}</p>
+                    <p className="mt-1 text-sm text-muted">{t("chat.sayHello")}</p>
                   </div>
                 </div>
               ) : (
-                <ol className="mx-auto max-w-3xl">
+                <ol ref={list} className="mx-auto max-w-3xl pb-1">
                   {all.map((m, i) => {
                     const prev = all[i - 1];
                     const next = all[i + 1];
@@ -370,15 +456,16 @@ export function Conversation({ id }: { id: string }) {
                     const runStart = newDay || !prev || prev.author_id !== m.author_id || new Date(m.created_at).getTime() - new Date(prev.created_at).getTime() > RUN_MS || m.id === firstUnread;
                     const runEnd = !next || next.author_id !== m.author_id || dayKey(next.created_at) !== dayKey(m.created_at) || new Date(next.created_at).getTime() - new Date(m.created_at).getTime() > RUN_MS || next.id === firstUnread;
                     const mine = m.author_id === me?.user_id;
+                    const gif = m.files.find((f) => f.mime === "image/gif" && !f.expired);
                     return (
                       <li key={m.id}>
                         {newDay && (
-                          <div className="sticky top-0 z-[1] my-2 flex justify-center">
-                            <span className="rounded-full bg-ink/40 px-3 py-0.5 text-xs font-medium text-white backdrop-blur-sm">{formatDay(m.created_at, i18n.language)}</span>
+                          <div className="sticky top-0 z-[2] my-3 flex justify-center">
+                            <span className="rounded-full bg-black/30 px-3 py-1 text-xs font-medium text-white backdrop-blur-sm">{formatDay(m.created_at, i18n.language)}</span>
                           </div>
                         )}
                         {m.id === firstUnread && (
-                          <div id="chat-unread-mark" className="my-2 scroll-mt-10 bg-paper/70 py-1 text-center text-xs font-medium text-accent">
+                          <div id="chat-unread-mark" className="-mx-2 my-3 scroll-mt-12 bg-paper/75 py-1 text-center text-[13px] font-medium text-accent backdrop-blur-sm sm:-mx-4">
                             {t("chat.newMessages")}
                           </div>
                         )}
@@ -407,6 +494,7 @@ export function Conversation({ id }: { id: string }) {
                           onForward={() => setForward(m)}
                           onPin={() => pin.mutate(d.pinned_message?.id === m.id ? null : m.id)}
                           onReact={(emoji) => react.mutate({ message: m.id, emoji })}
+                          onSaveGif={gif ? () => saveGif.mutate(gif.id) : undefined}
                           onJump={jump}
                         />
                       </li>
@@ -419,9 +507,9 @@ export function Conversation({ id }: { id: string }) {
               {incoming}
             </p>
             {!atBottom && (
-              <button type="button" onClick={() => toBottom()} className="absolute right-4 bottom-20 z-10 flex size-11 items-center justify-center rounded-full border border-line bg-paper text-muted shadow-lg hover:text-ink" aria-label={missed ? t("chat.newBelow", { count: missed }) : t("chat.toBottom")}>
-                <IconChevronDown size={20} />
-                {missed > 0 && <span className="absolute -top-1.5 -right-1 min-w-5 rounded-full bg-accent px-1 text-xs font-semibold text-paper tabular-nums">{missed}</span>}
+              <button type="button" onClick={() => toBottom()} className="absolute right-3 bottom-[5.25rem] z-10 flex size-11 animate-pop-in items-center justify-center rounded-full bg-paper text-muted shadow-lg ring-1 ring-line hover:text-ink sm:right-5" aria-label={missed ? t("chat.newBelow", { count: missed }) : t("chat.toBottom")}>
+                <IconChevronDown size={22} />
+                {missed > 0 && <span className="absolute -top-1.5 -right-1 min-w-5 rounded-full bg-accent px-1 text-center text-xs leading-5 font-semibold text-paper tabular-nums">{missed}</span>}
               </button>
             )}
             {canWrite ? (
@@ -440,16 +528,17 @@ export function Conversation({ id }: { id: string }) {
                 onCancelReply={() => setReply(null)}
               />
             ) : (
-              <p className="border-t border-line bg-paper px-3 py-3 text-center text-sm text-muted">{t("chat.readOnlyHint")}</p>
+              <p className="m-2 rounded-2xl bg-paper/90 px-3 py-3 text-center text-sm text-muted backdrop-blur sm:mx-4 sm:mb-3">{t("chat.readOnlyHint")}</p>
             )}
             {dragging && (
-              <div className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-2xl border-2 border-dashed border-accent bg-paper/85 text-lg font-medium text-accent">
+              <div className="pointer-events-none absolute inset-3 z-20 flex flex-col items-center justify-center gap-2 rounded-3xl border-2 border-dashed border-accent bg-paper/90 text-lg font-medium text-accent backdrop-blur">
+                <IconPlus size={28} />
                 {t("chat.dropHere")}
               </div>
             )}
           </div>
-          {panel === "search" && <SearchPanel chat={id} onClose={() => setPanel(null)} onJump={jump} />}
-          {panel === "files" && <FilesPanel chat={id} onClose={() => setPanel(null)} onJump={jump} />}
+          {panel === "search" && <SearchPanel chat={id} onClose={() => setPanel(null)} onJump={jumpFromPanel} />}
+          {panel === "files" && <FilesPanel chat={id} onClose={() => setPanel(null)} onJump={jumpFromPanel} />}
         </div>
       )}
       {info && <ChatInfo d={d} onClose={() => setInfo(false)} />}
@@ -480,6 +569,7 @@ type BubbleProps = {
   onForward: () => void;
   onPin: () => void;
   onReact: (emoji: string) => void;
+  onSaveGif?: () => void;
   onJump: (id: string) => void;
 };
 
@@ -491,84 +581,154 @@ function Bubble(p: BubbleProps) {
   const [below, setBelow] = useState(false);
   const smile = useRef<HTMLButtonElement>(null);
   const closePicker = useCallback(() => setPicking(false), []);
+  const images = m.files.filter((f) => f.image && !f.expired);
+  const docs = m.files.filter((f) => !f.image || f.expired);
   const big = !m.reply && !m.forwarded_from_name && m.files.length === 0 && onlyEmoji(m.body);
-  const showName = group && !mine && p.runStart;
+  // Только картинки без подписи — без пузыря, время поверх картинки.
+  const bare = images.length > 0 && docs.length === 0 && !m.body && !m.reply && !m.forwarded_from_name;
+  const showName = group && !mine && p.runStart && !big;
   const showAvatar = group && !mine;
-  const tail = p.runEnd && !big ? (mine ? "rounded-br-md" : "rounded-bl-md") : "";
+  const tail = p.runEnd && !big && !bare;
+  const who = `tone-${tone(m.author_id)}`;
   const copy = () => {
-    void navigator.clipboard?.writeText(m.body).then(
+    if (!navigator.clipboard) {
+      toast(t("common.error"), "bad");
+      return;
+    }
+    void navigator.clipboard.writeText(m.body).then(
       () => toast(t("chat.copied")),
       () => toast(t("common.error"), "bad"),
     );
   };
+  const reactFromMenu = () => {
+    setBelow((document.getElementById(`msg-${m.id}`)?.getBoundingClientRect().top ?? 999) < 220);
+    setPicking(true);
+  };
   const menu = [
+    ...(p.canWrite ? [{ key: "react", label: t("chat.react"), icon: <IconSmile size={16} />, onSelect: reactFromMenu }] : []),
     ...(p.canWrite ? [{ key: "reply", label: t("chat.reply"), icon: <IconReply size={16} />, onSelect: p.onReply }] : []),
     { key: "forward", label: t("chat.forward"), icon: <IconTransfer size={16} />, onSelect: p.onForward },
     ...(m.body ? [{ key: "copy", label: t("chat.copyText"), icon: <IconCopy size={16} />, onSelect: copy }] : []),
+    ...(p.onSaveGif ? [{ key: "gif", label: t("chat.gifSave"), icon: <IconPlus size={16} />, onSelect: p.onSaveGif }] : []),
     ...(m.editable && m.body ? [{ key: "edit", label: t("common.edit"), onSelect: p.onEdit }] : []),
     ...(p.canPin ? [{ key: "pin", label: p.pinned ? t("chat.unpinMessage") : t("chat.pinMessage"), icon: <IconPin size={16} />, onSelect: p.onPin }] : []),
     ...(m.version > 1 && p.canVersions ? [{ key: "versions", label: t("chat.versions"), onSelect: p.onVersions, separated: true }] : []),
   ];
-  const meta = (
-    <span className={`ml-2 inline-flex translate-y-1 items-center gap-1 align-bottom text-[11px] whitespace-nowrap select-none ${big ? "rounded-full bg-ink/40 px-1.5 text-white" : mine ? "text-accent-ink/70" : "text-muted"} float-right`}>
+  const meta = (chip: boolean) => (
+    <span className={`inline-flex items-center gap-1 text-[11px] leading-4 whitespace-nowrap select-none ${chip ? "chat-meta-chip py-0.5" : mine ? "text-white/75" : "text-muted"}`}>
       {m.version > 1 && <span>{t("chat.edited")}</span>}
       <time dateTime={m.created_at} title={formatDate(m.created_at, i18n.language)}>
         {formatTime(m.created_at, i18n.language)}
       </time>
       {mine &&
         (p.read ? (
-          <><IconCheckDouble size={14} className="text-accent" /><span className="sr-only">{t("chat.read")}</span></>
+          <>
+            <IconCheckDouble size={15} className={chip || mine ? "text-white" : "text-accent"} />
+            <span className="sr-only">{t("chat.read")}</span>
+          </>
         ) : (
-          <><IconCheck size={14} /><span className="sr-only">{t("chat.sent")}</span></>
+          <>
+            <IconCheck size={15} />
+            <span className="sr-only">{t("chat.sent")}</span>
+          </>
         ))}
     </span>
   );
+  // Время — в правом нижнем углу. В конце текста невидимая копия занимает его место: короткая
+  // последняя строка делит его со временем, длинная — уступает ему строку ниже (как в мессенджерах).
+  const metaSpace = (
+    <span aria-hidden="true" className="invisible ml-2.5 inline-block">
+      {meta(false)}
+    </span>
+  );
+  const bubble = `relative min-w-0 rounded-[1.1rem] ${mine ? "chat-bubble-mine" : "chat-bubble-other"} ${tail ? (mine ? "chat-tail-out rounded-br-[4px]" : "chat-tail-in rounded-bl-[4px]") : ""}`;
+  const width = images.length > 0 ? "w-[min(22rem,100%)]" : "";
+
+  let content: ReactNode;
+  if (big) {
+    content = (
+      <div className="flex flex-col items-end px-1">
+        <span role="img" aria-label={m.body} className={`emoji leading-none ${[...m.body.trim()].length <= 2 ? "text-[4rem]" : "text-5xl"}`}>
+          {m.body}
+        </span>
+        <span className="mt-1">{meta(true)}</span>
+      </div>
+    );
+  } else if (bare) {
+    content = (
+      <div className={width}>
+        <div className="overflow-hidden rounded-[1.1rem] shadow-[0_1px_2px_rgb(16_24_40/0.15)]">
+          <Media files={images} overlay={meta(true)} />
+        </div>
+      </div>
+    );
+  } else {
+    const head = showName || m.forwarded_from_name || m.reply;
+    content = (
+      <div className={`${bubble} ${width}`}>
+        {head && (
+          <div className="px-3 pt-1.5">
+            {showName && <div className={`${who} tone-ink truncate text-[13px] font-semibold`}>{m.author_name}</div>}
+            {m.forwarded_from_name && (
+              <div className={`flex items-center gap-1 text-[13px] ${mine ? "text-white/85" : "text-accent"}`}>
+                <IconTransfer size={12} /> {t("chat.forwardedFrom", { name: m.forwarded_from_name })}
+              </div>
+            )}
+            {m.reply && (
+              <div className={`mt-1 mb-0.5 rounded-lg py-1 pr-2 ${mine ? "bg-white/15" : "bg-accent/10"}`}>
+                <Quote q={m.reply} onColor={mine} onClick={() => p.onJump(m.reply?.id ?? "")} />
+              </div>
+            )}
+          </div>
+        )}
+        {images.length > 0 && (
+          <div className={`p-[3px] ${head ? "pt-1.5" : ""}`}>
+            <div className="overflow-hidden rounded-[0.9rem]">
+              <Media files={images} overlay={!m.body && docs.length === 0 ? meta(true) : undefined} />
+            </div>
+          </div>
+        )}
+        {docs.length > 0 && (
+          <div className="px-3 pt-1.5">
+            <Documents files={docs} mine={mine} />
+          </div>
+        )}
+        {m.body ? (
+          <div className="relative px-3 pt-1 pb-1.5 text-[15px] leading-[1.35]">
+            <MessageText body={m.body} tail={metaSpace} />
+            <span className="absolute right-3 bottom-1.5">{meta(false)}</span>
+          </div>
+        ) : (
+          (docs.length > 0 || images.length === 0) && <div className="flex justify-end px-2.5 pb-1">{meta(false)}</div>
+        )}
+        {m.reactions.length > 0 && (
+          <div className="px-2.5 pb-2">
+            <Reactions items={m.reactions} disabled={!p.canWrite} onToggle={p.onReact} mine={mine} />
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div
       id={`msg-${m.id}`}
-      className={`group/msg flex items-end gap-2 ${mine ? "justify-end" : "justify-start"} ${p.runStart ? "mt-2" : "mt-0.5"} scroll-my-20 rounded-xl transition-colors duration-700 ${p.flash ? "bg-accent/20" : ""}`}
+      className={`group/msg flex items-end gap-2 ${mine ? "justify-end" : "justify-start"} ${p.runStart ? "mt-2" : "mt-[3px]"} scroll-my-24 rounded-2xl transition-colors duration-700 ${p.flash ? "bg-accent/25" : ""} ${tail ? (mine ? "pr-2" : "pl-2") : mine ? "pr-2" : group ? "" : "pl-2"}`}
     >
-      {showAvatar && <span className="w-8 shrink-0">{p.runEnd && <UserAvatar name={m.author_name} userId={m.author_id} avatar={p.avatar} size="sm" />}</span>}
-      <div className={`relative flex max-w-[88%] items-center gap-1 sm:max-w-[72%] ${mine ? "flex-row-reverse" : ""}`}>
-        <div className={big ? "px-1" : `min-w-0 rounded-2xl px-3 py-1.5 text-[15px] leading-snug shadow-sm ${mine ? "chat-bubble-mine" : "chat-bubble-other"} ${tail}`}>
-          {showName && !big && <div className="mb-0.5 truncate text-[13px] font-semibold text-accent">{m.author_name}</div>}
-          {m.forwarded_from_name && (
-            <div className="mb-1 flex items-center gap-1 text-xs text-accent">
-              <IconTransfer size={12} /> {t("chat.forwardedFrom", { name: m.forwarded_from_name })}
-            </div>
-          )}
-          {m.reply && (
-            <div className="mb-1 rounded-lg bg-ink/5 py-1 pr-2">
-              <Quote q={m.reply} onClick={() => p.onJump(m.reply?.id ?? "")} />
-            </div>
-          )}
-          {m.files.length > 0 && <Attachments files={m.files} />}
-          {big ? (
-            <div className="text-5xl leading-tight">
-              <span role="img" aria-label={m.body}>
-                {m.body}
-              </span>
-              {meta}
-            </div>
-          ) : m.body ? (
-            <div className="mt-0.5">
-              <MessageText body={m.body} />
-              {meta}
-              <span className="clear-both block" />
-            </div>
-          ) : (
-            <div className="flex justify-end">{meta}</div>
-          )}
-          <Reactions items={m.reactions} disabled={!p.canWrite} onToggle={p.onReact} />
+      {showAvatar && <span className="w-9 shrink-0 self-end">{p.runEnd && <UserAvatar name={m.author_name} userId={m.author_id} avatar={p.avatar} size="sm" />}</span>}
+      <div className={`relative flex max-w-[min(34rem,86%)] items-end gap-1 ${mine ? "flex-row-reverse" : ""}`}>
+        <div className="min-w-0">
+          {content}
+          {(big || bare) && m.reactions.length > 0 && <Reactions items={m.reactions} disabled={!p.canWrite} onToggle={p.onReact} mine={false} />}
         </div>
         {/* Действия: на мыши — при наведении, на сенсорном экране — всегда. */}
-        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/msg:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100">
+        <div className="mb-1 flex shrink-0 items-center gap-0.5 rounded-full bg-paper/85 p-0.5 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover/msg:opacity-100 focus-within:opacity-100 [@media(hover:none)]:bg-transparent [@media(hover:none)]:opacity-100 [@media(hover:none)]:shadow-none">
           {p.canWrite && (
             <>
               <button
                 ref={smile}
                 type="button"
-                className="rounded-full p-1.5 text-muted hover:bg-paper hover:text-ink"
+                className="rounded-full p-1.5 text-muted hover:bg-hover hover:text-ink max-sm:hidden"
                 aria-label={t("chat.react")}
                 aria-expanded={picking}
                 onClick={(e) => {
@@ -578,7 +738,7 @@ function Bubble(p: BubbleProps) {
               >
                 <IconSmile size={16} />
               </button>
-              <button type="button" className="hidden rounded-full p-1.5 text-muted hover:bg-paper hover:text-ink sm:block" aria-label={t("chat.reply")} onClick={p.onReply}>
+              <button type="button" className="rounded-full p-1.5 text-muted hover:bg-hover hover:text-ink max-sm:hidden" aria-label={t("chat.reply")} onClick={p.onReply}>
                 <IconReply size={16} />
               </button>
             </>
@@ -608,9 +768,9 @@ function SidePanel({ title, onClose, children }: { title: string; onClose: () =>
   const { t } = useTranslation();
   return (
     <aside className="absolute inset-0 z-30 flex flex-col border-l border-line bg-paper sm:static sm:w-80 sm:shrink-0" aria-label={title}>
-      <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2">
+      <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2.5">
         <h3 className="font-semibold">{title}</h3>
-        <button type="button" className="rounded-lg p-1 text-muted hover:bg-hover" aria-label={t("common.close")} onClick={onClose}>
+        <button type="button" className="rounded-full p-1.5 text-muted hover:bg-hover" aria-label={t("common.close")} onClick={onClose}>
           <IconX size={18} />
         </button>
       </div>
@@ -648,15 +808,18 @@ function SearchPanel({ chat, onClose, onJump }: { chat: string; onClose: () => v
       ) : (
         <>
           <p className="px-3 pb-1 text-xs text-muted">{t("chat.foundN", { count: found.data.length })}</p>
-          <ul className="divide-y divide-line">
+          <ul>
             {found.data.map((m) => (
               <li key={m.id}>
-                <button type="button" className="w-full px-3 py-2 text-left hover:bg-hover" onClick={() => onJump(m.id)}>
-                  <span className="flex items-baseline justify-between gap-2">
-                    <span className="truncate text-sm font-medium">{m.author_name}</span>
-                    <span className="shrink-0 text-[11px] text-muted">{formatDate(m.created_at, i18n.language)}</span>
+                <button type="button" className="flex w-full items-start gap-2.5 px-3 py-2 text-left hover:bg-hover" onClick={() => onJump(m.id)}>
+                  <UserAvatar name={m.author_name} userId={m.author_id} size="sm" />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-baseline justify-between gap-2">
+                      <span className="truncate text-sm font-medium">{m.author_name}</span>
+                      <span className="shrink-0 text-[11px] text-muted">{formatDate(m.created_at, i18n.language)}</span>
+                    </span>
+                    <Highlighted text={m.body} term={term} />
                   </span>
-                  <Highlighted text={m.body} term={term} />
                 </button>
               </li>
             ))}
@@ -695,7 +858,7 @@ function FilesPanel({ chat, onClose, onJump }: { chat: string; onClose: () => vo
       ) : q.isPending ? (
         <Spinner variant="list" />
       ) : q.data.length === 0 ? (
-        <p className="p-3 text-sm text-muted">{t("chat.noSharedFiles")}</p>
+        <Empty icon={<IconFileText size={28} />}>{t("chat.noSharedFiles")}</Empty>
       ) : (
         <div className="space-y-4 p-3">
           {images.length > 0 && (
@@ -703,8 +866,9 @@ function FilesPanel({ chat, onClose, onJump }: { chat: string; onClose: () => vo
               <h4 className="mb-1.5 text-xs font-semibold text-muted uppercase">{t("chat.photos", { count: images.length })}</h4>
               <div className="grid grid-cols-3 gap-1">
                 {images.map((x, i) => (
-                  <button key={x.file.id} type="button" className="aspect-square overflow-hidden rounded-md bg-sunken" onClick={() => setOpen(i)} aria-label={x.file.name}>
-                    <img src={chatFileUrl(x.file.id)} alt="" loading="lazy" className="size-full object-cover" />
+                  <button key={x.file.id} type="button" className="relative aspect-square overflow-hidden rounded-lg bg-sunken" onClick={() => setOpen(i)} aria-label={x.file.name}>
+                    <img src={chatFileUrl(x.file.id)} alt="" loading="lazy" className="size-full object-cover transition-transform hover:scale-105" />
+                    {x.file.mime === "image/gif" && <span className="absolute top-1 left-1 rounded bg-black/50 px-1 text-[9px] font-bold text-white">GIF</span>}
                   </button>
                 ))}
               </div>
@@ -715,8 +879,8 @@ function FilesPanel({ chat, onClose, onJump }: { chat: string; onClose: () => vo
               <h4 className="mb-1.5 text-xs font-semibold text-muted uppercase">{t("chat.documents", { count: docs.length })}</h4>
               <ul className="space-y-1">
                 {docs.map((x) => (
-                  <li key={x.file.id} className="flex items-center gap-2 rounded-lg px-1 py-1 hover:bg-hover">
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accentsoft text-accent-ink">
+                  <li key={x.file.id} className="flex items-center gap-2.5 rounded-xl px-1.5 py-1.5 hover:bg-hover">
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-accent text-paper">
                       <IconFileText size={18} />
                     </span>
                     <span className="min-w-0 flex-1">
@@ -731,7 +895,7 @@ function FilesPanel({ chat, onClose, onJump }: { chat: string; onClose: () => vo
                         {x.file.expired ? t("chat.expired") : formatSize(x.file.size)} · {x.author_name} · {formatDate(x.created_at, i18n.language)}
                       </span>
                     </span>
-                    <button type="button" className="shrink-0 rounded p-1 text-muted hover:bg-paper hover:text-ink" aria-label={t("chat.showInChat")} title={t("chat.showInChat")} onClick={() => onJump(x.message_id)}>
+                    <button type="button" className="shrink-0 rounded-full p-1.5 text-muted hover:bg-paper hover:text-ink" aria-label={t("chat.showInChat")} title={t("chat.showInChat")} onClick={() => onJump(x.message_id)}>
                       <IconArrowLeft size={14} />
                     </button>
                   </li>

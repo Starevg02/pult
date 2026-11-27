@@ -13,20 +13,20 @@ import { Card, Empty, ErrorBox, Input, Skeleton, Spinner } from "../ui";
 import { fullName } from "./phonebookUtil";
 import { ServiceStatusCard } from "./assets/ServiceStatus";
 
-function QuickTile({ to, icon, title, hint, primary }: { to: "/tickets/new" | "/phonebook" | "/kb" | "/access"; icon: ReactNode; title: string; hint: string; primary?: boolean }) {
+function QuickTile({ to, icon, title, hint, primary, hue = 2 }: { to: "/tickets/new" | "/phonebook" | "/kb" | "/access"; icon: ReactNode; title: string; hint: string; primary?: boolean; hue?: number }) {
   return (
     <Link
       to={to}
-      className={`group flex min-h-24 flex-col gap-3 rounded-xl border p-4 transition-[box-shadow,border-color,transform] hover:-translate-y-px hover:shadow-md ${
-        primary ? "border-transparent bg-ink text-paper" : "border-line bg-paper shadow-xs hover:border-line-strong"
+      className={`group flex min-h-24 flex-col gap-3 rounded-2xl border p-4 transition-[box-shadow,border-color,transform] hover:-translate-y-0.5 hover:shadow-lg ${
+        primary ? "border-transparent bg-[linear-gradient(135deg,#7b6dff,#4f46e5_60%,#4338ca)] text-white shadow-md shadow-accent/25" : "border-line bg-paper shadow-xs hover:border-line-strong"
       }`}
     >
-      <span aria-hidden="true" className={`flex h-9 w-9 items-center justify-center rounded-lg ${primary ? "bg-paper/15" : "bg-accentsoft text-accent-ink"}`}>
+      <span aria-hidden="true" className={`flex h-10 w-10 items-center justify-center rounded-xl transition-transform group-hover:scale-105 ${primary ? "bg-white/20" : `tone-${hue} tone-avatar shadow-sm`}`}>
         {icon}
       </span>
       <span>
         <span className="block text-sm font-semibold">{title}</span>
-        <span className={`mt-0.5 block text-xs ${primary ? "text-paper/75" : "text-muted"}`}>{hint}</span>
+        <span className={`mt-0.5 block text-xs ${primary ? "text-white/80" : "text-muted"}`}>{hint}</span>
       </span>
     </Link>
   );
@@ -114,9 +114,9 @@ export function HomePage() {
             </h2>
             <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
               {helpdesk && <QuickTile primary to="/tickets/new" icon={<IconPlus size={18} />} title={t("helpdesk.create")} hint={t("home.createHint")} />}
-              {phonebook && <QuickTile to="/phonebook" icon={<IconContacts size={18} />} title={t("nav.phonebook")} hint={t("home.phonebookHint")} />}
-              {helpdesk && <QuickTile to="/kb" icon={<IconBook size={18} />} title={t("nav.kb")} hint={t("home.kbHint")} />}
-              {helpdesk && <QuickTile to="/access" icon={<IconKey size={18} />} title={t("nav.access")} hint={t("home.accessHint")} />}
+              {phonebook && <QuickTile hue={5} to="/phonebook" icon={<IconContacts size={18} />} title={t("nav.phonebook")} hint={t("home.phonebookHint")} />}
+              {helpdesk && <QuickTile hue={1} to="/kb" icon={<IconBook size={18} />} title={t("nav.kb")} hint={t("home.kbHint")} />}
+              {helpdesk && <QuickTile hue={3} to="/access" icon={<IconKey size={18} />} title={t("nav.access")} hint={t("home.accessHint")} />}
             </div>
           </section>
           {helpdesk && (

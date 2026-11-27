@@ -3,6 +3,7 @@
 // картинки — только вложения портала (внешние адреса закрыты CSP и не подгружаются).
 import { useMemo, useState, type ReactNode } from "react";
 import Markdown, { type Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useTranslation } from "react-i18next";
 import type { KbFile } from "../../api/client";
 import { IconFileText } from "../../icons";
@@ -56,6 +57,12 @@ export function TelegraphBody({ text }: { text: string }) {
         const only = node?.children.length === 1 && first?.type === "element" && first.tagName === "img";
         return only ? <>{children}</> : <p>{children}</p>;
       },
+      // Широкая таблица прокручивается вбок, а не ломает страницу.
+      table: ({ children }) => (
+        <div className="tg-table" tabIndex={0}>
+          <table>{children}</table>
+        </div>
+      ),
       img: ({ src, alt }) => {
         if (typeof src !== "string" || !FILE_URL.test(src)) return <span className="text-muted">{alt}</span>;
         const i = images.findIndex((x) => x.src === src);
@@ -73,11 +80,16 @@ export function TelegraphBody({ text }: { text: string }) {
   }, [text, images]);
   return (
     <div className="telegraph-body">
-      <Markdown components={components}>{text}</Markdown>
+      <Markdown components={components} remarkPlugins={PLUGINS}>
+        {text}
+      </Markdown>
       {open !== null && images.length > 0 && <Lightbox items={images} index={open} onIndex={setOpen} onClose={() => setOpen(null)} />}
     </div>
   );
 }
+
+/** Таблицы, ~~зачёркивание~~, списки задач и ссылки без скобок (GitHub Flavored Markdown). */
+const PLUGINS = [remarkGfm];
 
 /** Вложения статьи, которых нет в тексте: карточки для скачивания. */
 export function KbFiles({ files, text }: { files: KbFile[]; text: string }) {

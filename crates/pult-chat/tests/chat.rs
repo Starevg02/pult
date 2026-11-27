@@ -124,6 +124,15 @@ impl Browser {
         let (code, bytes, _) = self.raw(Method::POST, &format!("/api/chat/{chat}/files"), &ctype, body).await;
         (code, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
     }
+    async fn upload_gif(&mut self, name: &str, data: &[u8]) -> (StatusCode, Value) {
+        let b = "XBOUNDARYX";
+        let mut body = format!("--{b}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{name}\"\r\nContent-Type: image/gif\r\n\r\n").into_bytes();
+        body.extend_from_slice(data);
+        body.extend_from_slice(format!("\r\n--{b}--\r\n").as_bytes());
+        let ctype = format!("multipart/form-data; boundary={b}");
+        let (code, bytes, _) = self.raw(Method::POST, "/api/chat/gifs", &ctype, body).await;
+        (code, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+    }
     async fn download(&mut self, file: &str) -> (StatusCode, Vec<u8>, header::HeaderMap) {
         self.raw(Method::GET, &format!("/api/chat/files/{file}"), "application/json", Vec::new()).await
     }
@@ -476,6 +485,55 @@ async fn chat_acceptance() {
     assert_eq!(files.as_array().map(Vec::len), Some(2), "{files}");
     assert_eq!(si.put(&format!("/api/chat/{news}/prefs"), json!({"muted": true})).await.0, StatusCode::NO_CONTENT);
     assert!(si.chats(false).await.iter().any(|c| c["id"] == news.as_str() && c["muted"] == true));
+    // «Мои GIF»: личная подборка, отправка копии в чат, сохранение из переписки.
+    const GIF: &[u8] =
+        b"GIF89a\x01\0\x01\0\x80\0\0\0\0\0\xff\xff\xff!\xf9\x04\x01\0\0\0\0,\0\0\0\0\x01\0\x01\0\0\x02\x02D\x01\0;";
+    let (code, g) = si.upload_gif("смешной.gif", GIF).await;
+    assert_eq!(code, StatusCode::OK, "{g}");
+    let (_, again) = si.upload_gif("ещё раз.gif", GIF).await;
+    assert_eq!(id(&again), id(&g), "тот же GIF второй раз не добавляется");
+    assert_eq!(si.upload_gif("картинка.gif", PNG).await.0, StatusCode::BAD_REQUEST, "не GIF");
+    let (_, mine) = si.get("/api/chat/gifs").await;
+    assert_eq!(mine.as_array().map(Vec::len), Some(1), "{mine}");
+    let gif_url = format!("/api/chat/gifs/{}", id(&g));
+    let (code, data, headers) = si.raw(Method::GET, &gif_url, "application/json", Vec::new()).await;
+    assert_eq!(
+        (code, data.as_slice(), headers[header::CONTENT_TYPE].to_str().unwrap()),
+        (StatusCode::OK, GIF, "image/gif")
+    );
+    assert_eq!(pe.get(&gif_url).await.0, StatusCode::NOT_FOUND, "чужая подборка не видна");
+    let send_gif = format!("/api/chat/{news}/gifs/{}", id(&g));
+    assert_eq!(pe.post(&send_gif, json!({})).await.0, StatusCode::NOT_FOUND, "чужой GIF не отправить");
+    assert_eq!(
+        si.post(&format!("/api/chat/{direct}/gifs/{}", id(&g)), json!({})).await.0,
+        StatusCode::NOT_FOUND,
+        "не участник"
+    );
+    let (code, sent) = si.post(&send_gif, json!({"reply_to": id(&q1)})).await;
+    assert_eq!(
+        (code, sent["files"][0]["mime"].as_str(), sent["body"].as_str(), sent["reply"]["id"].as_str()),
+        (StatusCode::CREATED, Some("image/gif"), Some(""), Some(id(&q1).as_str())),
+        "{sent}"
+    );
+    let sent_file = sent["files"][0]["id"].as_str().unwrap().to_string();
+    assert_eq!(pe.download(&sent_file).await.1, GIF, "копия в чате — тот же GIF");
+    let (code, saved) = pe.post("/api/chat/gifs/from-file", json!({"file": sent_file})).await;
+    assert_eq!(code, StatusCode::OK, "{saved}");
+    assert_eq!(
+        ko.post("/api/chat/gifs/from-file", json!({"file": sent_file})).await.0,
+        StatusCode::NOT_FOUND,
+        "из чужого чата"
+    );
+    assert_eq!(
+        pe.post("/api/chat/gifs/from-file", json!({"file": id(&png)})).await.0,
+        StatusCode::BAD_REQUEST,
+        "PNG — не GIF"
+    );
+    let pe_gif = format!("/api/chat/gifs/{}", id(&saved));
+    assert_eq!(pe.delete(&pe_gif).await.0, StatusCode::NO_CONTENT);
+    assert_eq!(pe.delete(&pe_gif).await.0, StatusCode::NOT_FOUND);
+    assert_eq!(si.get("/api/chat/gifs").await.1.as_array().map(Vec::len), Some(1), "у отправителя подборка на месте");
+    assert_eq!(pe.download(&sent_file).await.0, StatusCode::OK, "отправленная копия остаётся");
     // Срок хранения вложений: содержимое стирается, отметка в переписке остаётся.
     let retention = "/api/admin/chats/settings";
     assert_eq!(si.put(retention, json!({"file_retention_days": 30})).await.0, StatusCode::FORBIDDEN);
