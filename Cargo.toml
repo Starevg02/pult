@@ -58,7 +58,7 @@ tokio-util = { version = "0.7", features = ["compat"] }
 # Таймер для hyper: без него ограничение на чтение заголовков не действует.
 hyper-util = { version = "0.1", features = ["tokio", "server-auto"] }
 axum-server = { version = "0.8", default-features = false, features = ["tls-rustls-no-provider"] }
-base64 = "0.22"
+base64 = "0.23"
 ring = "0.17"
 # Вход в Asterisk AMI по MD5-вызову (протокол AMI; для паролей не используется).
 md-5 = "0.10"
